@@ -1,0 +1,25 @@
+{
+  "name": "scc",
+  "version": "0.1.0",
+  "description": "SCC: a mobile-first StarCraft-inspired RTS built with Phaser 3.x",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "phaser",
+    "html5",
+    "mobile",
+    "rts",
+    "strategy",
+    "starcraft"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "vite": "^8.0.16"
+  }
+}
