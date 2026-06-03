@@ -40,6 +40,21 @@ const FOOTER_Y = {
 // ── Shared menu text style (title, subtitle, description, labels, footer) ────
 const MENU_TEXT_STYLE = { fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' };
 
+// ── Description word-wrap width helpers ───────────────────────────────────────
+const DESC_WRAP_PAD = 50;
+const DESC_WRAP_MAX = 680;
+
+function descWrapWidth(width) {
+  return Math.min(width - DESC_WRAP_PAD, DESC_WRAP_MAX);
+}
+
+// ── Race-card subtitle word-wrap helper ───────────────────────────────────────
+const RACE_CARD_SUBTITLE_WRAP_PAD = 30;
+
+function raceCardSubtitleWrapWidth(cardWidth) {
+  return cardWidth - RACE_CARD_SUBTITLE_WRAP_PAD;
+}
+
 export default class MenuScene extends Phaser.Scene {
   constructor() {
     super('MenuScene');
@@ -81,7 +96,7 @@ export default class MenuScene extends Phaser.Scene {
       fontSize: 'clamp(13px, 2.6vw, 18px)',
       color: '#94a3b8',
       align: 'center',
-      wordWrap: { width: Math.min(width - 50, 680) }
+      wordWrap: { width: descWrapWidth(width) }
     }).setOrigin(0.5);
 
     this.cardEntries = [];
@@ -183,7 +198,7 @@ export default class MenuScene extends Phaser.Scene {
       fontSize: 'clamp(12px, 2.4vw, 16px)',
       color: '#cbd5e1',
       align: 'center',
-      wordWrap: { width: layout.cardWidth - 30 }
+      wordWrap: { width: raceCardSubtitleWrapWidth(layout.cardWidth) }
     }).setOrigin(0.5);
 
     const facts = this.add.text(position.x, position.y + (layout.compact ? 18 : 18), [
@@ -265,7 +280,7 @@ export default class MenuScene extends Phaser.Scene {
     this.titleText.setPosition(width / 2, this.layout.titleY);
     this.subtitleText.setPosition(width / 2, this.layout.subtitleY);
     this.descriptionText.setPosition(width / 2, this.layout.descriptionY);
-    this.descriptionText.setWordWrapWidth(Math.min(width - 50, 680));
+    this.descriptionText.setWordWrapWidth(descWrapWidth(width));
 
     this.cardEntries.forEach((entry, index) => {
       const pos = this.layout.cardPositions[index];
@@ -274,7 +289,7 @@ export default class MenuScene extends Phaser.Scene {
       entry.topLine.setPosition(pos.x, pos.y - cardHeight / 2 + 16).setSize(this.layout.cardWidth - 20, 4);
       entry.title.setPosition(pos.x, pos.y - (this.layout.compact ? 48 : 74));
       entry.subtitle.setPosition(pos.x, pos.y - (this.layout.compact ? 18 : 34));
-      entry.subtitle.setWordWrapWidth(this.layout.cardWidth - 30);
+      entry.subtitle.setWordWrapWidth(raceCardSubtitleWrapWidth(this.layout.cardWidth));
       entry.facts.setPosition(pos.x, pos.y + (this.layout.compact ? 18 : 18));
       const chipY = this.layout.compact ? pos.y + cardHeight / 2 - 28 : pos.y + 86;
       entry.chip.setPosition(pos.x, chipY).setSize(128, 28);
