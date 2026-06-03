@@ -10,6 +10,8 @@
 #   ./scripts/qa/run-qa.sh --skip-touch      # skip touch checks
 #   ./scripts/qa/run-qa.sh --json            # machine-readable output
 #   ./scripts/qa/run-qa.sh --quick           # only fail-fast checks
+#   ./scripts/qa/run-qa.sh --smoke           # include runtime smoke tests
+#   ./scripts/qa/release-gate.sh             # full release gate with decision
 
 set -euo pipefail
 
@@ -29,11 +31,14 @@ SKIP_TOUCH=0
 JSON_OUTPUT=0
 QUICK=0
 
+SKIP_SMOKE=1
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-build)    SKIP_BUILD=1; shift ;;
     --skip-gameplay) SKIP_GAMEPLAY=1; shift ;;
     --skip-touch)    SKIP_TOUCH=1; shift ;;
+    --smoke)         SKIP_SMOKE=0; shift ;;
     --json)          JSON_OUTPUT=1; shift ;;
     --quick)         QUICK=1; shift ;;
     *)               echo "Unknown option: $1"; exit 1 ;;
@@ -163,6 +168,33 @@ else
   fi
 fi
 
+# --- Runtime Smoke Tests ---
+if [ "$SKIP_SMOKE" -eq 0 ]; then
+  if [ "$JSON_OUTPUT" -eq 0 ]; then
+    echo -e "${BLUE}=== Phase 4: Runtime Smoke Tests ===${NC}"
+    echo ""
+  fi
+
+  SMOKE_REPORT="$REPORT_DIR/${TIMESTAMP_FILE}-smoke.txt"
+  if bash "$SCRIPT_DIR/smoke-test.sh" 2>&1 | tee "$SMOKE_REPORT"; then
+    SMOKE_EXIT=0
+  else
+    SMOKE_EXIT=$?
+  fi
+
+  if [ "$SMOKE_EXIT" -eq 0 ]; then
+    if [ "$JSON_OUTPUT" -eq 0 ]; then
+      echo -e "  ${GREEN}Runtime smoke tests: PASSED${NC}"
+    fi
+  else
+    if [ "$JSON_OUTPUT" -eq 0 ]; then
+      echo -e "  ${RED}Runtime smoke tests: FAILED (see report above)${NC}"
+    fi
+    OVERALL_EXIT=1
+  fi
+  echo ""
+fi
+
 # --- Consolidated Report ---
 if [ "$JSON_OUTPUT" -eq 0 ]; then
   echo "============================================"
@@ -198,8 +230,11 @@ if [ "$JSON_OUTPUT" -eq 0 ]; then
   echo "    Build verification:  scripts/qa/verify-build.sh"
   echo "    Gameplay checks:     scripts/qa/gameplay-checks.js"
   echo "    Touch checks:        scripts/qa/touch-checks.js"
+  echo "    Smoke test:          scripts/qa/smoke-test.sh"
+  echo "    Release gate:        scripts/qa/release-gate.sh"
   echo "    Master runner:       scripts/qa/run-qa.sh"
-  echo "    Pre-backup checklist: backups/QA_CHECKLIST.md"
+  echo "    Pre-backup checklist:  backups/QA_CHECKLIST.md"
+  echo "    Smoke checklist:       backups/SMOKE_CHECKLIST.md"
   echo ""
 else
   # JSON mode: output consolidated JSON
@@ -207,10 +242,12 @@ else
   BUILD_RESULT="PASS"
   GAMEPLAY_RESULT="PASS"
   TOUCH_RESULT="PASS"
+  SMOKE_RESULT="PASS"
   if [ -d "$REPORT_DIR" ]; then
     LATEST_BUILD=$(ls -t "$REPORT_DIR"/*-build.txt 2>/dev/null | head -1)
     LATEST_GAMEPLAY=$(ls -t "$REPORT_DIR"/*-gameplay.txt 2>/dev/null | head -1)
     LATEST_TOUCH=$(ls -t "$REPORT_DIR"/*-touch.txt 2>/dev/null | head -1)
+    LATEST_SMOKE=$(ls -t "$REPORT_DIR"/*-smoke.txt 2>/dev/null | head -1)
 
     if [ -n "$LATEST_BUILD" ] && grep -q '\[FAIL\]' "$LATEST_BUILD" 2>/dev/null; then
       BUILD_RESULT="FAIL"
@@ -221,6 +258,9 @@ else
     if [ -n "$LATEST_TOUCH" ] && grep -q '\[FAIL\]' "$LATEST_TOUCH" 2>/dev/null; then
       TOUCH_RESULT="FAIL"
     fi
+    if [ -n "$LATEST_SMOKE" ] && grep -q '\[FAIL\]' "$LATEST_SMOKE" 2>/dev/null; then
+      SMOKE_RESULT="FAIL"
+    fi
   fi
 
   cat <<JSONEOF
@@ -230,7 +270,8 @@ else
   "phases": {
     "build": "$BUILD_RESULT",
     "gameplay": "$GAMEPLAY_RESULT",
-    "touch": "$TOUCH_RESULT"
+    "touch": "$TOUCH_RESULT",
+    "smoke": "$SMOKE_RESULT"
   },
   "overall": "$([ $OVERALL_EXIT -eq 0 ] && echo 'PASS' || echo 'FAIL')",
   "reports_dir": "$REPORT_DIR"

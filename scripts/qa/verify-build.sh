@@ -186,7 +186,7 @@ echo "--- Source integrity ---"
 
 # Check all scenes are referenced in createGame.js
 if [ -f "src/game/createGame.js" ]; then
-  SCENES_IN_CODE=$(grep -oP "import \w+ from" src/game/createGame.js | wc -l)
+  SCENES_IN_CODE=$(grep -o "import [A-Za-z_][A-Za-z_0-9]* from" src/game/createGame.js | wc -l)
   SCENES_EXPECTED=5  # Boot, Preload, Menu, Battle, Hud
   if [ "$SCENES_IN_CODE" -ge "$SCENES_EXPECTED" ]; then
     pass "createGame.js imports $SCENES_IN_CODE scenes (expected >= $SCENES_EXPECTED)"
@@ -203,7 +203,7 @@ if [ -f "src/game/createGame.js" ]; then
 
   # Check active pointers
   if grep -q 'activePointers' src/game/createGame.js; then
-    AP=$(grep 'activePointers' src/game/createGame.js | grep -oP '\d+' | head -1)
+    AP=$(grep 'activePointers' src/game/createGame.js | grep -oE '[0-9]+' | head -1)
     if [ -n "$AP" ] && [ "$AP" -ge 3 ]; then
       pass "Multi-touch support: activePointers=$AP (>= 3)"
     else
@@ -228,15 +228,15 @@ if [ -f "src/game/data/races.js" ]; then
   # Check each race has required fields
   for race_id in terran zerg protoss; do
     if grep -q "id: '$race_id'" src/game/data/races.js; then
-      # Check worker has cost
-      if grep -A5 "id: '$race_id'" src/game/data/races.js | grep -q "cost:"; then
+      # Check worker has cost — use -A100 to capture the full race block
+      if grep -A100 "id: '$race_id'" src/game/data/races.js | head -80 | grep -q "cost:"; then
         pass "Race '$race_id' has cost data"
       else
         fail "Race '$race_id' missing cost data"
       fi
 
-      # Check units have hp
-      if grep -A3 "$race_id" src/game/data/races.js | grep -q "hp:"; then
+      # Check units have hp — use -A100 to capture the full race block
+      if grep -A100 "id: '$race_id'" src/game/data/races.js | head -80 | grep -q "hp:"; then
         pass "Race '$race_id' units have HP data"
       else
         fail "Race '$race_id' units missing HP data"
