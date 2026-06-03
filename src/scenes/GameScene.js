@@ -2,16 +2,22 @@ import Phaser from 'phaser';
 import { session, GameStates } from '../game/state/gameSession.js';
 import { getRace } from '../game/data/races.js';
 import { createInputController } from '../game/input/createInputController.js';
+import { getUnitDef } from '../game/unitDefs.js';
+import ParticleManager from '../game/particles/ParticleManager.js';
+import { spawnMuzzleFlash, spawnExplosion } from '../game/particleEffects.js';
+import { audioSystem } from '../game/audio/audioSystem.js';
+import { createAudioManager } from '../game/audioManager.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
 const TOP_UI_HEIGHT = 70;
 const BOTTOM_UI_HEIGHT = 190;
-const TAP_DRAG_THRESHOLD = 12;
+const TAP_DRAG_THRESHOLD = 18;
 const CAMERA_SPEED = 560;
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.15;
+const SEPARATION_FORCE = 2.5;
 const PLAYER_BUILD_SLOTS = [
   { x: 315, y: WORLD_HEIGHT / 2 - 150 },
   { x: 315, y: WORLD_HEIGHT / 2 + 150 }
@@ -48,6 +54,7 @@ export default class BattleScene extends Phaser.Scene {
     this.constructions = [];
     this.playerBuildSlots = PLAYER_BUILD_SLOTS.map((slot) => ({ ...slot }));
     this.enemyBuildSlots = ENEMY_BUILD_SLOTS.map((slot) => ({ ...slot }));
+    this.projectiles = [];
     this.playerMinerals = this.race.startMinerals;
     this.playerGas = this.race.startGas;
     this.playerSupplyUsed = this.race.startSupplyUsed;
@@ -62,12 +69,25 @@ export default class BattleScene extends Phaser.Scene {
     this.enemyAttackTimer = 0;
     this.enemyTechBuilt = false;
     this.enemySignatureUnlocked = false;
+    // Performance cache: tech building reference (avoids repeated scans).
+    this._cachedTechBuilding = null;
+    this._updateTechCache();
     this.inputController = createInputController(this);
+
+    // Audio — programmatic SFX via Web Audio API (no external files).
+    this.audioManager = createAudioManager(this.game);
 
     // Touch zoom state
     this.touchZoomState = null;
     this.lastPinchDist = 0;
     this.lastPinchCenter = { x: 0, y: 0 };
+
+    // Mobile visual feedback — selection highlight ring
+    this.selectionHighlight = null;
+    this.selectionHighlightTween = null;
+
+    // Tap feedback — brief flash at tap point (move/attack commands, empty taps)
+    this.tapFeedback = null;
 
     this.cameras.main.setBackgroundColor(this.race.backdrop);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -111,9 +131,27 @@ export default class BattleScene extends Phaser.Scene {
 
     this.installPointerControls();
     this.installPinchZoom();
+
+    // Particle effects system
+    this.particleManager = new ParticleManager(this);
+    this.particleManager.startIdleResourceSparks = (node) => this.particleManager.spawnIdleResourceSparks(node);
+
     this.scale.on('resize', this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this.syncSession();
+  }
+
+  shutdown() {
+    // Clean up audio systems on scene destroy.
+    if (this.audioManager) {
+      this.audioManager.destroy();
+    }
+    if (this._audioSystem) {
+      this._audioSystem.destroy();
+    }
+    // Clean up visual feedback objects.
+    if (this.selectionHighlight) this.selectionHighlight.destroy();
+    if (this.tapFeedback) this.tapFeedback.destroy();
   }
 
   drawDecor() {
@@ -451,7 +489,11 @@ export default class BattleScene extends Phaser.Scene {
     ];
 
     mineralSpots.forEach((spot, index) => {
-      this.createResourceNode(spot.x, spot.y, 900 + index * 60);
+      const node = this.createResourceNode(spot.x, spot.y, 900 + index * 60);
+      // Start idle particle sparks for each mineral node
+      if (this.particleManager) {
+        this.particleManager.spawnIdleResourceSparks(node);
+      }
     });
   }
 
@@ -491,6 +533,11 @@ export default class BattleScene extends Phaser.Scene {
         assignedWorkers: 0,
         maxWorkers: 3
       };
+
+      // Start continuous gas particle emission for this geyser
+      if (this.particleManager) {
+        this.particleManager.startGeyserEmission(entity);
+      }
 
       this.gasGeysers.push(entity);
     });
@@ -589,10 +636,10 @@ export default class BattleScene extends Phaser.Scene {
     const construction = options.construction ?? false;
     const roleName = options.roleName ?? (role === 'commandCenter' ? this.race.commandCenterName : role === 'techBuilding' ? this.race.techBuildingName : this.race.productionName);
     const textureKey = role === 'commandCenter'
-      ? 'terran-command-center'
+      ? (this.race.id === 'zerg' ? 'zerg-command-center' : this.race.id === 'protoss' ? 'protoss-command-center' : 'terran-command-center')
       : role === 'techBuilding'
-        ? 'terran-factory'
-        : 'terran-barracks';
+        ? (this.race.id === 'zerg' ? 'zerg-tech' : this.race.id === 'protoss' ? 'protoss-tech' : 'terran-factory')
+        : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
 
     const sprite = this.add.image(x, y, textureKey)
       .setDisplaySize(width, height)
@@ -654,18 +701,19 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   createUnit(team, kind, x, y, options = {}) {
-    const def = this.getUnitDef(team, kind, options.enemyKind);
+    const def = getUnitDef(this.race, team, kind, options.enemyKind);
     let spriteKey;
+    let frameConfig = null; // { frameWidth, frameHeight, endFrame } for spritesheet
     if (this.race.id === 'protoss') {
       if (kind === 'worker') spriteKey = 'protoss-probe';
       else if (kind === 'soldier') spriteKey = 'protoss-zealot';
       else if (kind === 'signature') spriteKey = 'protoss-dragoon';
       else spriteKey = 'protoss-zealot';
     } else if (this.race.id === 'zerg') {
-      if (kind === 'worker') spriteKey = 'zerg-drone';
-      else if (kind === 'soldier') spriteKey = 'zerg-zergling';
-      else if (kind === 'signature') spriteKey = 'zerg-hydralisk';
-      else spriteKey = 'zerg-zergling';
+      if (kind === 'worker') { spriteKey = 'zerg-drone'; frameConfig = { fw: 52, fh: 26, end: 11 }; }
+      else if (kind === 'soldier') { spriteKey = 'zerg-zergling'; frameConfig = { fw: 52, fh: 26, end: 12 }; }
+      else if (kind === 'signature') { spriteKey = 'zerg-hydralisk'; frameConfig = { fw: 60, fh: 30, end: 14 }; }
+      else { spriteKey = 'zerg-zergling'; frameConfig = { fw: 52, fh: 26, end: 12 }; }
     } else {
       if (kind === 'worker') spriteKey = 'terran-scv';
       else if (kind === 'soldier') spriteKey = 'terran-marine';
@@ -673,13 +721,22 @@ export default class BattleScene extends Phaser.Scene {
       else spriteKey = 'terran-marine';
     }
 
-    const sprite = this.add.sprite(x, y, spriteKey, 0)
-      .setOrigin(0.5);
-    const scale = def.radius * 2 / sprite.width;
+    const sprite = this.add.sprite(x, y, spriteKey);
+    if (frameConfig) {
+      const { fw, fh, end } = frameConfig;
+      const numFrames = end + 1;
+      this.textures.addSpriteSheet(spriteKey, spriteKey, {
+        frameWidth: fw,
+        frameHeight: fh,
+        maxFrame: end
+      });
+    }
+    const scale = def.radius * 2 / (frameConfig ? frameConfig.fw : sprite.width);
     sprite.setScale(scale);
     if (team === 'enemy') {
       sprite.setTint(0xf97316);
     }
+
     const labelText = null;
     const hpBack = this.add.rectangle(x, y + def.radius + 8, def.radius * 2 + 8, 5, 0x0f172a, 1);
     const hpFront = this.add.rectangle(x - (def.radius * 2 + 8) / 2, y + def.radius + 8, def.radius * 2 + 8, 5, team === 'player' ? 0x22c55e : 0xfb7185, 1)
@@ -718,6 +775,19 @@ export default class BattleScene extends Phaser.Scene {
       range: def.range,
       cooldownTime: def.cooldown,
       cooldown: options.initialCooldown ?? 0,
+      // Shield properties (Protoss units)
+      shield: def.shield ?? 0,
+      maxShield: def.maxShield ?? 0,
+      shieldRegenDelay: 5, // seconds of no damage before regen starts
+      lastDamageTime: 0,
+      // Charge ability (Zealot)
+      chargeCooldown: def.chargeCooldown ?? 0,
+      chargeDamage: def.chargeDamage ?? 0,
+      chargeDashDist: def.chargeDashDist ?? 0,
+      chargeTimer: 0,
+      isCharging: false,
+      chargeTargetX: x,
+      chargeTargetY: y,
       supply: def.supply,
       cargo: 0,
       cargoTarget: kind === 'worker' ? (options.harvestType === 'gas' ? this.race.workerGasHarvest : this.race.workerHarvest) : 0,
@@ -741,8 +811,31 @@ export default class BattleScene extends Phaser.Scene {
       color: def.color,
       harvestType: options.harvestType ?? null,
       geyserId: options.geyserId ?? null,
-      isSignature: options.isSignature ?? false
+      isSignature: options.isSignature ?? false,
+      // Stimpack state (Terran Marine only)
+      stimpackActive: false,
+      stimpackRemaining: 0,
+      stimpackCooldown: 0,
+      stimpackOriginalSpeed: def.speed,
+      stimpackOriginalAttack: def.attack,
+      stimpackGlow: null
     };
+
+    // Animation state tracking for Zerg units (must be after entity is created)
+    if (this.race.id === 'zerg' && frameConfig) {
+      const isWorker = kind === 'worker';
+      const isSignature = kind === 'signature';
+      entity.animState = 'idle';
+      entity.animFrameIndex = 0;
+      entity.animTimer = 0;
+      entity.idleEnd = 1;
+      entity.walkStart = 2;
+      entity.walkEnd = 5;
+      entity.attackStart = isWorker ? 6 : (isSignature ? 6 : 6);
+      entity.deathStart = isWorker ? 8 : (isSignature ? 11 : 9);
+      entity.deathFrameCount = isWorker ? 4 : (isSignature ? 4 : 4);
+      entity.isZerg = true;
+    }
 
     if (team === 'player') {
       this.playerUnits.push(entity);
@@ -757,32 +850,9 @@ export default class BattleScene extends Phaser.Scene {
     return entity;
   }
 
+  // Thin wrapper that delegates to the pure helper in src/game/unitDefs.js.
   getUnitDef(team, kind, enemyKind) {
-    if (team === 'enemy' && kind === 'soldier') {
-      return this.race.units.enemySoldier;
-    }
-
-    if (team === 'enemy' && kind === 'signature') {
-      return this.race.units.enemySignature;
-    }
-
-    if (kind === 'worker') {
-      return this.race.units.worker;
-    }
-
-    if (kind === 'soldier') {
-      return this.race.units.soldier;
-    }
-
-    if (kind === 'signature') {
-      return this.race.units.signature;
-    }
-
-    if (enemyKind && team === 'enemy') {
-      return this.race.units[enemyKind] ?? this.race.units.enemySoldier;
-    }
-
-    return this.race.units.soldier;
+    return getUnitDef(this.race, team, kind, enemyKind);
   }
 
   // --- Touch/mouse input for panning and tapping ---
@@ -990,6 +1060,11 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
+    // Visual feedback for empty battlefield tap (deselection ripple)
+    if (!this.selectedEntity || this.commandMode === 'select') {
+      this.showDeselectRipple(worldX, worldY);
+    }
+
     if (this.selectedEntity && this.selectedEntity.team === 'player') {
       // If tapping near a gas geyser with a selected worker, assign to gas
       if (this.selectedEntity.type === 'worker' && !this.selectedEntity.autoHarvest) {
@@ -1004,6 +1079,7 @@ export default class BattleScene extends Phaser.Scene {
       if (this.commandMode === 'move') {
         this.issueMove(this.selectedEntity, worldX, worldY);
         this.commandMode = 'select';
+        this.showTapIndicator(worldX, worldY);
         this.syncSession('Move order issued.');
         return;
       }
@@ -1011,6 +1087,7 @@ export default class BattleScene extends Phaser.Scene {
       if (this.commandMode === 'attack') {
         this.issueAttackMove(this.selectedEntity, worldX, worldY);
         this.commandMode = 'select';
+        this.showTapIndicator(worldX, worldY);
         this.syncSession('Attack move issued.');
         return;
       }
@@ -1022,13 +1099,19 @@ export default class BattleScene extends Phaser.Scene {
   selectEntity(entity) {
     this.selectedEntity = entity;
     this.commandMode = 'select';
+    this.showSelectionHighlight(entity);
     this.syncSession(`Selected ${entity.label}.`);
+    // Audio feedback: selection chirp.
+    if (this.audioManager) this.audioManager.select();
   }
 
   clearSelection() {
     this.selectedEntity = null;
     this.commandMode = 'select';
+    this.clearSelectionHighlight();
     this.syncSession('Selection cleared.');
+    // Audio feedback: deselect blip.
+    if (this.audioManager) this.audioManager.deselect();
   }
 
   handleHudAction(action) {
@@ -1044,6 +1127,8 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     if (!this.selectedEntity || this.selectedEntity.team !== 'player') {
+      // Audio: error buzz for unavailable actions.
+      if (this.audioManager) this.audioManager.error();
       this.commandMode = action === 'move' || action === 'attack' ? action : 'select';
       this.syncSession('Select one of your units or structures first.');
       return;
@@ -1051,8 +1136,15 @@ export default class BattleScene extends Phaser.Scene {
 
     switch (action) {
       case 'move':
+        this.commandMode = action;
+        // Audio: low whoosh for move command.
+        if (this.audioManager) this.audioManager.moveCommand();
+        this.syncSession(`Command mode: ${action}. Tap the battlefield to issue the order.`);
+        break;
       case 'attack':
         this.commandMode = action;
+        // Audio: sharper whoosh for attack command.
+        if (this.audioManager) this.audioManager.attackCommand();
         this.syncSession(`Command mode: ${action}. Tap the battlefield to issue the order.`);
         break;
       case 'train-worker':
@@ -1087,7 +1179,24 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   findPlayerTechBuilding() {
-    return this.structures.find((structure) => structure.team === 'player' && structure.type === 'structure' && structure.role === 'techBuilding');
+    // Use cache when possible, scan if cache is stale.
+    if (this._cachedTechBuilding && this.structures.includes(this._cachedTechBuilding)) {
+      return this._cachedTechBuilding;
+    }
+    this._updateTechCache();
+    return this._cachedTechBuilding;
+  }
+
+  // Optimized: cache tech building reference to avoid repeated scans.
+  _updateTechCache() {
+    this._cachedTechBuilding = null;
+    for (let i = 0; i < this.structures.length; i++) {
+      const s = this.structures[i];
+      if (s.team === 'player' && s.role === 'techBuilding' && s.type === 'structure') {
+        this._cachedTechBuilding = s;
+        return;
+      }
+    }
   }
 
   queueUnit(structure, kind) {
@@ -1250,6 +1359,7 @@ export default class BattleScene extends Phaser.Scene {
   issueMove(entity, worldX, worldY) {
     if (entity.type === 'structure' || entity.type === 'construction') {
       session.setMessage('Structures cannot move.');
+      if (this.audioManager) this.audioManager.error();
       return;
     }
 
@@ -1259,11 +1369,14 @@ export default class BattleScene extends Phaser.Scene {
     entity.manual = true;
     entity.targetEntity = null;
     entity.statusText.setText('Moving');
+    // Audio: low whoosh for move order on battlefield.
+    if (this.audioManager) this.audioManager.moveCommand();
   }
 
   issueAttackMove(entity, worldX, worldY) {
     if (entity.type === 'structure' || entity.type === 'construction') {
       session.setMessage('Structures cannot attack-move.');
+      if (this.audioManager) this.audioManager.error();
       return;
     }
 
@@ -1273,6 +1386,90 @@ export default class BattleScene extends Phaser.Scene {
     entity.manual = true;
     entity.targetEntity = null;
     entity.statusText.setText('Attack move');
+    // Audio: sharp whoosh for attack-move on battlefield.
+    if (this.audioManager) this.audioManager.attackCommand();
+  }
+
+  activateStimpack(unit) {
+    if (!unit || unit.team !== 'player' || unit.type !== 'soldier') {
+      session.setMessage('Only Terran Marines can use Stimpack.');
+      return;
+    }
+
+    // Check if tech building exists (Stimpack requires Tech Lab)
+    if (!this.findPlayerTechBuilding()) {
+      session.setMessage(`Build ${this.race.techBuildingName} to unlock Stimpack.`);
+      return;
+    }
+
+    const race = this.race;
+    const unitDef = race.units.soldier;
+    if (!unitDef.stimpack) {
+      session.setMessage('This unit does not have Stimpack.');
+      return;
+    }
+
+    const sp = unitDef.stimpack;
+
+    // Check cooldown
+    if (unit.stimpackCooldown > 0) {
+      session.setMessage(`Stimpack on cooldown: ${unit.stimpackCooldown.toFixed(1)}s remaining.`);
+      return;
+    }
+
+    // Check if already active
+    if (unit.stimpackActive) {
+      session.setMessage('Stimpack already active.');
+      return;
+    }
+
+    // Check HP - cannot use if hp <= hpBurn (would kill the unit)
+    if (unit.hp <= sp.hpBurn) {
+      session.setMessage('Not enough HP to activate Stimpack.');
+      return;
+    }
+
+    // Apply stimpack: burn HP, boost attack, reduce speed
+    unit.hp -= sp.hpBurn;
+    unit.stimpackActive = true;
+    unit.stimpackRemaining = sp.duration;
+    unit.speed = unit.stimpackOriginalSpeed * sp.speedMultiplier;
+    unit.attack = Math.ceil(unit.stimpackOriginalAttack * sp.damageMultiplier);
+
+    // Create visual glow effect
+    if (unit.stimpackGlow) {
+      unit.stimpackGlow.destroy();
+    }
+    unit.stimpackGlow = this.add.circle(unit.x, unit.y, unit.radius + 8, 0xff4444, 0.15)
+      .setScrollFactor(1);
+
+    session.pushLog(`${unit.label} activated Stimpack!`);
+    session.setMessage('Stimpack activated — double damage, half speed.');
+    this.syncSession(`Stimpack activated on ${unit.label}.`);
+  }
+
+  deactivateStimpack(unit) {
+    if (!unit.stimpackActive) return;
+
+    const race = this.race;
+    const unitDef = race.units.soldier;
+    const sp = unitDef.stimpack;
+
+    // Restore original stats
+    unit.speed = unit.stimpackOriginalSpeed;
+    unit.attack = unit.stimpackOriginalAttack;
+    unit.stimpackActive = false;
+    unit.stimpackRemaining = 0;
+    unit.stimpackCooldown = sp.cooldown;
+
+    // Remove glow
+    if (unit.stimpackGlow) {
+      unit.stimpackGlow.destroy();
+      unit.stimpackGlow = null;
+    }
+
+    session.pushLog(`${unit.label} Stimpack ended.`);
+    this.syncSession(`Stimpack expired on ${unit.label}.`);
   }
 
   update(time, delta) {
@@ -1294,13 +1491,21 @@ export default class BattleScene extends Phaser.Scene {
       const ticks = Math.floor(this.enemyIncomeTimer);
       this.enemyIncomeTimer -= ticks;
       // Enemy income now scales with their worker count (not purely passive)
-      const enemyWorkerCount = this.enemyUnits.filter((u) => u.type === 'worker' && u.hp > 0).length;
+      // Optimized: count in single pass instead of two filter() calls.
+      let enemyWorkerCount = 0;
+      let enemyGasWorkerCount = 0;
+      for (let i = 0; i < this.enemyUnits.length; i++) {
+        const u = this.enemyUnits[i];
+        if (u.type === 'worker' && u.hp > 0) {
+          enemyWorkerCount++;
+          if (u.harvestType === 'gas') enemyGasWorkerCount++;
+        }
+      }
       const workerIncome = enemyWorkerCount * this.race.workerHarvest;
       const passiveIncome = this.race.enemyIncomePerSecond;
       this.enemyMinerals += (workerIncome + passiveIncome) * ticks;
       // Gas income for enemy workers assigned to gas
-      const enemyGasWorkers = this.enemyUnits.filter((u) => u.type === 'worker' && u.hp > 0 && u.harvestType === 'gas');
-      this.enemyGas += enemyGasWorkers.length * this.race.workerGasHarvest * ticks;
+      this.enemyGas += enemyGasWorkerCount * this.race.workerGasHarvest * ticks;
     }
 
     this.enemySpawnTimer += dt;
@@ -1316,6 +1521,7 @@ export default class BattleScene extends Phaser.Scene {
     this.updateConstructions(dt);
     this.updateStructures(dt);
     this.updateUnits(dt);
+    this.separateUnits();
     this.updateEnemyAI(dt);
     this.resolveCombat(dt);
     this.reapDeadEntities();
@@ -1351,8 +1557,14 @@ export default class BattleScene extends Phaser.Scene {
         construction.statusText.setText('Operational');
         construction.sprite.setAlpha(0.94);
         construction.ridge.setAlpha(0.22);
+        // Visual feedback: completion glow + audio
+        this.showCompletionGlow(construction.x, construction.y, this.race.id);
         if (construction.team === 'player') {
           this.playerSupplyCap += construction.supplyBonus;
+          // If a player tech building just completed, refresh the cache immediately.
+          if (construction.finalRole === 'techBuilding') {
+            this._updateTechCache();
+          }
         } else {
           this.enemySupplyCap += construction.supplyBonus;
         }
@@ -1394,6 +1606,8 @@ export default class BattleScene extends Phaser.Scene {
             this.enemySupplyUsed += item.def.supply;
           }
           structure.queue.shift();
+          // Visual feedback: unit deployment glow
+          this.showCompletionGlow(spawnX, spawnY, structure.team === 'player' ? this.race.id : 'enemy');
           session.pushLog(`${item.def.label} deployed.`);
           session.setMessage(`${item.def.label} deployed.`);
         }
@@ -1583,6 +1797,18 @@ export default class BattleScene extends Phaser.Scene {
     if (unit.cooldown <= 0) {
       enemy.hp -= unit.attack;
       unit.cooldown = unit.cooldownTime;
+      // Visual feedback: damage flash on the target
+      this.showDamageFlash(enemy);
+      // Track damage for shield regen delay (Protoss units)
+      if (unit.shield > 0 && unit.team === 'player') {
+        unit.lastDamageTime = time / 1000;
+      }
+      // Apply charge bonus damage if this was a charge hit
+      if (unit.isCharging && unit.chargeDamage > 0) {
+        enemy.hp -= unit.chargeDamage;
+        this.showChargeImpact(enemy.x, enemy.y);
+        unit.isCharging = false;
+      }
       if (enemy.type === 'structure' || enemy.type === 'construction') {
         enemy.statusText.setText(`${Math.max(0, enemy.hp)} hp`);
       }
@@ -1596,22 +1822,39 @@ export default class BattleScene extends Phaser.Scene {
 
     // Enemy AI: Build production if not exists (already exists at start)
     // Enemy AI: Build gas harvesters
-    const enemyWorkers = this.enemyUnits.filter((u) => u.type === 'worker' && u.hp > 0);
-    const gasWorkers = enemyWorkers.filter((u) => u.harvestType === 'gas');
-    const mineralWorkers = enemyWorkers.filter((u) => u.harvestType !== 'gas');
+    // Optimized: single-pass count of enemy workers, gas workers, mineral workers.
+    let enemyWorkerCount = 0;
+    let gasWorkerCount = 0;
+    for (let i = 0; i < this.enemyUnits.length; i++) {
+      const u = this.enemyUnits[i];
+      if (u.type === 'worker' && u.hp > 0) {
+        enemyWorkerCount++;
+        if (u.harvestType === 'gas') gasWorkerCount++;
+      }
+    }
+    const mineralWorkerCount = enemyWorkerCount - gasWorkerCount;
 
     // Assign workers to gas if geysers available and not enough gas workers
     const availableGeysers = this.gasGeysers.filter((g) => g.amount > 0 && g.assignedWorkers < g.maxWorkers);
-    if (availableGeysers.length > 0 && gasWorkers.length < availableGeysers.length && mineralWorkers.length > 1) {
-      // Move a mineral worker to gas
-      const mover = mineralWorkers[mineralWorkers.length - 1];
-      const geyser = availableGeysers[0];
-      // Unassign from minerals (just stop auto-harvest, will find new node)
-      mover.harvestType = 'gas';
-      mover.order = 'gasHarvest';
-      mover.geyserId = geyser.id;
-      mover.statusText.setText('Mining Gas');
-      geyser.assignedWorkers += 1;
+    if (availableGeysers.length > 0 && gasWorkerCount < availableGeysers.length && mineralWorkerCount > 1) {
+      // Move a mineral worker to gas — find the last mineral (non-gas) worker.
+      let mover = null;
+      for (let i = this.enemyUnits.length - 1; i >= 0; i--) {
+        const u = this.enemyUnits[i];
+        if (u.type === 'worker' && u.hp > 0 && u.harvestType !== 'gas') {
+          mover = u;
+          break;
+        }
+      }
+      if (mover) {
+        const geyser = availableGeysers[0];
+        // Unassign from minerals (just stop auto-harvest, will find new node)
+        mover.harvestType = 'gas';
+        mover.order = 'gasHarvest';
+        mover.geyserId = geyser.id;
+        mover.statusText.setText('Mining Gas');
+        geyser.assignedWorkers += 1;
+      }
     }
 
     // Enemy builds tech building if they have minerals and gas, and no tech building yet
@@ -1753,64 +1996,86 @@ export default class BattleScene extends Phaser.Scene {
     wave.targetX = this.playerCommandCenter.x;
     wave.targetY = this.playerCommandCenter.y;
     this.enemyWave += 1;
+    // Visual feedback: wave announcement banner
+    this.showWaveAnnouncement(this.enemyWave);
     session.pushLog(`Enemy wave ${this.enemyWave} ${isSignature ? '(signature units)' : ''} detected.`);
     session.setMessage(`Enemy wave ${this.enemyWave} advancing.`);
   }
 
   findNearestResourceNode(x, y) {
-    const available = this.resourceNodes.filter((node) => node.amount > 0);
-    if (available.length === 0) {
-      return null;
+    // Optimized: single-pass iteration instead of filter + reduce.
+    let best = null;
+    let bestDistance = Infinity;
+
+    for (let i = 0; i < this.resourceNodes.length; i++) {
+      const node = this.resourceNodes[i];
+      if (node.amount <= 0) continue;
+      const d = Phaser.Math.Distance.Between(x, y, node.x, node.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = node;
+      }
     }
 
-    return available.reduce((best, node) => {
-      if (!best) {
-        return node;
-      }
-      const bestDistance = Phaser.Math.Distance.Between(x, y, best.x, best.y);
-      const nextDistance = Phaser.Math.Distance.Between(x, y, node.x, node.y);
-      return nextDistance < bestDistance ? node : best;
-    }, null);
+    return best;
   }
 
   findNearestEnemy(unit) {
-    const enemies = [
-      ...this.enemyUnits.filter((entry) => entry.hp > 0),
-      ...this.structures.filter((entry) => entry.team === 'enemy' && entry.hp > 0)
-    ];
+    // Optimized: direct iteration instead of array spread + reduce.
+    let best = null;
+    let bestDistance = Infinity;
 
-    if (enemies.length === 0) {
-      return null;
+    for (let i = 0; i < this.enemyUnits.length; i++) {
+      const entry = this.enemyUnits[i];
+      if (entry.hp <= 0) continue;
+      const d = Phaser.Math.Distance.Between(unit.x, unit.y, entry.x, entry.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = entry;
+      }
     }
 
-    return enemies.reduce((best, candidate) => {
-      if (!best) {
-        return candidate;
+    for (let i = 0; i < this.structures.length; i++) {
+      const entry = this.structures[i];
+      if (entry.team === 'enemy' && entry.hp > 0) {
+        const d = Phaser.Math.Distance.Between(unit.x, unit.y, entry.x, entry.y);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = entry;
+        }
       }
-      const bestDistance = Phaser.Math.Distance.Between(unit.x, unit.y, best.x, best.y);
-      const nextDistance = Phaser.Math.Distance.Between(unit.x, unit.y, candidate.x, candidate.y);
-      return nextDistance < bestDistance ? candidate : best;
-    }, null);
+    }
+
+    return best;
   }
 
   findNearestPlayerTarget(unit) {
-    const targets = [
-      ...this.playerUnits.filter((entry) => entry.hp > 0),
-      ...this.structures.filter((entry) => entry.team === 'player' && entry.hp > 0)
-    ];
+    // Optimized: direct iteration instead of array spread + reduce.
+    let best = null;
+    let bestDistance = Infinity;
 
-    if (targets.length === 0) {
-      return null;
+    for (let i = 0; i < this.playerUnits.length; i++) {
+      const entry = this.playerUnits[i];
+      if (entry.hp <= 0) continue;
+      const d = Phaser.Math.Distance.Between(unit.x, unit.y, entry.x, entry.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = entry;
+      }
     }
 
-    return targets.reduce((best, candidate) => {
-      if (!best) {
-        return candidate;
+    for (let i = 0; i < this.structures.length; i++) {
+      const entry = this.structures[i];
+      if (entry.team === 'player' && entry.hp > 0) {
+        const d = Phaser.Math.Distance.Between(unit.x, unit.y, entry.x, entry.y);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = entry;
+        }
       }
-      const bestDistance = Phaser.Math.Distance.Between(unit.x, unit.y, best.x, best.y);
-      const nextDistance = Phaser.Math.Distance.Between(unit.x, unit.y, candidate.x, candidate.y);
-      return nextDistance < bestDistance ? candidate : best;
-    }, null);
+    }
+
+    return best;
   }
 
   moveEntityTowards(entity, targetX, targetY, dt) {
@@ -1834,6 +2099,60 @@ export default class BattleScene extends Phaser.Scene {
     entity.y = Phaser.Math.Clamp(entity.y, 18, WORLD_HEIGHT - 18);
   }
 
+  // --- Unit separation (prevents overlap/clumping) ---
+  // Optimized: skips pairs whose bounding circles don't overlap, avoiding expensive sqrt calls.
+  separateUnits() {
+    const unitCount = this.units.length;
+    for (let i = 0; i < unitCount; i++) {
+      const a = this.units[i];
+      if (a.hp <= 0) continue;
+
+      for (let j = i + 1; j < unitCount; j++) {
+        const b = this.units[j];
+        if (b.hp <= 0) continue;
+
+        // Skip worker-resource overlap — workers can stand on resource nodes
+        if (a.type === 'worker' && b.type === 'resource') continue;
+        if (b.type === 'worker' && a.type === 'resource') continue;
+        // Workers can stand on geysers (they harvest from them)
+        if (a.type === 'worker' && b.type === 'gasGeyser') continue;
+        if (b.type === 'worker' && a.type === 'gasGeyser') continue;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distSq = dx * dx + dy * dy;
+        const minDist = a.radius + b.radius;
+
+        // Early-out: if circles don't overlap at all, skip (avoids sqrt).
+        // Use a generous threshold: 4× the combined radius allows overlap detection
+        // while skipping distant pairs that can't possibly interact.
+        if (distSq > minDist * minDist * 4 || distSq > 400) {
+          continue;
+        }
+
+        if (distSq < minDist * minDist && distSq > 0.01) {
+          const dist = Math.sqrt(distSq);
+          // Push apart proportional to overlap amount, clamped by SEPARATION_FORCE * dt
+          const overlap = minDist - dist;
+          const force = Math.min(overlap * 0.5, SEPARATION_FORCE);
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          a.x -= nx * force;
+          a.y -= ny * force;
+          b.x += nx * force;
+          b.y += ny * force;
+
+          // Clamp back to world bounds after separation
+          a.x = Phaser.Math.Clamp(a.x, 18, WORLD_WIDTH - 18);
+          a.y = Phaser.Math.Clamp(a.y, 18, WORLD_HEIGHT - 18);
+          b.x = Phaser.Math.Clamp(b.x, 18, WORLD_WIDTH - 18);
+          b.y = Phaser.Math.Clamp(b.y, 18, WORLD_HEIGHT - 18);
+        }
+      }
+    }
+  }
+
   resolveCombat() {
     this.units.forEach((unit) => {
       if (unit.hp <= 0) {
@@ -1852,15 +2171,26 @@ export default class BattleScene extends Phaser.Scene {
 
   reapDeadEntities() {
     const deadUnits = this.units.filter((unit) => unit.hp <= 0);
-    deadUnits.forEach((unit) => this.destroyEntity(unit));
+    deadUnits.forEach((unit) => {
+      // Death explosion visual + audio feedback
+      this.showDeathExplosion(unit.x, unit.y);
+      this.destroyEntity(unit);
+    });
     this.units = this.units.filter((unit) => unit.hp > 0);
     this.playerUnits = this.playerUnits.filter((unit) => unit.hp > 0);
     this.enemyUnits = this.enemyUnits.filter((unit) => unit.hp > 0);
 
     const deadStructures = this.structures.filter((structure) => structure.hp <= 0);
-    deadStructures.forEach((structure) => this.destroyEntity(structure));
+    deadStructures.forEach((structure) => {
+      // Death explosion for structures too
+      this.showDeathExplosion(structure.x, structure.y);
+      this.destroyEntity(structure);
+    });
     this.structures = this.structures.filter((structure) => structure.hp > 0);
     this.constructions = this.constructions.filter((construction) => construction.hp > 0 && construction.type === 'construction');
+
+    // Refresh tech building cache when structures change.
+    this._updateTechCache();
   }
 
   destroyEntity(entity) {
@@ -1874,10 +2204,26 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   syncSession(messageOverride) {
-    const playerStructures = this.structures.filter((entry) => entry.team === 'player' && entry.hp > 0).length;
-    const enemyStructures = this.structures.filter((entry) => entry.team === 'enemy' && entry.hp > 0).length;
-    const playerCombat = this.units.filter((entry) => entry.team === 'player' && entry.type !== 'worker' && entry.hp > 0).length;
-    const enemyCombat = this.units.filter((entry) => entry.team === 'enemy' && entry.type !== 'worker' && entry.hp > 0).length;
+    // Optimized: count directly instead of creating filtered arrays.
+    let playerStructCount = 0;
+    let enemyStructCount = 0;
+    let playerCombatCount = 0;
+    let enemyCombatCount = 0;
+
+    for (let i = 0; i < this.structures.length; i++) {
+      const s = this.structures[i];
+      if (s.hp > 0) {
+        if (s.team === 'player') playerStructCount++;
+        else enemyStructCount++;
+      }
+    }
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i];
+      if (u.hp > 0) {
+        if (u.team === 'player' && u.type !== 'worker') playerCombatCount++;
+        else if (u.team === 'enemy' && u.type !== 'worker') enemyCombatCount++;
+      }
+    }
 
     const selected = this.selectedEntity;
     const selection = this.describeSelection(selected);
@@ -1895,10 +2241,10 @@ export default class BattleScene extends Phaser.Scene {
 
     session.setSelection(selection);
     session.setBattle({
-      playerUnits: playerCombat,
-      enemyUnits: enemyCombat,
-      playerStructures,
-      enemyStructures,
+      playerUnits: playerCombatCount,
+      enemyUnits: enemyCombatCount,
+      playerStructures: playerStructCount,
+      enemyStructures: enemyStructCount,
       playerBaseHp: Math.max(0, Math.floor(this.playerCommandCenter?.hp ?? 0)),
       enemyBaseHp: Math.max(0, Math.floor(this.enemyCommandCenter?.hp ?? 0)),
       wave: this.enemyWave,
@@ -2005,8 +2351,9 @@ export default class BattleScene extends Phaser.Scene {
 
     if (entity.type === 'structure' && entity.role === 'production') {
       commands.splice(1, 0, 'train-soldier');
-      // Add signature unit training if tech building exists
-      if (this.findPlayerTechBuilding()) {
+      // Optimized: cache tech building lookup — only scan if queue has items.
+      const hasTech = this._cachedTechBuilding || this.structures.some((s) => s.team === 'player' && s.role === 'techBuilding' && s.type === 'structure');
+      if (hasTech) {
         commands.splice(2, 0, 'train-signature');
       }
       return commands;
@@ -2074,6 +2421,288 @@ export default class BattleScene extends Phaser.Scene {
     if (this.banner) {
       this.banner.setText(`${this.race.name} advance`);
     }
+  }
+
+  // --- Mobile visual feedback helpers ---
+
+  /** Draw a pulsing selection ring around the selected entity. */
+  showSelectionHighlight(entity) {
+    // Clean up previous highlight
+    this.clearSelectionHighlight();
+
+    if (!entity || !entity.sprite) return;
+
+    const radius = entity.radius || 20;
+    const highlightColor = this.race.accent ?? 0x3b82f6;
+
+    // Selection ring - slightly larger than entity radius
+    this.selectionHighlight = this.add.circle(entity.x, entity.y, radius + 10, highlightColor, 0.5)
+      .setStrokeStyle(2, highlightColor, 0.9)
+      .setAlpha(0.8)
+      .setDepth(5);
+
+    // Pulsing animation - gentle breathing effect
+    this.selectionHighlightTween = this.tweens.add({
+      targets: this.selectionHighlight,
+      alpha: 0.3,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+  }
+
+  clearSelectionHighlight() {
+    if (this.selectionHighlight) {
+      this.selectionHighlight.destroy();
+      this.selectionHighlight = null;
+    }
+    if (this.selectionHighlightTween) {
+      this.selectionHighlightTween.stop();
+      this.selectionHighlightTween = null;
+    }
+  }
+
+  /** Brief flash at tap location - confirms move/attack commands on mobile. */
+  showTapIndicator(worldX, worldY) {
+    // Clean up previous feedback
+    if (this.tapFeedback) {
+      this.tapFeedback.destroy();
+    }
+
+    // Small crosshair flash - confirms the command was registered
+    const size = 14;
+    this.tapFeedback = this.add.group();
+
+    // Horizontal line
+    const hLine = this.add.rectangle(worldX, worldY, size, 2, 0x60a5fa, 0.9)
+      .setOrigin(0.5);
+    // Vertical line
+    const vLine = this.add.rectangle(worldX, worldY, 2, size, 0x60a5fa, 0.9)
+      .setOrigin(0.5);
+
+    this.tapFeedback.add(hLine);
+    this.tapFeedback.add(vLine);
+
+    // Brief flash then fade out
+    this.tweens.add({
+      targets: [hLine, vLine],
+      alpha: 0,
+      duration: 450,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.tapFeedback?.destroy();
+        this.tapFeedback = null;
+      }
+    });
+  }
+
+  /** Subtle ripple on empty battlefield tap - confirms deselection. */
+  showDeselectRipple(x, y) {
+    // Clean up previous feedback
+    if (this.tapFeedback) {
+      this.tapFeedback.destroy();
+    }
+
+    // Small expanding ring - subtle confirmation of empty tap
+    this.tapFeedback = this.add.circle(x, y, 4, 0x475569, 0.6)
+      .setStrokeStyle(1, 0x475569, 0.5)
+      .setDepth(3);
+
+    this.tweens.add({
+      targets: this.tapFeedback,
+      scaleX: 4,
+      scaleY: 4,
+      alpha: 0,
+      duration: 350,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.tapFeedback?.destroy();
+        this.tapFeedback = null;
+      }
+    });
+  }
+
+  /** Unit takes damage — brief red flash + audio feedback. */
+  showDamageFlash(unit) {
+    if (!unit || !unit.sprite) return;
+
+    // Brief red tint on the sprite
+    if (!unit._damageFlash) {
+      unit._damageFlash = this.tweens.add({
+        targets: unit.sprite,
+        tint: 0xff4444,
+        duration: 60,
+        yoyo: true,
+        repeat: 0,
+        ease: 'Linear',
+        onComplete: () => {
+          unit.sprite.clearTint();
+          if (unit._damageFlash) {
+            unit._damageFlash = null;
+          }
+        }
+      });
+    }
+
+    // Audio: hit sound
+    if (this.audioManager) this.audioManager.hit();
+  }
+
+  /** Unit dies — explosion particle burst + audio feedback. */
+  showDeathExplosion(x, y) {
+    const palette = this.particleManager?.getPalette?.() || this.particleManager?.palettes?.terran || {
+      mineral: [0x60a5fa, 0x93c5fd, 0x2563eb, 0x38bdf8],
+      mineralBright: [0xdbeafe, 0x67e8f9],
+      gas: [0xc084fc, 0xf0abfc, 0x8b5cf6],
+      gasBright: [0xf0abfc, 0xd8b4fe],
+      dust: [0x64748b, 0x94a3b8, 0x475569],
+      construction: [0x2563eb, 0x3b82f6, 0x93c5fd],
+      completion: [0x60a5fa, 0x93c5fd, 0xdbeafe, 0x2563eb]
+    };
+
+    // Spawn 16-24 explosion particles in a radial pattern
+    const count = Phaser.Math.Between(16, 24);
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + Phaser.Math.Between(-10, 10);
+      const speed = Phaser.Math.Between(40, 120);
+      const colors = [...palette.mineral, ...palette.mineralBright];
+      const size = Phaser.Math.Between(3, 7);
+
+      const particle = this.add.circle(x, y, size, colors[Phaser.Math.Between(0, colors.length - 1)], 0.9)
+        .setScrollFactor(1);
+
+      // Explode outward and fade
+      this.tweens.add({
+        targets: particle,
+        x: x + Math.cos(angle) * speed,
+        y: y + Math.sin(angle) * speed,
+        alpha: 0,
+        scale: 0,
+        duration: 400 + Phaser.Math.Between(0, 200),
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          particle.destroy();
+        }
+      });
+    }
+
+    // Audio: explosion/death sound
+    if (this.audioManager) this.audioManager.explosion();
+  }
+
+  /** Wave announcement — brief banner showing wave number. */
+  showWaveAnnouncement(waveNumber) {
+    const camera = this.cameras.main;
+    const { width, height } = this.scale;
+
+    // Clean up previous banner
+    if (this.waveBanner) {
+      this.waveBanner.destroy();
+    }
+
+    const centerX = width / 2;
+    const centerY = height / 2 - 40;
+
+    // Dark background panel
+    const bg = this.add.rectangle(centerX, centerY, 280, 56, 0x020617, 0.85)
+      .setStrokeStyle(1, 0x3b82f6, 0.7)
+      .setOrigin(0.5)
+      .setAlpha(0)
+      .setDepth(10);
+
+    // Wave number text
+    const text = this.add.text(centerX, centerY, `Wave ${waveNumber}`, {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(18px, 3.5vw, 24px)',
+      fontStyle: '700',
+      color: '#ffffff'
+    }).setOrigin(0.5).setAlpha(0).setDepth(11);
+
+    // Subtitle
+    const subtitle = this.add.text(centerX, centerY + 28, 'advancing', {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(11px, 2vw, 14px)',
+      fontStyle: '600',
+      color: '#93c5fd'
+    }).setOrigin(0.5).setAlpha(0).setDepth(11);
+
+    this.waveBanner = this.add.group([bg, text, subtitle]);
+
+    // Fade in, hold, fade out
+    this.tweens.add({
+      targets: [bg, text, subtitle],
+      alpha: 1,
+      duration: 300,
+      ease: 'Cubic.easeOut',
+      delay: 0,
+      onComplete: () => {
+        this.tweens.add({
+          targets: [bg, text, subtitle],
+          alpha: 0,
+          duration: 500,
+          ease: 'Cubic.easeIn',
+          delay: 1500,
+          onComplete: () => {
+            this.waveBanner?.destroy();
+            this.waveBanner = null;
+          }
+        });
+      }
+    });
+  }
+
+  /** Building completion glow — brief highlight when a structure finishes construction. */
+  showCompletionGlow(x, y, raceId) {
+    const raceColors = { terran: 0x3b82f6, zerg: 0xf97316, protoss: 0x7c3aed };
+    const color = raceColors[raceId] ?? 0x3b82f6;
+
+    // Expanding glow ring
+    const glow = this.add.circle(x, y, 10, color, 0.6)
+      .setStrokeStyle(2, color, 0.8)
+      .setAlpha(1)
+      .setDepth(4);
+
+    this.tweens.add({
+      targets: glow,
+      scaleX: 5,
+      scaleY: 5,
+      alpha: 0,
+      duration: 600,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        glow.destroy();
+      }
+    });
+
+    // Audio: completion chime
+    if (this.audioManager) this.audioManager.complete();
+  }
+
+  /** Show a charge impact effect (Protoss Zealot/Dragoon charge hit). */
+  showChargeImpact(x, y) {
+    // Impact ring
+    const impact = this.add.circle(x, y, 8, 0x7c3aed, 0.9)
+      .setStrokeStyle(3, 0xc4b5fd, 0.9)
+      .setAlpha(1)
+      .setDepth(6);
+
+    this.tweens.add({
+      targets: impact,
+      scaleX: 4,
+      scaleY: 4,
+      alpha: 0,
+      duration: 300,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        impact.destroy();
+      }
+    });
+
+    // Audio: charge hit sound
+    if (this.audioManager) this.audioManager.chargeHit();
   }
 
   shutdown() {
