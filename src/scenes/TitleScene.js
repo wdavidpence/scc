@@ -75,51 +75,36 @@ export default class MenuScene extends Phaser.Scene {
     this.scale.on('resize', this.handleResize, this);
   }
 
-  getLayout(width, height) {
+  getCardLayout(width, height) {
     const compact = width < 880;
     if (compact) {
       const cardWidth = Math.min(width - 36, 440);
       const cardHeight = Math.min(144, Math.max(128, (height - 320) / 3));
       const gap = 12;
-      return {
-        compact: true,
-        cardWidth,
-        cardHeight,
-        cardGap: gap,
-        cardPositions: [
-          { x: width / 2, y: height / 2 - cardHeight - 74 },
-          { x: width / 2, y: height / 2 - cardHeight / 2 + 18 },
-          { x: width / 2, y: height / 2 + cardHeight / 2 + 110 }
-        ],
-        titleY: height * 0.16,
-        subtitleY: height * 0.16 + 54,
-        descriptionY: height * 0.16 + 94,
-        startY: Math.min(height - 106, height / 2 + 320),
-        startWidth: Math.min(width - 50, 300),
-        footerY: Math.min(height - 28, height / 2 + 388)
-      };
+      return { compact: true, cardWidth, cardHeight, cardGap: gap, cardPositions: [
+        { x: width / 2, y: height / 2 - cardHeight - 74 },
+        { x: width / 2, y: height / 2 - cardHeight / 2 + 18 },
+        { x: width / 2, y: height / 2 + cardHeight / 2 + 110 }
+      ]};
     }
 
     const cardWidth = Math.min(290, Math.max(220, (width - 56) / 3));
     const cardGap = Math.min(20, Math.max(12, (width - cardWidth * 3) / 4));
     const totalWidth = cardWidth * 3 + cardGap * 2;
     const startX = (width - totalWidth) / 2 + cardWidth / 2;
-    return {
-      compact: false,
-      cardWidth,
-      cardGap,
-      cardPositions: [
-        { x: startX, y: height / 2 - 10 },
-        { x: startX + cardWidth + cardGap, y: height / 2 - 10 },
-        { x: startX + (cardWidth + cardGap) * 2, y: height / 2 - 10 }
-      ],
-      titleY: height / 2 - 220,
-      subtitleY: height / 2 - 160,
-      descriptionY: height / 2 - 122,
-      startY: height / 2 + 202,
-      startWidth: 270,
-      footerY: height / 2 + 282
-    };
+    return { compact: false, cardWidth, cardGap, cardPositions: [
+      { x: startX, y: height / 2 - 10 },
+      { x: startX + cardWidth + cardGap, y: height / 2 - 10 },
+      { x: startX + (cardWidth + cardGap) * 2, y: height / 2 - 10 }
+    ]};
+  }
+
+  getLayout(width, height) {
+    const card = this.getCardLayout(width, height);
+    if (card.compact) {
+      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + 320), startWidth: Math.min(width - 50, 300), footerY: Math.min(height - 28, height / 2 + 388) };
+    }
+    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: 270, footerY: height / 2 + 282 };
   }
 
   createRaceCard(race, index) {
@@ -132,6 +117,20 @@ export default class MenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const topLine = this.add.rectangle(position.x, position.y - cardHeight / 2 + 16, layout.cardWidth - 20, 4, race.accent, 1);
+    const accentLeft = race.id === 'terran'
+      ? this.add.image(position.x - layout.cardWidth / 2 + 24, position.y - cardHeight / 2 + 24, 'terran-scv').setDisplaySize(20, 20)
+      : race.id === 'zerg'
+        ? this.add.image(position.x - layout.cardWidth / 2 + 24, position.y - cardHeight / 2 + 24, 'zerg-drone').setDisplaySize(20, 20)
+        : race.id === 'protoss'
+          ? this.add.image(position.x - layout.cardWidth / 2 + 24, position.y - cardHeight / 2 + 24, 'protoss-probe').setDisplaySize(20, 20)
+        : null;
+    const accentRight = race.id === 'terran'
+      ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'terran-marine').setDisplaySize(20, 20)
+      : race.id === 'zerg'
+        ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'zerg-zergling').setDisplaySize(20, 20)
+        : race.id === 'protoss'
+          ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'protoss-zealot').setDisplaySize(20, 20)
+        : null;
     const title = this.add.text(position.x, position.y - (layout.compact ? 48 : 74), race.name, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(18px, 4vw, 30px)',
@@ -163,6 +162,13 @@ export default class MenuScene extends Phaser.Scene {
 
     const chipY = layout.compact ? position.y + cardHeight / 2 - 28 : position.y + 86;
     const chip = this.add.rectangle(position.x, chipY, 128, 28, race.accent, 0.18);
+    const chipIcon = race.id === 'terran'
+      ? this.add.image(position.x - 38, chipY, 'terran-marauder').setDisplaySize(20, 20)
+      : race.id === 'zerg'
+        ? this.add.image(position.x - 38, chipY, 'zerg-hydralisk').setDisplaySize(20, 20)
+        : race.id === 'protoss'
+          ? this.add.image(position.x - 38, chipY, 'protoss-dragoon').setDisplaySize(20, 20)
+        : null;
     const chipLabel = this.add.text(position.x, chipY, 'Tap to select', {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(11px, 2.1vw, 13px)',
@@ -178,7 +184,7 @@ export default class MenuScene extends Phaser.Scene {
 
     card.on('pointerdown', select);
 
-    return { race, card, topLine, title, subtitle, facts, chip, chipLabel, cardHeight };
+    return { race, card, topLine, accentLeft, accentRight, title, subtitle, facts, chip, chipIcon, chipLabel, cardHeight };
   }
 
   refreshCards() {
@@ -189,6 +195,9 @@ export default class MenuScene extends Phaser.Scene {
       entry.facts.setColor(selected ? '#dbeafe' : '#94a3b8');
       entry.chip.setFillStyle(entry.race.accent, selected ? 0.35 : 0.18);
       entry.chipLabel.setText(selected ? 'Selected' : 'Tap to select');
+      entry.chipIcon?.setAlpha(selected ? 1 : 0.7);
+      entry.accentLeft?.setAlpha(selected ? 1 : 0.7);
+      entry.accentRight?.setAlpha(selected ? 1 : 0.7);
     });
 
     const activeRace = getRace(this.selectedRaceId);
@@ -230,6 +239,9 @@ export default class MenuScene extends Phaser.Scene {
       const chipY = this.layout.compact ? pos.y + cardHeight / 2 - 28 : pos.y + 86;
       entry.chip.setPosition(pos.x, chipY).setSize(128, 28);
       entry.chipLabel.setPosition(pos.x, chipY);
+      entry.chipIcon?.setPosition(pos.x - 38, chipY);
+      entry.accentLeft?.setPosition(pos.x - this.layout.cardWidth / 2 + 24, pos.y - cardHeight / 2 + 24);
+      entry.accentRight?.setPosition(pos.x + this.layout.cardWidth / 2 - 24, pos.y - cardHeight / 2 + 24);
     });
 
     this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, 60);
@@ -240,5 +252,25 @@ export default class MenuScene extends Phaser.Scene {
 
   handleResize(gameSize) {
     this.applyLayout(gameSize);
+  }
+
+  shutdown() {
+    // Clean up race cards and buttons when scene is destroyed.
+    if (this.background) this.background.destroy();
+    if (this.shell) this.shell.destroy();
+    if (this.titleText) this.titleText.destroy();
+    if (this.footerText) this.footerText.destroy();
+    if (this.startButton) this.startButton.destroy();
+    if (this.raceCards) {
+      for (const card of this.raceCards) {
+        if (card.icon) card.icon.destroy();
+        if (card.title) card.title.destroy();
+        if (card.subtitle) card.subtitle.destroy();
+        if (card.facts) card.facts.destroy();
+        if (card.chip) card.chip.destroy();
+        if (card.accentLeft) card.accentLeft.destroy();
+        if (card.accentRight) card.accentRight.destroy();
+      }
+    }
   }
 }
