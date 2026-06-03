@@ -1,9 +1,5 @@
 import Phaser from 'phaser';
-import BootScene from '../scenes/BootScene.js';
-import PreloadScene from '../scenes/PreloadScene.js';
-import MenuScene from '../scenes/TitleScene.js';
-import BattleScene from '../scenes/GameScene.js';
-import HudScene from '../scenes/HudScene.js';
+import { SCENE_LIST } from './scenes.js';
 
 export function createGame() {
   return new Phaser.Game({
@@ -11,8 +7,8 @@ export function createGame() {
     parent: 'game',
     backgroundColor: '#07111c',
     transparent: false,
-    pixelArt: false,
-    antialias: true,
+    pixelArt: true,
+    antialias: false,
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -27,6 +23,6 @@ export function createGame() {
       antialiasGL: true,
       powerPreference: 'high-performance'
     },
-    scene: [BootScene, PreloadScene, MenuScene, BattleScene, HudScene]
+    scene: SCENE_LIST
   });
 }
