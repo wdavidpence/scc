@@ -1,8 +1,13 @@
 import Phaser from 'phaser';
 import { SCENE_LIST } from './scenes.js';
 
-export function createGame() {
-  return new Phaser.Game({
+/**
+ * Build the Phaser.Game configuration object.
+ * Pure helper — no side effects, returns a config literal identical
+ * to the one previously passed inline to `new Phaser.Game()`.
+ */
+export function buildGameConfig() {
+  return {
     type: Phaser.AUTO,
     parent: 'game',
     backgroundColor: '#07111c',
@@ -24,5 +29,9 @@ export function createGame() {
       powerPreference: 'high-performance'
     },
     scene: SCENE_LIST
-  });
+  };
+}
+
+export function createGame() {
+  return new Phaser.Game(buildGameConfig());
 }
