@@ -31,6 +31,15 @@ const START_BUTTON = {
   height: 60,
 };
 
+// ── Footer Y-position constants (compact vs wide) ───────────────────────────
+const FOOTER_Y = {
+  compact: { footerMinPad: 28, footerCenterOffset: 388 },
+  wide: { footerCenterOffset: 282 },
+};
+
+// ── Shared menu text style (title, subtitle, description, labels, footer) ────
+const MENU_TEXT_STYLE = { fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' };
+
 export default class MenuScene extends Phaser.Scene {
   constructor() {
     super('MenuScene');
@@ -53,7 +62,7 @@ export default class MenuScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x1f3b61, 1);
 
     this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(48px, 12vw, 88px)',
       fontStyle: '800',
       color: '#ffffff',
@@ -61,14 +70,14 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.subtitleText = this.add.text(width / 2, this.layout.subtitleY, 'StarCraft-inspired mobile RTS skirmish', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(14px, 3vw, 22px)',
       color: '#cbd5e1',
       align: 'center'
     }).setOrigin(0.5);
 
     this.descriptionText = this.add.text(width / 2, this.layout.descriptionY, 'Choose a race, then build, scout, and push across the battlefield.', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(13px, 2.6vw, 18px)',
       color: '#94a3b8',
       align: 'center',
@@ -86,7 +95,7 @@ export default class MenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     this.startLabel = this.add.text(width / 2, this.layout.startY, 'Deploy into Mission', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(16px, 3vw, 22px)',
       fontStyle: '700',
       color: '#ffffff',
@@ -94,7 +103,7 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.footerText = this.add.text(width / 2, this.layout.footerY, 'Tip: tap and drag the battlefield to pan once you are in the match.', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(12px, 2.3vw, 15px)',
       color: '#64748b',
       align: 'center'
@@ -132,9 +141,9 @@ export default class MenuScene extends Phaser.Scene {
   getLayout(width, height) {
     const card = this.getCardLayout(width, height);
     if (card.compact) {
-      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320), startWidth: Math.min(width - 50, START_BUTTON.widthCompact), footerY: Math.min(height - 28, height / 2 + 388) };
+      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320), startWidth: Math.min(width - 50, START_BUTTON.widthCompact), footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset) };
     }
-    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: START_BUTTON.widthWide, footerY: height / 2 + 282 };
+    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: START_BUTTON.widthWide, footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset };
   }
 
   createRaceCard(race, index) {
@@ -162,7 +171,7 @@ export default class MenuScene extends Phaser.Scene {
           ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'protoss-zealot').setDisplaySize(20, 20)
         : null;
     const title = this.add.text(position.x, position.y - (layout.compact ? 48 : 74), race.name, {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(18px, 4vw, 30px)',
       fontStyle: '800',
       color: '#ffffff',
@@ -170,7 +179,7 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const subtitle = this.add.text(position.x, position.y - (layout.compact ? 18 : 34), race.subtitle, {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(12px, 2.4vw, 16px)',
       color: '#cbd5e1',
       align: 'center',
@@ -183,7 +192,7 @@ export default class MenuScene extends Phaser.Scene {
       `Base: ${race.commandCenterName}`,
       `Production: ${race.productionName}`
     ], {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(11px, 2vw, 14px)',
       color: '#94a3b8',
       align: 'center',
@@ -200,7 +209,7 @@ export default class MenuScene extends Phaser.Scene {
           ? this.add.image(position.x - 38, chipY, 'protoss-dragoon').setDisplaySize(20, 20)
         : null;
     const chipLabel = this.add.text(position.x, chipY, 'Tap to select', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      ...MENU_TEXT_STYLE,
       fontSize: 'clamp(11px, 2.1vw, 13px)',
       color: '#e2e8f0',
       align: 'center'
