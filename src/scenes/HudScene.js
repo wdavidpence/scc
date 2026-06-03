@@ -47,6 +47,8 @@ const COMMAND_INDICATOR_COLOR = 0x60a5fa;    // blue color for command indicator
 const LINE_SPACING_DETAILS = 6;              // line spacing for selection details text
 const LINE_SPACING_LOG = 4;                  // line spacing for log text
 const HOVER_GLOW_INSET = 6;                  // extra inset for hover-glow rectangle (bg.width/height + HOVER_GLOW_INSET)
+const HOVER_GLOW_COLOR = 0x3b82f6;           // blue color for hover-glow rectangle
+const HOVER_GLOW_ALPHA = 0.08;               // initial alpha for hover-glow rectangle (before active)
 
 // ── Layout constants (getLayout return values) ────────────────────────
 const COMPACT_WIDTH_THRESHOLD = 760;         // width below which compact mode activates
@@ -467,7 +469,7 @@ export default class HudScene extends Phaser.Scene {
               });
               // Create a subtle glow rectangle behind the button
               if (!button.hoverGlow) {
-                button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + HOVER_GLOW_INSET, bg.height + HOVER_GLOW_INSET, 0x3b82f6, 0.08)
+                button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + HOVER_GLOW_INSET, bg.height + HOVER_GLOW_INSET, HOVER_GLOW_COLOR, HOVER_GLOW_ALPHA)
                   .setStrokeStyle(0)
                   .setAlpha(0);
                 button.hoverGlow.setDepth(-1);
@@ -559,7 +561,7 @@ export default class HudScene extends Phaser.Scene {
             ease: 'Sine.easeOut'
           });
           if (!button.hoverGlow) {
-            button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + 6, bg.height + 6, 0x3b82f6, 0.08)
+            button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + 6, bg.height + 6, HOVER_GLOW_COLOR, HOVER_GLOW_ALPHA)
               .setStrokeStyle(0)
               .setAlpha(0);
             button.hoverGlow.setDepth(-1);
