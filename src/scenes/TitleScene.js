@@ -1,6 +1,35 @@
 import Phaser from 'phaser';
 import { GameStates, session } from '../game/state/gameSession.js';
 import { RACE_ORDER, getRace } from '../game/data/races.js';
+import { getShellSize } from '../game/shellSize.js';
+
+// ── Card spacing & start-button sizing constants (compact vs wide) ──────────
+const CARD_SPACING = {
+  compact: {
+    widthMax: 440,
+    widthMinPad: 36,
+    heightMax: 144,
+    heightMin: 128,
+    gap: 12,
+    yOffset74: 74,
+    yOffset18: 18,
+    yOffset110: 110,
+    yOffset320: 320,
+  },
+  wide: {
+    widthMax: 290,
+    widthMin: 220,
+    widthPad: 56,
+    gapMax: 20,
+    gapMin: 12,
+  },
+};
+
+const START_BUTTON = {
+  widthCompact: 300,
+  widthWide: 270,
+  height: 60,
+};
 
 export default class MenuScene extends Phaser.Scene {
   constructor() {
@@ -19,7 +48,8 @@ export default class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#07111c');
 
     this.background = this.add.rectangle(width / 2, height / 2, width, height, 0x07111c, 1);
-    this.shell = this.add.rectangle(width / 2, height / 2 - 30, Math.min(width - 24, 900), Math.min(height - 48, this.layout.compact ? 760 : 530), 0x0a1524, 0.92)
+    const shell = getShellSize(width, height, this.layout.compact);
+    this.shell = this.add.rectangle(shell.x, shell.y, shell.width, shell.height, 0x0a1524, 0.92)
       .setStrokeStyle(2, 0x1f3b61, 1);
 
     this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
@@ -51,7 +81,7 @@ export default class MenuScene extends Phaser.Scene {
       this.cardEntries.push(this.createRaceCard(race, index));
     });
 
-    this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, 60, 0x2563eb, 1)
+    this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, START_BUTTON.height, 0x2563eb, 1)
       .setStrokeStyle(2, 0x60a5fa, 1)
       .setInteractive({ useHandCursor: true });
 
@@ -78,18 +108,18 @@ export default class MenuScene extends Phaser.Scene {
   getCardLayout(width, height) {
     const compact = width < 880;
     if (compact) {
-      const cardWidth = Math.min(width - 36, 440);
-      const cardHeight = Math.min(144, Math.max(128, (height - 320) / 3));
-      const gap = 12;
+      const cardWidth = Math.min(width - CARD_SPACING.compact.widthMinPad, CARD_SPACING.compact.widthMax);
+      const cardHeight = Math.min(CARD_SPACING.compact.heightMax, Math.max(CARD_SPACING.compact.heightMin, (height - CARD_SPACING.compact.yOffset320) / 3));
+      const gap = CARD_SPACING.compact.gap;
       return { compact: true, cardWidth, cardHeight, cardGap: gap, cardPositions: [
-        { x: width / 2, y: height / 2 - cardHeight - 74 },
-        { x: width / 2, y: height / 2 - cardHeight / 2 + 18 },
-        { x: width / 2, y: height / 2 + cardHeight / 2 + 110 }
+        { x: width / 2, y: height / 2 - cardHeight - CARD_SPACING.compact.yOffset74 },
+        { x: width / 2, y: height / 2 - cardHeight / 2 + CARD_SPACING.compact.yOffset18 },
+        { x: width / 2, y: height / 2 + cardHeight / 2 + CARD_SPACING.compact.yOffset110 }
       ]};
     }
 
-    const cardWidth = Math.min(290, Math.max(220, (width - 56) / 3));
-    const cardGap = Math.min(20, Math.max(12, (width - cardWidth * 3) / 4));
+    const cardWidth = Math.min(CARD_SPACING.wide.widthMax, Math.max(CARD_SPACING.wide.widthMin, (width - CARD_SPACING.wide.widthPad) / 3));
+    const cardGap = Math.min(CARD_SPACING.wide.gapMax, Math.max(CARD_SPACING.wide.gapMin, (width - cardWidth * 3) / 4));
     const totalWidth = cardWidth * 3 + cardGap * 2;
     const startX = (width - totalWidth) / 2 + cardWidth / 2;
     return { compact: false, cardWidth, cardGap, cardPositions: [
@@ -102,15 +132,15 @@ export default class MenuScene extends Phaser.Scene {
   getLayout(width, height) {
     const card = this.getCardLayout(width, height);
     if (card.compact) {
-      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + 320), startWidth: Math.min(width - 50, 300), footerY: Math.min(height - 28, height / 2 + 388) };
+      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320), startWidth: Math.min(width - 50, START_BUTTON.widthCompact), footerY: Math.min(height - 28, height / 2 + 388) };
     }
-    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: 270, footerY: height / 2 + 282 };
+    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: START_BUTTON.widthWide, footerY: height / 2 + 282 };
   }
 
   createRaceCard(race, index) {
     const layout = this.layout;
     const position = layout.cardPositions[index];
-    const cardHeight = layout.compact ? layout.cardHeight : 230;
+    const cardHeight = layout.compact ? layout.cardHeight : CARD_SPACING.wide.heightMax;
 
     const card = this.add.rectangle(position.x, position.y, layout.cardWidth, cardHeight, 0x0b1220, 1)
       .setStrokeStyle(2, race.accent, 1)
@@ -219,8 +249,9 @@ export default class MenuScene extends Phaser.Scene {
     this.background.setPosition(width / 2, height / 2);
     this.background.setSize(width, height);
 
-    this.shell.setPosition(width / 2, height / 2 - 30);
-    this.shell.setSize(Math.min(width - 24, 900), Math.min(height - 48, this.layout.compact ? 760 : 530));
+    const shell = getShellSize(width, height, this.layout.compact);
+    this.shell.setPosition(shell.x, shell.y);
+    this.shell.setSize(shell.width, shell.height);
 
     this.titleText.setPosition(width / 2, this.layout.titleY);
     this.subtitleText.setPosition(width / 2, this.layout.subtitleY);
@@ -244,7 +275,7 @@ export default class MenuScene extends Phaser.Scene {
       entry.accentRight?.setPosition(pos.x + this.layout.cardWidth / 2 - 24, pos.y - cardHeight / 2 + 24);
     });
 
-    this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, 60);
+    this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, START_BUTTON.height);
     this.startLabel.setPosition(width / 2, this.layout.startY);
     this.footerText.setPosition(width / 2, this.layout.footerY);
     this.refreshCards();
