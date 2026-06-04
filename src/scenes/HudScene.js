@@ -112,6 +112,18 @@ const WIDE_BUTTON_MARGIN = 40;               // margin used in button width calc
 // ── Selection panel Y helper (extracted from create/handleResize) ─────────
 const selectionPanelY = (width, height) => height - getLayout(width, height).bottomBarHeight + SELECTION_PANEL_GAP;
 
+// ── Bottom-bar text baseline helper (extracted from create/handleResize) ──
+const computeTextPositions = (width, height) => {
+  const bottomBarY = height - getLayout(width, height).bottomBarHeight;
+  return {
+    bottomBarY,
+    selectionTitleY: bottomBarY + SELECTION_TITLE_OFFSET,
+    selectionDetailsY: bottomBarY + SELECTION_DETAILS_OFFSET,
+    statusTextY: bottomBarY + getLayout(width, height).selectionPanelHeight - STATUS_TEXT_OFFSET,
+    logTextY: bottomBarY + LOG_Y_OFFSET
+  };
+};
+
 export default class HudScene extends Phaser.Scene {
   constructor() {
     super('HudScene');
@@ -141,8 +153,10 @@ export default class HudScene extends Phaser.Scene {
     this.topBarBorder = this.add.rectangle(width / 2, this.layout.topBarY + this.layout.topBarHeight / 2, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.6).setOrigin(0.5);
 
     // Bottom bar
-    this.bottomBar = this.add.rectangle(width / 2, height - this.layout.bottomBarHeight / 2, width, this.layout.bottomBarHeight, 0x020617, 0.9).setOrigin(0.5);
-    this.bottomBarBorder = this.add.rectangle(width / 2, height - this.layout.bottomBarHeight / 2, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.5).setOrigin(0.5);
+    const bottomBarY = height - this.layout.bottomBarHeight;
+    const bottomBarCenterY = bottomBarY + this.layout.bottomBarHeight / 2;
+    this.bottomBar = this.add.rectangle(width / 2, bottomBarCenterY, width, this.layout.bottomBarHeight, 0x020617, 0.9).setOrigin(0.5);
+    this.bottomBarBorder = this.add.rectangle(width / 2, bottomBarCenterY, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.5).setOrigin(0.5);
 
     // Race accent accent line on top bar
     const raceColors = { terran: 0x1d4ed8, zerg: 0xf97316, protoss: 0x7c3aed };
@@ -186,11 +200,10 @@ export default class HudScene extends Phaser.Scene {
       align: 'right',
       wordWrap: { width: objectiveWrapWidth(width) }
     }).setOrigin(1, 0);
-
     // --- Selection panel (bottom bar Y baseline extracted for reuse) ---
-    const bottomBarY = height - this.layout.bottomBarHeight;
+    const textPos = computeTextPositions(width, height);
     const panelX = PANEL_X;
-    const panelY = bottomBarY + SELECTION_PANEL_GAP;
+    const panelY = selectionPanelY(width, height);
     const panelW = panelWidth(width);
     const panelH = this.layout.selectionPanelHeight;
 
@@ -208,7 +221,7 @@ export default class HudScene extends Phaser.Scene {
     }).setVisible(false);
 
     // Selection title
-    this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_TITLE_OFFSET, '', {
+    this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionTitleY, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(14px, 2.6vw, 18px)',
       fontStyle: '700',
@@ -216,7 +229,7 @@ export default class HudScene extends Phaser.Scene {
     });
 
     // Selection details
-    this.selectionDetails = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_DETAILS_OFFSET, '', {
+    this.selectionDetails = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionDetailsY, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2.1vw, 14px)',
       color: COLOR_SLAKE_200,
@@ -225,14 +238,14 @@ export default class HudScene extends Phaser.Scene {
     });
 
     // Status text
-    this.statusText = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET, '', {
+    this.statusText = this.add.text(STATUS_TEXT_OFFSET, textPos.statusTextY, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2.1vw, 14px)',
       color: COLOR_BLUE_300
     });
 
     // Log text (right side of selection panel)
-    this.logText = this.add.text(width - LOG_X_OFFSET, bottomBarY + LOG_Y_OFFSET, '', {
+    this.logText = this.add.text(width - LOG_X_OFFSET, textPos.logTextY, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2vw, 13px)',
       color: COLOR_SLAKE_400,
@@ -744,10 +757,9 @@ export default class HudScene extends Phaser.Scene {
       this.updateCommandPulse(button, isActive);
     });
 
-    // Position HP bar (bottom bar Y baseline extracted for reuse)
-    const bottomBarY = height - this.layout.bottomBarHeight;
+    // Position HP bar (reuse file-scoped selectionPanelY helper)
     const panelX = PANEL_X;
-    const panelY = bottomBarY + SELECTION_PANEL_GAP;
+    const panelY = selectionPanelY(width, height);
     this.hpBarBack.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpBarFront.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpText.setPosition(panelX + HP_TEXT_X_OFFSET, panelY + HP_TEXT_Y_OFFSET);
@@ -807,30 +819,31 @@ export default class HudScene extends Phaser.Scene {
     this.raceIcon?.setPosition(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
     this.raceIconAlt?.setPosition(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
 
-    this.bottomBar.setPosition(width / 2, height - this.layout.bottomBarHeight / 2);
+    const bottomBarCenterY = height - this.layout.bottomBarHeight / 2;
+    this.bottomBar.setPosition(width / 2, bottomBarCenterY);
     this.bottomBar.height = this.layout.bottomBarHeight;
     this.bottomBar.width = width;
 
-    this.bottomBarBorder.setPosition(width / 2, height - this.layout.bottomBarHeight / 2);
+    this.bottomBarBorder.setPosition(width / 2, bottomBarCenterY);
     this.bottomBarBorder.width = width;
 
     this.objectiveText.setPosition(width - OBJECTIVE_X_OFFSET, OBJECTIVE_Y);
 
-    // Update HP bar positions (bottom bar Y baseline extracted for reuse)
-    const bottomBarY = height - this.layout.bottomBarHeight;
+    // Update text positions (bottom bar Y baseline extracted for reuse)
+    const textPos = computeTextPositions(width, height);
     const panelX = PANEL_X;
-    const panelY = bottomBarY + SELECTION_PANEL_GAP;
+    const panelY = selectionPanelY(width, height);
     this.hpBarBack.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpBarFront.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpText.setPosition(panelX + HP_TEXT_X_OFFSET, panelY + HP_TEXT_Y_OFFSET);
 
-    this.logText.setPosition(width - LOG_X_OFFSET, bottomBarY + LOG_Y_OFFSET);
+    this.logText.setPosition(width - LOG_X_OFFSET, textPos.logTextY);
     this.selectionPanel.setPosition(panelX, panelY);
     this.selectionPanel.setSize(panelWidth(width), this.layout.selectionPanelHeight);
-    this.selectionTitle.setPosition(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_TITLE_OFFSET);
-    this.selectionDetails.setPosition(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_DETAILS_OFFSET);
+    this.selectionTitle.setPosition(STATUS_TEXT_OFFSET, textPos.selectionTitleY);
+    this.selectionDetails.setPosition(STATUS_TEXT_OFFSET, textPos.selectionDetailsY);
     this.selectionDetails.setWordWrapWidth(selectionWrapWidth(width));
-    this.statusText.setPosition(STATUS_TEXT_OFFSET, bottomBarY + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET);
+    this.statusText.setPosition(STATUS_TEXT_OFFSET, textPos.statusTextY);
 
     // Recreate buttons if layout mode changed
     if (layoutChanged) {
