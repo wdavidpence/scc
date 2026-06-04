@@ -11,6 +11,12 @@ const BAR_PAD_X        = 110;
 const DETAIL_PAD_X     = 80;
 const DETAIL_MAX_WIDTH = 560;
 
+// Shared text style for loading-screen title and detail.
+const LOADING_TEXT_STYLE = {
+  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  align: 'center',
+};
+
 function panelSize(w, h) {
   return {
     width:  Math.min(w - PANEL_PAD_X, PANEL_MAX_WIDTH),
@@ -55,18 +61,22 @@ const ASSET_MANIFEST = [
   { key: 'protoss-cybernetics-core',   path: 'assets/sprites/protoss/cybernetics-core.png', frameWidth: 78, frameHeight: 54 },
 ];
 
+function loadAssetManifest(loader, manifest) {
+  for (const asset of manifest) {
+    loader.spritesheet(asset.key, asset.path, {
+      frameWidth: asset.frameWidth,
+      frameHeight: asset.frameHeight,
+    });
+  }
+}
+
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
     super('PreloadScene');
   }
 
   preload() {
-    for (const asset of ASSET_MANIFEST) {
-      this.load.spritesheet(asset.key, asset.path, {
-        frameWidth: asset.frameWidth,
-        frameHeight: asset.frameHeight,
-      });
-    }
+    loadAssetManifest(this.load, ASSET_MANIFEST);
   }
 
   create() {
@@ -77,35 +87,33 @@ export default class PreloadScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#07111c');
 
     const panel = panelSize(width, height);
-    const backdrop = this.add.rectangle(cx, cy, panel.width, panel.height, 0x081825, 0.95)
+    this.backdrop = this.add.rectangle(cx, cy, panel.width, panel.height, 0x081825, 0.95)
       .setStrokeStyle(2, 0x1f3b61, 1);
 
-    const title = this.add.text(cx, cy - 50, 'Loading SCC command core…', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    this.title = this.add.text(cx, cy - 50, 'Loading SCC command core…', {
+      ...LOADING_TEXT_STYLE,
       fontSize: 'clamp(24px, 5vw, 42px)',
       fontStyle: '700',
       color: '#ffffff',
-      align: 'center'
     }).setOrigin(0.5);
 
-    const detail = this.add.text(cx, cy + 6, 'Preparing the mobile RTS shell, HUD, and race selection menu.', {
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    this.detail = this.add.text(cx, cy + 6, 'Preparing the mobile RTS shell, HUD, and race selection menu.', {
+      ...LOADING_TEXT_STYLE,
       fontSize: 'clamp(14px, 3vw, 20px)',
       color: '#cbd5e1',
-      align: 'center',
       wordWrap: { width: detailWrapWidth(width) }
     }).setOrigin(0.5);
 
     const bw = barWidth(width);
-    const barBack = this.add.rectangle(cx, cy + 82, bw, 16, 0x0f172a, 1);
-    const barFill = this.add.rectangle(cx - bw / 2, cy + 82, 8, 16, 0x60a5fa, 1)
+    this.barBack = this.add.rectangle(cx, cy + 82, bw, 16, 0x0f172a, 1);
+    this.barFill = this.add.rectangle(cx - bw / 2, cy + 82, 8, 16, 0x60a5fa, 1)
       .setOrigin(0, 0.5);
 
     this.time.addEvent({
       delay: 600,
       callback: () => {
         this.tweens.add({
-          targets: barFill,
+          targets: this.barFill,
           width: bw,
           duration: 260,
           ease: 'Sine.easeInOut',
@@ -117,17 +125,17 @@ export default class PreloadScene extends Phaser.Scene {
     this.scale.on('resize', (gameSize) => {
       const nextCx = gameSize.width / 2;
       const nextCy = gameSize.height / 2;
-      backdrop.setPosition(nextCx, nextCy);
+      this.backdrop.setPosition(nextCx, nextCy);
       const nextPanel = panelSize(gameSize.width, gameSize.height);
-      backdrop.setSize(nextPanel.width, nextPanel.height);
-      title.setPosition(nextCx, nextCy - 50);
-      detail.setPosition(nextCx, nextCy + 6);
-      detail.wordWrap.width = detailWrapWidth(gameSize.width);
+      this.backdrop.setSize(nextPanel.width, nextPanel.height);
+      this.title.setPosition(nextCx, nextCy - 50);
+      this.detail.setPosition(nextCx, nextCy + 6);
+      this.detail.wordWrap.width = detailWrapWidth(gameSize.width);
       const nextBw = barWidth(gameSize.width);
-      barBack.setPosition(nextCx, nextCy + 82);
-      barBack.width = nextBw;
-      barFill.setPosition(nextCx - nextBw / 2, nextCy + 82);
-      barFill.width = nextBw;
+      this.barBack.setPosition(nextCx, nextCy + 82);
+      this.barBack.width = nextBw;
+      this.barFill.setPosition(nextCx - nextBw / 2, nextCy + 82);
+      this.barFill.width = nextBw;
     });
   }
 

@@ -21,10 +21,45 @@ export function createInputController(scene) {
     return vector;
   };
 
+  // Track whether the user is currently interacting via touch
+  let lastPointerId = -1;
+  let lastPointerTime = 0;
+
+  const onTouchStart = (pointer) => {
+    lastPointerId = pointer.id;
+    lastPointerTime = scene.time.now;
+  };
+
+  const isTouchActive = () => {
+    if (lastPointerId < 0) return false;
+    // Touch is considered "active" for 200ms after last pointer down
+    return (scene.time.now - lastPointerTime) < 200;
+  };
+
+  // Vertical bounds for the touch-active zone (between HUD top and action bar bottom)
+  const TOUCH_ACTIVE_TOP = 70;
+  const TOUCH_ACTIVE_BOTTOM_OFFSET = 190;
+
+  const getTouchState = () => {
+    const activePointers = scene.input.activePointers.filter(
+      (p) => p.y > TOUCH_ACTIVE_TOP && p.y < scene.scale.height - TOUCH_ACTIVE_BOTTOM_OFFSET,
+    );
+    return {
+      active: isTouchActive(),
+      pointerCount: activePointers.length,
+      lastPointerId
+    };
+  };
+
+  // Register touch listeners
+  scene.input.on('pointerdown', onTouchStart);
+
   return {
     getKeyboardVector,
+    getTouchState,
     destroy() {
       // Phaser manages the keyboard objects with the scene lifecycle.
+      scene.input.off('pointerdown', onTouchStart);
     }
   };
 }

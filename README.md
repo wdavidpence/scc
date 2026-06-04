@@ -72,6 +72,9 @@ Creates a lightweight git tag and appends a changelog entry to `backups/CHANGELO
 ### `backups/UPDATE_TEMPLATE.md` — Daily update template
 Copy to `backups/DAILY-YYYY-MM-DD.md` and fill in for each session.
 
+### `backups/SMOKE_CHECKLIST.md` — Smoke-check checklist
+Concise pre-release / pre-merge checklist with exact commands, pass/fail criteria, and 10 mobile sanity checks.
+
 ## Notes
 
 This repo is intended to be backed by GitHub and managed through Hermes Kanban with small, testable cards.

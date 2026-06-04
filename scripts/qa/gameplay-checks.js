@@ -261,27 +261,47 @@ function checkScenes() {
     }
   }
 
-  // Check createGame.js references all scenes
+  // Check scene registration (supports both inline and scenes.js helper patterns)
   const createGame = readSourceFile('src/game/createGame.js');
+  const scenesHelper = readSourceFile('src/game/scenes.js');
   if (createGame) {
-    const expectedScenes = ['BootScene', 'PreloadScene', 'MenuScene', 'BattleScene', 'HudScene'];
-    for (const scene of expectedScenes) {
-      const imported = createGame.includes(`import ${scene}`);
-      const registered = createGame.includes(`scene: [`) && createGame.includes(scene);
-      check(`createGame imports ${scene}`, imported,
-        imported ? 'imported' : 'not imported');
-      check(`createGame registers ${scene}`, registered,
-        registered ? 'registered in scene array' : 'not registered in scene array');
-    }
+    // Check if scenes are registered via SCENE_LIST (refactored pattern)
+    const usesHelper = createGame.includes('SCENE_LIST');
+    // Check if scenes are registered inline
+    const inlineArrayMatch = createGame.match(/scene:\s*\[([^\]]+)\]/);
+    const usesInline = !!inlineArrayMatch;
 
-    // Check scene order makes sense
-    const sceneArrayMatch = createGame.match(/scene:\s*\[([^\]]+)\]/);
-    if (sceneArrayMatch) {
-      const sceneOrder = sceneArrayMatch[1].match(/\w+/g) || [];
-      const expectedOrder = ['BootScene', 'PreloadScene', 'MenuScene', 'BattleScene', 'HudScene'];
-      const orderCorrect = expectedOrder.every((s, i) => sceneOrder[i] === s);
-      check('Scene registration order correct', orderCorrect,
-        orderCorrect ? 'Boot -> Preload -> Menu -> Battle -> Hud' : `actual: [${sceneOrder.join(', ')}]`);
+    if (usesHelper && scenesHelper) {
+      // Refactored pattern: scenes.js is the single source of truth
+      const expectedScenes = ['BootScene', 'PreloadScene', 'MenuScene', 'BattleScene', 'HudScene'];
+      for (const scene of expectedScenes) {
+        const inHelper = scenesHelper.includes(scene);
+        check(`scenes.js includes ${scene}`, inHelper,
+          inHelper ? 'scene class imported in helper' : 'scene class missing from helper');
+      }
+      // Check scene order via scenes.js
+      const helperArrayMatch = scenesHelper.match(/scene:\s*\[([^\]]+)\]/) ||
+        scenesHelper.match(/\[([^\]]+)\]/);
+      if (helperArrayMatch) {
+        const sceneOrder = helperArrayMatch[1].match(/\w+/g) || [];
+        const expectedOrder = ['BootScene', 'PreloadScene', 'MenuScene', 'BattleScene', 'HudScene'];
+        const orderCorrect = expectedOrder.every((s, i) => sceneOrder[i] === s);
+        check('Scene registration order correct', orderCorrect,
+          orderCorrect ? 'Boot -> Preload -> Menu -> Battle -> Hud' : `actual: [${sceneOrder.join(', ')}]`);
+      }
+    } else if (usesInline) {
+      // Legacy inline pattern
+      const expectedScenes = ['BootScene', 'PreloadScene', 'MenuScene', 'BattleScene', 'HudScene'];
+      const sceneList = inlineArrayMatch[1].match(/\w+/g) || [];
+      for (const scene of expectedScenes) {
+        const present = sceneList.includes(scene);
+        check(`createGame registers ${scene}`, present,
+          present ? 'registered in scene array' : 'not registered in scene array');
+      }
+    } else {
+      // Neither pattern found
+      check('Scene registration pattern', false,
+        'No scene registration found (check createGame.js or scenes.js)');
     }
   }
 }

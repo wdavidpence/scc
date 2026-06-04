@@ -8,4 +8,8 @@ export default class BootScene extends Phaser.Scene {
   create() {
     this.scene.start('PreloadScene');
   }
+
+  shutdown() {
+    // BootScene is transient — nothing to clean up.
+  }
 }

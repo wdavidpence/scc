@@ -90,6 +90,36 @@ function checkTouchInput() {
     }
   }
 
+  // Touch feedback helpers (mobile polish)
+  const gameSceneSrc = readSourceFile('src/scenes/GameScene.js');
+  if (gameSceneSrc) {
+    check('Selection highlight visual feedback', gameSceneSrc.includes('showSelectionHighlight'),
+      'pulsing selection ring for mobile visibility');
+
+    check('Tap indicator for commands', gameSceneSrc.includes('showTapIndicator'),
+      'crosshair flash confirms move/attack commands');
+
+    check('Deselect ripple feedback', gameSceneSrc.includes('showDeselectRipple'),
+      'ripple on empty tap confirms deselection');
+
+    // Drag threshold check (mobile: should be >= 18 to avoid accidental pans)
+    const thresholdMatch = gameSceneSrc.match(/TAP_DRAG_THRESHOLD\s*=\s*(\d+)/);
+    if (thresholdMatch) {
+      const threshold = parseInt(thresholdMatch[1]);
+      check(`Drag threshold (${threshold}px)`, threshold >= 18,
+        `${threshold}px threshold (>= 18 recommended for mobile to avoid accidental pans)`);
+    } else {
+      check('Drag threshold defined', false, 'TAP_DRAG_THRESHOLD not found');
+    }
+
+    // Input controller touch state
+    const inputSrc = readSourceFile('src/game/input/createInputController.js');
+    if (inputSrc) {
+      check('Touch state tracking in input controller', inputSrc.includes('getTouchState'),
+        'input controller provides touch state for game logic');
+    }
+  }
+
   // Hand cursor for interactivity (nice-to-have, not required for touch feedback)
   check('useHandCursor on interactive elements', true,
     'useHandCursor not set — tap feedback still works without cursor graphics');
@@ -114,9 +144,19 @@ function checkHUDTouch() {
   check('Button layout adapts to screen', hudSrc.includes('getLayout') || hudSrc.includes('compact'),
     'responsive button layout (compact mode)');
 
-  const layoutMatch = hudSrc.match(/compact\s*=\s*width\s*<\s*(\d+)/);
-  if (layoutMatch) {
-    const threshold = parseInt(layoutMatch[1]);
+  // Try numeric literal first, then constant reference
+  let threshold = null;
+  const literalMatch = hudSrc.match(/compact\s*=\s*width\s*<\s*(\d+)/);
+  if (literalMatch) {
+    threshold = parseInt(literalMatch[1]);
+  } else {
+    // Look for constant definition: COMPACT_WIDTH_THRESHOLD = N or similar
+    const constDef = hudSrc.match(/(?:COMPACT|COMPACT_MODE|MIN_|MIN_WIDTH|THRESHOLD_WIDTH)_?WIDTH_?THRESHOLD\s*=\s*(\d+)/);
+    if (constDef) {
+      threshold = parseInt(constDef[1]);
+    }
+  }
+  if (threshold !== null) {
     check(`Compact mode threshold`, threshold < 800,
       `compact mode activates below ${threshold}px (good for mobile)`);
   } else {

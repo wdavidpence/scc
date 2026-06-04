@@ -34,14 +34,22 @@ const PANEL_MAX_WIDTH = 350;                 // max selection panel width (used 
 const OBJECTIVE_WRAP_MAX = 420;              // max objective word-wrap width (used in Math.min)
 const SELECTION_WRAP_MAX = 320;              // max selection details word-wrap width (used in Math.min)
 const LOG_WRAP_MAX = 360;                    // max log text word-wrap width (used in Math.min)
+
+// ── Word-wrap width helpers (extracted from inline Math.min calculations) ──
+const objectiveWrapWidth = (width) => Math.min(OBJECTIVE_WRAP_MAX, width - OBJECTIVE_WRAP_MARGIN);
+const selectionWrapWidth = (width) => Math.min(SELECTION_WRAP_MAX, width - SELECTION_PANEL_PADDING);
+const logWrapWidth = (width) => Math.min(LOG_WRAP_MAX, width - SELECTION_PANEL_PADDING);
+const panelWidth = (width) => Math.min(PANEL_MAX_WIDTH, width - PANEL_MARGIN);
 const HP_BAR_WIDTH = 120;                    // max HP bar width (used in Math.min)
 const HP_BAR_HEIGHT = 5;                     // HP bar height (used for bg + front)
+const HP_BAR_X_OFFSET = 0;                   // X offset of HP bar from panelX (kept at 0 for left alignment)
 const HP_BAR_Y_OFFSET = 52;                  // Y offset of HP bar from panelY (used in setPosition)
 const HP_TEXT_Y_OFFSET = 48;                 // Y offset of HP text from panelY (used in setPosition)
 const HP_TEXT_X_OFFSET = 146;                // X offset of HP text from panelX (used in setPosition)
 const RACE_ICON_X = 148;                     // X for primary race icon (terran-scv / zerg-drone / protoss-probe)
 const RACE_ICON_ALT_X = 174;                 // X for secondary race icon (terran-marine / zerg-zergling / protoss-zealot)
 const RACE_ICON_SIZE = 22;                   // display size for race icons (width + height)
+const RACE_ICON_Y_OFFSET = 1;                // Y offset for race icons from topBarY (used in handleResize)
 const COMMAND_INDICATOR_RADIUS = 4;          // radius of command mode indicator dot
 const COMMAND_INDICATOR_COLOR = 0x60a5fa;    // blue color for command indicator
 const LINE_SPACING_DETAILS = 6;              // line spacing for selection details text
@@ -49,8 +57,20 @@ const LINE_SPACING_LOG = 4;                  // line spacing for log text
 const HOVER_GLOW_INSET = 6;                  // extra inset for hover-glow rectangle (bg.width/height + HOVER_GLOW_INSET)
 const HOVER_GLOW_COLOR = 0x3b82f6;           // blue color for hover-glow rectangle
 const HOVER_GLOW_ALPHA = 0.08;               // initial alpha for hover-glow rectangle (before active)
+const HOVER_GLOW_ACTIVE_ALPHA = 0.4;         // alpha target for active-state hover-glow tween
+const ACCENT_LINE_Y_OFFSET = 2;              // offset above topBarY for accent line position
+const ACCENT_LINE_HEIGHT = 2;                // thickness of the race accent line
+const BORDER_LINE_HEIGHT = 1;                // thickness of top/bottom bar borders
+const PULSE_GLOW_INSET = 8;                  // extra inset for command pulse glow (bg.width/height + PULSE_GLOW_INSET)
 
-// ── Layout constants (getLayout return values) ────────────────────────
+// ── Inline spacing/offset constants (used in create/handleResize)
+const PANEL_MARGIN = 36;                     // horizontal margin from edges (width - 36)
+const OBJECTIVE_WRAP_MARGIN = 80;            // horizontal margin for objective wrap (width - 80)
+const SELECTION_PANEL_PADDING = 60;          // horizontal padding for selection text (width - 60)
+const BUTTON_COMPACT_MARGIN = 46;            // horizontal margin for compact mode button layout (width - 46)
+const BUTTON_COMPACT_GAP = 6;                // gap subtracted in compact mode button width calc
+
+// ── Inline spacing/offset constants (used in create/handleResize) ────────────────────────
 const COMPACT_WIDTH_THRESHOLD = 760;         // width below which compact mode activates
 const NARROW_PORTRAIT_ASPECT_RATIO = 0.55;   // aspect ratio for narrow portrait detection
 const NARROW_PORTRAIT_HEIGHT_MULTIPLIER = 2; // height multiplier for narrow portrait
@@ -89,12 +109,8 @@ const WIDE_BUTTON_GAP_MIN = 3;
 const WIDE_BUTTON_GAP_MAX = 8;
 const WIDE_BUTTON_MARGIN = 40;               // margin used in button width calc
 
-// ── Inline spacing/offset constants (used in create/handleResize) ─────
-const PANEL_MARGIN = 36;                     // horizontal margin from edges (width - 36)
-const OBJECTIVE_WRAP_MARGIN = 80;            // horizontal margin for objective wrap (width - 80)
-const SELECTION_PANEL_PADDING = 60;          // horizontal padding for selection text (width - 60)
-const BUTTON_COMPACT_MARGIN = 46;            // horizontal margin for compact mode button layout (width - 46)
-const BUTTON_COMPACT_GAP = 6;                // gap subtracted in compact mode button width calc
+// ── Selection panel Y helper (extracted from create/handleResize) ─────────
+const selectionPanelY = (width, height) => height - getLayout(width, height).bottomBarHeight + SELECTION_PANEL_GAP;
 
 export default class HudScene extends Phaser.Scene {
   constructor() {
@@ -122,29 +138,29 @@ export default class HudScene extends Phaser.Scene {
 
     // Top bar with subtle gradient effect
     this.topBar = this.add.rectangle(width / 2, this.layout.topBarY, width, this.layout.topBarHeight, 0x020617, 0.85).setOrigin(0.5);
-    this.topBarBorder = this.add.rectangle(width / 2, this.layout.topBarY + this.layout.topBarHeight / 2, width, 1, 0x1e3a5f, 0.6).setOrigin(0.5);
+    this.topBarBorder = this.add.rectangle(width / 2, this.layout.topBarY + this.layout.topBarHeight / 2, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.6).setOrigin(0.5);
 
     // Bottom bar
     this.bottomBar = this.add.rectangle(width / 2, height - this.layout.bottomBarHeight / 2, width, this.layout.bottomBarHeight, 0x020617, 0.9).setOrigin(0.5);
-    this.bottomBarBorder = this.add.rectangle(width / 2, height - this.layout.bottomBarHeight / 2, width, 1, 0x1e3a5f, 0.5).setOrigin(0.5);
+    this.bottomBarBorder = this.add.rectangle(width / 2, height - this.layout.bottomBarHeight / 2, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.5).setOrigin(0.5);
 
     // Race accent accent line on top bar
     const raceColors = { terran: 0x1d4ed8, zerg: 0xf97316, protoss: 0x7c3aed };
     const initialRaceId = this.battleScene?.race?.id ?? session.raceId ?? 'terran';
-    this.accentLine = this.add.rectangle(width / 2, this.layout.topBarY - 2, width, 2, raceColors[initialRaceId] ?? 0x1d4ed8, 0.7).setOrigin(0.5);
+    this.accentLine = this.add.rectangle(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET, width, ACCENT_LINE_HEIGHT, raceColors[initialRaceId] ?? 0x1d4ed8, 0.7).setOrigin(0.5);
     this.raceIcon = initialRaceId === 'terran'
-      ? this.add.image(RACE_ICON_X, this.layout.topBarY + 1, 'terran-scv').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+      ? this.add.image(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'terran-scv').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
       : initialRaceId === 'zerg'
-        ? this.add.image(RACE_ICON_X, this.layout.topBarY + 1, 'zerg-drone').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+        ? this.add.image(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'zerg-drone').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
         : initialRaceId === 'protoss'
-          ? this.add.image(RACE_ICON_X, this.layout.topBarY + 1, 'protoss-probe').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+          ? this.add.image(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'protoss-probe').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
         : null;
     this.raceIconAlt = initialRaceId === 'terran'
-      ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + 1, 'terran-marine').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+      ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'terran-marine').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
       : initialRaceId === 'zerg'
-        ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + 1, 'zerg-zergling').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+        ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'zerg-zergling').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
         : initialRaceId === 'protoss'
-          ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + 1, 'protoss-zealot').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
+          ? this.add.image(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'protoss-zealot').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
         : null;
 
     // Title text
@@ -168,13 +184,14 @@ export default class HudScene extends Phaser.Scene {
       fontSize: 'clamp(12px, 2.2vw, 15px)',
       color: COLOR_BLUE_300,
       align: 'right',
-      wordWrap: { width: Math.min(OBJECTIVE_WRAP_MAX, width - OBJECTIVE_WRAP_MARGIN) }
+      wordWrap: { width: objectiveWrapWidth(width) }
     }).setOrigin(1, 0);
 
-    // --- Selection panel ---
+    // --- Selection panel (bottom bar Y baseline extracted for reuse) ---
+    const bottomBarY = height - this.layout.bottomBarHeight;
     const panelX = PANEL_X;
-    const panelY = height - this.layout.bottomBarHeight + SELECTION_PANEL_GAP;
-    const panelW = Math.min(PANEL_MAX_WIDTH, width - PANEL_MARGIN);
+    const panelY = bottomBarY + SELECTION_PANEL_GAP;
+    const panelW = panelWidth(width);
     const panelH = this.layout.selectionPanelHeight;
 
     this.selectionPanel = this.add.rectangle(panelX, panelY, panelW, panelH, 0x0b1220, 0.96)
@@ -191,7 +208,7 @@ export default class HudScene extends Phaser.Scene {
     }).setVisible(false);
 
     // Selection title
-    this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + SELECTION_TITLE_OFFSET, '', {
+    this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_TITLE_OFFSET, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(14px, 2.6vw, 18px)',
       fontStyle: '700',
@@ -199,28 +216,28 @@ export default class HudScene extends Phaser.Scene {
     });
 
     // Selection details
-    this.selectionDetails = this.add.text(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + SELECTION_DETAILS_OFFSET, '', {
+    this.selectionDetails = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_DETAILS_OFFSET, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2.1vw, 14px)',
       color: COLOR_SLAKE_200,
-      wordWrap: { width: Math.min(SELECTION_WRAP_MAX, width - SELECTION_PANEL_PADDING) },
+      wordWrap: { width: selectionWrapWidth(width) },
       lineSpacing: LINE_SPACING_DETAILS
     });
 
     // Status text
-    this.statusText = this.add.text(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET, '', {
+    this.statusText = this.add.text(STATUS_TEXT_OFFSET, bottomBarY + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2.1vw, 14px)',
       color: COLOR_BLUE_300
     });
 
     // Log text (right side of selection panel)
-    this.logText = this.add.text(width - LOG_X_OFFSET, height - this.layout.bottomBarHeight + LOG_Y_OFFSET, '', {
+    this.logText = this.add.text(width - LOG_X_OFFSET, bottomBarY + LOG_Y_OFFSET, '', {
       fontFamily: FONT_FAMILY,
       fontSize: 'clamp(11px, 2vw, 13px)',
       color: COLOR_SLAKE_400,
       align: 'right',
-      wordWrap: { width: Math.min(LOG_WRAP_MAX, width - SELECTION_PANEL_PADDING) },
+      wordWrap: { width: logWrapWidth(width) },
       lineSpacing: LINE_SPACING_LOG
     }).setOrigin(1, 0);
 
@@ -281,6 +298,7 @@ export default class HudScene extends Phaser.Scene {
     const gasDiff = Math.abs(targetGas - oldGas);
     const maxDiff = Math.max(mineralDiff, gasDiff, 1);
     const duration = Phaser.Math.Between(200, 500) + maxDiff * 15;
+    const MAX_TWEEN_DURATION = 1500;
 
     // Build the initial text (with old values)
     const baseText = `Supply ${supplyUsedVal}/${supplyCapVal}  |  Enemy ${enemyMineralsVal}`;
@@ -289,7 +307,7 @@ export default class HudScene extends Phaser.Scene {
 
     this._resourceTween = this.tweens.add({
       targets: {},
-      duration: Math.min(duration, 1500), // cap at 1.5s max
+      duration: Math.min(duration, MAX_TWEEN_DURATION),
       onUpdate: (tween) => {
         const progress = tween.progress;
         // Ease with a slight bounce-out feel using cubic ease
@@ -360,6 +378,7 @@ export default class HudScene extends Phaser.Scene {
 
     if (compact && narrowPortrait) {
       // Very narrow portrait (e.g. phone held vertically, small screen)
+      const compactNarrowBtnWidth = Math.min(COMPACT_NARROW_BUTTON_WIDTH_MAX, Math.floor((width - PANEL_MARGIN) / 3) - COMPACT_NARROW_BUTTON_GAP);
       return {
         compact: true,
         narrowPortrait: true,
@@ -368,7 +387,7 @@ export default class HudScene extends Phaser.Scene {
         bottomBarHeight: COMPACT_NARROW_BOTTOM_BAR_HEIGHT,
         selectionPanelHeight: COMPACT_NARROW_SELECTION_PANEL_HEIGHT,
         buttonRows: [3, 4],
-        buttonWidth: Math.min(COMPACT_NARROW_BUTTON_WIDTH_MAX, Math.floor((width - PANEL_MARGIN) / 3) - COMPACT_NARROW_BUTTON_GAP),
+        buttonWidth: compactNarrowBtnWidth,
         buttonHeight: COMPACT_NARROW_BUTTON_HEIGHT,
         buttonGap: COMPACT_NARROW_BUTTON_GAP,
         buttonTopY: height - COMPACT_NARROW_BUTTON_TOP_Y_OFFSET,
@@ -377,6 +396,8 @@ export default class HudScene extends Phaser.Scene {
     }
 
     if (compact) {
+      // Compact wide layout: 2 rows (5 top, 4 bottom), columns = 5
+      const compactBtnWidth = Math.min(COMPACT_BUTTON_WIDTH_MAX, Math.floor((width - BUTTON_COMPACT_MARGIN) / 5) - BUTTON_COMPACT_GAP);
       return {
         compact: true,
         narrowPortrait: false,
@@ -385,7 +406,7 @@ export default class HudScene extends Phaser.Scene {
         bottomBarHeight: COMPACT_BOTTOM_BAR_HEIGHT,
         selectionPanelHeight: COMPACT_SELECTION_PANEL_HEIGHT,
         buttonRows: [5, 4],
-        buttonWidth: Math.min(COMPACT_BUTTON_WIDTH_MAX, Math.floor((width - BUTTON_COMPACT_MARGIN) / 5) - BUTTON_COMPACT_GAP),
+        buttonWidth: compactBtnWidth,
         buttonHeight: COMPACT_BUTTON_HEIGHT,
         buttonGap: COMPACT_BUTTON_GAP,
         buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
@@ -393,6 +414,9 @@ export default class HudScene extends Phaser.Scene {
       };
     }
 
+    // Wide (non-compact) layout: single row of 9 buttons
+    const wideBtnWidth = Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 9 - WIDE_BUTTON_GAP_MAX));
+    const wideBtnGap = Math.max(WIDE_BUTTON_GAP_MIN, (width - WIDE_BUTTON_MARGIN - wideBtnWidth * 9) / 8);
     return {
       compact: false,
       narrowPortrait: false,
@@ -401,9 +425,9 @@ export default class HudScene extends Phaser.Scene {
       bottomBarHeight: WIDE_BOTTOM_BAR_HEIGHT,
       selectionPanelHeight: WIDE_SELECTION_PANEL_HEIGHT,
       buttonRows: [9],
-      buttonWidth: Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 9 - WIDE_BUTTON_GAP_MAX)),
+      buttonWidth: wideBtnWidth,
       buttonHeight: WIDE_BUTTON_HEIGHT,
-      buttonGap: Math.max(WIDE_BUTTON_GAP_MIN, Math.min(WIDE_BUTTON_GAP_MAX, (width - WIDE_BUTTON_MARGIN - Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 9 - WIDE_BUTTON_GAP_MAX)) * 9) / 8)),
+      buttonGap: Math.min(WIDE_BUTTON_GAP_MAX, wideBtnGap),
       buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
       buttonBottomY: height - COMPACT_BUTTON_BOTTOM_Y_OFFSET
     };
@@ -561,14 +585,14 @@ export default class HudScene extends Phaser.Scene {
             ease: 'Sine.easeOut'
           });
           if (!button.hoverGlow) {
-            button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + 6, bg.height + 6, HOVER_GLOW_COLOR, HOVER_GLOW_ALPHA)
+            button.hoverGlow = this.add.rectangle(bg.x, bg.y, bg.width + HOVER_GLOW_INSET, bg.height + HOVER_GLOW_INSET, HOVER_GLOW_COLOR, HOVER_GLOW_ALPHA)
               .setStrokeStyle(0)
               .setAlpha(0);
             button.hoverGlow.setDepth(-1);
           }
           this.tweens.add({
             targets: button.hoverGlow,
-            alpha: 0.4,
+            alpha: HOVER_GLOW_ACTIVE_ALPHA,
             duration: 120,
             ease: 'Sine.easeOut'
           });
@@ -720,9 +744,10 @@ export default class HudScene extends Phaser.Scene {
       this.updateCommandPulse(button, isActive);
     });
 
-    // Position HP bar
+    // Position HP bar (bottom bar Y baseline extracted for reuse)
+    const bottomBarY = height - this.layout.bottomBarHeight;
     const panelX = PANEL_X;
-    const panelY = height - this.layout.bottomBarHeight + SELECTION_PANEL_GAP;
+    const panelY = bottomBarY + SELECTION_PANEL_GAP;
     this.hpBarBack.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpBarFront.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpText.setPosition(panelX + HP_TEXT_X_OFFSET, panelY + HP_TEXT_Y_OFFSET);
@@ -733,7 +758,7 @@ export default class HudScene extends Phaser.Scene {
       if (!button.pulse) {
         // Create a subtle glow around the active button
         const bg = button.bg;
-        button.pulse = this.add.rectangle(bg.x, bg.y, bg.width + 8, bg.height + 8, 0x3b82f6, 0.15)
+        button.pulse = this.add.rectangle(bg.x, bg.y, bg.width + PULSE_GLOW_INSET, bg.height + PULSE_GLOW_INSET, 0x3b82f6, 0.15)
           .setStrokeStyle(0)
           .setAlpha(0.5);
         button.pulse.setDepth(-1);
@@ -777,10 +802,10 @@ export default class HudScene extends Phaser.Scene {
     this.topBarBorder.setPosition(width / 2, this.layout.topBarY + this.layout.topBarHeight / 2);
     this.topBarBorder.width = width;
 
-    this.accentLine.setPosition(width / 2, this.layout.topBarY - 2);
+    this.accentLine.setPosition(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET);
     this.accentLine.width = width;
-    this.raceIcon?.setPosition(RACE_ICON_X, this.layout.topBarY + 1);
-    this.raceIconAlt?.setPosition(RACE_ICON_ALT_X, this.layout.topBarY + 1);
+    this.raceIcon?.setPosition(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
+    this.raceIconAlt?.setPosition(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
 
     this.bottomBar.setPosition(width / 2, height - this.layout.bottomBarHeight / 2);
     this.bottomBar.height = this.layout.bottomBarHeight;
@@ -791,20 +816,21 @@ export default class HudScene extends Phaser.Scene {
 
     this.objectiveText.setPosition(width - OBJECTIVE_X_OFFSET, OBJECTIVE_Y);
 
-    // Update HP bar positions
+    // Update HP bar positions (bottom bar Y baseline extracted for reuse)
+    const bottomBarY = height - this.layout.bottomBarHeight;
     const panelX = PANEL_X;
-    const panelY = height - this.layout.bottomBarHeight + SELECTION_PANEL_GAP;
+    const panelY = bottomBarY + SELECTION_PANEL_GAP;
     this.hpBarBack.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpBarFront.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);
     this.hpText.setPosition(panelX + HP_TEXT_X_OFFSET, panelY + HP_TEXT_Y_OFFSET);
 
-    this.logText.setPosition(width - LOG_X_OFFSET, height - this.layout.bottomBarHeight + LOG_Y_OFFSET);
-    this.selectionPanel.setPosition(panelX, height - this.layout.bottomBarHeight + SELECTION_PANEL_GAP);
-    this.selectionPanel.setSize(Math.min(PANEL_MAX_WIDTH, width - PANEL_MARGIN), this.layout.selectionPanelHeight);
-    this.selectionTitle.setPosition(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + SELECTION_TITLE_OFFSET);
-    this.selectionDetails.setPosition(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + SELECTION_DETAILS_OFFSET);
-    this.selectionDetails.setWordWrapWidth(Math.min(SELECTION_WRAP_MAX, width - SELECTION_PANEL_PADDING));
-    this.statusText.setPosition(STATUS_TEXT_OFFSET, height - this.layout.bottomBarHeight + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET);
+    this.logText.setPosition(width - LOG_X_OFFSET, bottomBarY + LOG_Y_OFFSET);
+    this.selectionPanel.setPosition(panelX, panelY);
+    this.selectionPanel.setSize(panelWidth(width), this.layout.selectionPanelHeight);
+    this.selectionTitle.setPosition(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_TITLE_OFFSET);
+    this.selectionDetails.setPosition(STATUS_TEXT_OFFSET, bottomBarY + SELECTION_DETAILS_OFFSET);
+    this.selectionDetails.setWordWrapWidth(selectionWrapWidth(width));
+    this.statusText.setPosition(STATUS_TEXT_OFFSET, bottomBarY + this.layout.selectionPanelHeight - STATUS_TEXT_OFFSET);
 
     // Recreate buttons if layout mode changed
     if (layoutChanged) {

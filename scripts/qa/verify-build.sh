@@ -184,14 +184,25 @@ echo ""
 # --- Check 4: Source integrity ---
 echo "--- Source integrity ---"
 
-# Check all scenes are referenced in createGame.js
+# Check all scenes are referenced (either inline imports or via scenes.js helper)
 if [ -f "src/game/createGame.js" ]; then
   SCENES_IN_CODE=$(grep -o "import [A-Za-z_][A-Za-z_0-9]* from" src/game/createGame.js | wc -l)
-  SCENES_EXPECTED=5  # Boot, Preload, Menu, Battle, Hud
+  SCENES_EXPECTED=1  # After refactor: scene list extracted to scenes.js (1 import)
   if [ "$SCENES_IN_CODE" -ge "$SCENES_EXPECTED" ]; then
-    pass "createGame.js imports $SCENES_IN_CODE scenes (expected >= $SCENES_EXPECTED)"
+    pass "createGame.js imports $SCENES_IN_CODE scene module(s) (expected >= $SCENES_EXPECTED)"
   else
-    fail "createGame.js imports only $SCENES_IN_CODE scenes (expected >= $SCENES_EXPECTED)"
+    fail "createGame.js imports only $SCENES_IN_CODE scene module(s) (expected >= $SCENES_EXPECTED)"
+  fi
+  # Verify scenes.js exists and defines all scenes
+  if [ -f "src/game/scenes.js" ]; then
+    SCENES_IN_HELPER=$(grep -o "import [A-Za-z_][A-Za-z_0-9]* from" src/game/scenes.js | wc -l)
+    if [ "$SCENES_IN_HELPER" -ge 5 ]; then
+      pass "scenes.js aggregates $SCENES_IN_HELPER scene classes"
+    else
+      fail "scenes.js defines only $SCENES_IN_HELPER scenes (expected >= 5)"
+    fi
+  else
+    fail "scenes.js helper not found (scenes may be inline — check createGame.js)"
   fi
 
   # Check scale mode
