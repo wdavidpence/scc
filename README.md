@@ -43,6 +43,26 @@ npm run build
 - Drag on the battlefield to pan the camera
 - Use WASD or arrow keys on desktop to pan the view
 
+## AI difficulty presets
+
+Choose the AI difficulty on the title screen before starting a match.
+
+Knobs changed by preset:
+- `enemyStartingMinerals`
+- `enemyStartingSupplyCap`
+- `enemyIncomeMultiplier`
+- `enemyWaveStart`
+- `enemyWaveFloor`
+- `enemyWaveDecay`
+- `enemyTechWave`
+- `enemySignatureWave`
+- `enemySignatureCadence`
+
+Gameplay effect:
+- Easy gives the player more setup time, slower AI income, and later elite waves.
+- Normal keeps the current baseline skirmish pacing.
+- Hard ramps pressure sooner with faster income, earlier tech, and more frequent elite attacks.
+
 ## Automation
 
 Three lightweight scripts live in `scripts/`. All are idempotent and safe for repeated runs.

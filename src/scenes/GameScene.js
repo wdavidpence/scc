@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { session, GameStates } from '../game/state/gameSession.js';
 import { getRace } from '../game/data/races.js';
+import { getDifficulty, getEnemyWaveInterval } from '../game/data/difficulties.js';
 import { createInputController } from '../game/input/createInputController.js';
 import { getUnitDef } from '../game/unitDefs.js';
 import ParticleManager from '../game/particles/ParticleManager.js';
@@ -18,6 +19,24 @@ const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.15;
 const SEPARATION_FORCE = 2.5;
+const MOTION_SCALE_TARGETS = {
+  idle: 1,
+  move: 1.03,
+  attack: 1.06,
+  build: 1.02,
+  train: 1.018
+};
+const FEEDBACK_TIMINGS = {
+  selectionPulse: 520,
+  tapFlash: 300,
+  deselectRipple: 240,
+  damageFlash: 40,
+  completionGlow: 420,
+  chargeImpact: 220,
+  waveFadeIn: 220,
+  waveHold: 1200,
+  waveFadeOut: 360
+};
 const PLAYER_BUILD_SLOTS = [
   { x: 315, y: WORLD_HEIGHT / 2 - 150 },
   { x: 315, y: WORLD_HEIGHT / 2 + 150 }
@@ -41,6 +60,7 @@ export default class BattleScene extends Phaser.Scene {
 
   create() {
     this.race = getRace(session.raceId);
+    this.aiDifficulty = getDifficulty(session.difficultyId);
     this.selectedEntity = null;
     this.commandMode = 'select';
     this.paused = false;
@@ -59,10 +79,10 @@ export default class BattleScene extends Phaser.Scene {
     this.playerGas = this.race.startGas;
     this.playerSupplyUsed = this.race.startSupplyUsed;
     this.playerSupplyCap = this.race.startSupplyCap;
-    this.enemyMinerals = 320;
+    this.enemyMinerals = this.aiDifficulty.enemyStartingMinerals;
     this.enemyGas = this.race.startGas;
     this.enemySupplyUsed = 4;
-    this.enemySupplyCap = 10;
+    this.enemySupplyCap = this.aiDifficulty.enemyStartingSupplyCap;
     this.enemyIncomeTimer = 0;
     this.enemySpawnTimer = 0;
     this.enemyWave = 0;
@@ -121,10 +141,21 @@ export default class BattleScene extends Phaser.Scene {
       supplyUsed: this.playerSupplyUsed,
       supplyCap: this.playerSupplyCap,
       enemyMinerals: this.enemyMinerals,
+      difficultyId: this.aiDifficulty.id,
+      difficultyLabel: this.aiDifficulty.label,
       objective: `Secure the frontier, build ${this.race.productionName}, and destroy the enemy ${this.race.commandCenterName}.`,
-      message: `${this.race.name} command uplink online. Tap a unit, structure, or the battlefield to command the army.`,
+      message: `${this.race.name} command uplink online. ${this.aiDifficulty.label} AI active. Tap a unit, structure, or the battlefield to command the army.`,
       log: [`${this.race.name} deployed.`]
     });
+
+    this.defaultWorker = this.units.find((unit) => unit.team === 'player' && unit.type === 'worker' && unit.hp > 0) ?? null;
+    if (this.defaultWorker) {
+      this.selectEntity(this.defaultWorker);
+      session.setMessage(`Worker selected by default. Tap Move or Attack to command it, or use the HUD to train more ${this.race.workerName}s.`);
+    } else if (this.playerCommandCenter) {
+      this.selectEntity(this.playerCommandCenter);
+      session.setMessage('Command Center selected by default. Use the HUD to grow your army.');
+    }
 
     this.scene.launch('HudScene', { battleScene: this });
     this.scene.bringToTop('HudScene');
@@ -807,6 +838,8 @@ export default class BattleScene extends Phaser.Scene {
       hpBack,
       hpFront,
       statusText,
+      motionScale: 1,
+      motionState: 'idle',
       radius: def.radius,
       color: def.color,
       harvestType: options.harvestType ?? null,
@@ -1102,16 +1135,17 @@ export default class BattleScene extends Phaser.Scene {
     this.showSelectionHighlight(entity);
     this.syncSession(`Selected ${entity.label}.`);
     // Audio feedback: selection chirp.
-    if (this.audioManager) this.audioManager.select();
+    if (this.audioManager) this.audioManager.select(entity);
   }
 
   clearSelection() {
+    const previousSelection = this.selectedEntity;
     this.selectedEntity = null;
     this.commandMode = 'select';
     this.clearSelectionHighlight();
     this.syncSession('Selection cleared.');
     // Audio feedback: deselect blip.
-    if (this.audioManager) this.audioManager.deselect();
+    if (this.audioManager) this.audioManager.deselect(previousSelection);
   }
 
   handleHudAction(action) {
@@ -1125,6 +1159,9 @@ export default class BattleScene extends Phaser.Scene {
       this.syncSession('Command mode cleared.');
       return;
     }
+
+    const defaultWorker = this.findPlayerWorker();
+    const defaultProduction = this.findPlayerProduction();
 
     if (!this.selectedEntity || this.selectedEntity.team !== 'player') {
       // Audio: error buzz for unavailable actions.
@@ -1148,19 +1185,19 @@ export default class BattleScene extends Phaser.Scene {
         this.syncSession(`Command mode: ${action}. Tap the battlefield to issue the order.`);
         break;
       case 'train-worker':
-        this.queueUnit(this.playerCommandCenter, 'worker');
+        this.queueUnit(this.playerCommandCenter ?? defaultWorker, 'worker');
         break;
       case 'train-soldier':
-        this.queueUnit(this.findPlayerProduction(), 'soldier');
+        this.queueUnit(defaultProduction, 'soldier');
         break;
       case 'train-signature':
-        this.queueUnit(this.findPlayerProduction(), 'signature');
+        this.queueUnit(defaultProduction, 'signature');
         break;
       case 'build-production':
-        this.startConstructionForWorker(this.selectedEntity, 'production');
+        this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'production');
         break;
       case 'build-tech':
-        this.startConstructionForWorker(this.selectedEntity, 'techBuilding');
+        this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'techBuilding');
         break;
       default:
         this.syncSession('Command unavailable.');
@@ -1176,6 +1213,10 @@ export default class BattleScene extends Phaser.Scene {
 
   findPlayerProduction() {
     return this.structures.find((structure) => structure.team === 'player' && structure.type === 'structure' && structure.role === 'production');
+  }
+
+  findPlayerWorker() {
+    return this.units.find((unit) => unit.team === 'player' && unit.type === 'worker' && unit.hp > 0) ?? this.defaultWorker ?? null;
   }
 
   findPlayerTechBuilding() {
@@ -1249,6 +1290,7 @@ export default class BattleScene extends Phaser.Scene {
     session.pushLog(`${this.race.name} queued ${def.label}.`);
     session.setMessage(`${def.label} training started.`);
     this.syncSession(`${def.label} queued.`);
+    if (this.audioManager) this.audioManager.buildStart();
   }
 
   startConstructionForWorker(worker, role) {
@@ -1305,6 +1347,7 @@ export default class BattleScene extends Phaser.Scene {
     session.pushLog(`${construction.finalLabel} construction started.`);
     session.setMessage(`Worker assigned to build ${construction.finalLabel}.`);
     this.syncSession(`${construction.finalLabel} under construction.`);
+    if (this.audioManager) this.audioManager.buildStart();
   }
 
   findBuildSlot(role, team) {
@@ -1502,7 +1545,7 @@ export default class BattleScene extends Phaser.Scene {
         }
       }
       const workerIncome = enemyWorkerCount * this.race.workerHarvest;
-      const passiveIncome = this.race.enemyIncomePerSecond;
+      const passiveIncome = this.race.enemyIncomePerSecond * this.aiDifficulty.enemyIncomeMultiplier;
       this.enemyMinerals += (workerIncome + passiveIncome) * ticks;
       // Gas income for enemy workers assigned to gas
       this.enemyGas += enemyGasWorkerCount * this.race.workerGasHarvest * ticks;
@@ -1511,8 +1554,8 @@ export default class BattleScene extends Phaser.Scene {
     this.enemySpawnTimer += dt;
     this.enemyAttackTimer += dt;
 
-    // Enemy wave spawning frequency increases over time (early: 7.5s, late: 4s)
-    const waveInterval = Math.max(4, 7.5 - this.enemyWave * 0.3);
+    // Enemy wave spawning frequency scales with the selected AI difficulty.
+    const waveInterval = getEnemyWaveInterval(this.aiDifficulty, this.enemyWave);
     if (this.enemySpawnTimer >= waveInterval) {
       this.enemySpawnTimer = 0;
       this.spawnEnemyWave();
@@ -1539,6 +1582,7 @@ export default class BattleScene extends Phaser.Scene {
       const progress = 1 - construction.buildTimeRemaining / (construction.finalRole === 'techBuilding' ? this.race.structures.techBuilding.buildTime : this.race.structures.production.buildTime);
       construction.ridge.width = (construction.width - 18) * Math.max(0.15, progress);
       construction.statusText.setText(`Building ${construction.buildTimeRemaining.toFixed(1)}s`);
+      construction._motionState = 'build';
 
       const worker = this.units.find((unit) => unit.team === 'player' && unit.type === 'worker' && unit.buildTargetId === construction.id);
       if (worker && Phaser.Math.Distance.Between(worker.x, worker.y, construction.x, construction.y) > 22) {
@@ -1550,6 +1594,8 @@ export default class BattleScene extends Phaser.Scene {
         worker.statusText.setText('Constructing');
       }
 
+      this.applyMotionScale(construction, dt);
+
       if (construction.buildTimeRemaining <= 0) {
         construction.type = 'structure';
         construction.active = true;
@@ -1559,6 +1605,7 @@ export default class BattleScene extends Phaser.Scene {
         construction.ridge.setAlpha(0.22);
         // Visual feedback: completion glow + audio
         this.showCompletionGlow(construction.x, construction.y, this.race.id);
+        construction._motionState = 'idle';
         if (construction.team === 'player') {
           this.playerSupplyCap += construction.supplyBonus;
           // If a player tech building just completed, refresh the cache immediately.
@@ -1613,7 +1660,14 @@ export default class BattleScene extends Phaser.Scene {
         }
       } else if (structure.type === 'structure') {
         structure.statusText.setText(structure.role === 'commandCenter' ? 'Operational' : structure.role === 'techBuilding' ? 'Online' : 'Idle');
+        structure._motionState = 'idle';
       }
+
+      if (structure.queue.length > 0) {
+        structure._motionState = 'train';
+      }
+
+      this.applyMotionScale(structure, dt);
 
       structure.hpFront.width = (structure.hp / structure.maxHp) * (structure.width + 8);
       structure.hpFront.setPosition(structure.x - (structure.width + 8) / 2, structure.y + structure.height / 2 + 10);
@@ -1627,6 +1681,7 @@ export default class BattleScene extends Phaser.Scene {
       }
 
       unit.cooldown = Math.max(0, unit.cooldown - dt);
+      unit._motionState = 'idle';
       unit.sprite.setPosition(unit.x, unit.y);
       unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8);
       unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8);
@@ -1638,6 +1693,8 @@ export default class BattleScene extends Phaser.Scene {
       } else {
         this.updateCombatUnit(unit, dt);
       }
+
+      this.applyMotionScale(unit, dt);
     });
   }
 
@@ -1795,10 +1852,15 @@ export default class BattleScene extends Phaser.Scene {
 
     unit.statusText.setText('Engage');
     if (unit.cooldown <= 0) {
-      enemy.hp -= unit.attack;
-      unit.cooldown = unit.cooldownTime;
-      // Visual feedback: damage flash on the target
-      this.showDamageFlash(enemy);
+    unit._motionState = 'attack';
+    if (this.audioManager) this.audioManager.attack(unit);
+    // High-signal attack moment: muzzle flash at attacker
+    const attackRace = this.race?.id || 'terran';
+    spawnMuzzleFlash(this, unit.x, unit.y, attackRace);
+    enemy.hp -= unit.attack;
+    unit.cooldown = unit.cooldownTime;
+    // Visual feedback: damage flash on the target
+    this.showDamageFlash(enemy);
       // Track damage for shield regen delay (Protoss units)
       if (unit.shield > 0 && unit.team === 'player') {
         unit.lastDamageTime = time / 1000;
@@ -1858,7 +1920,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     // Enemy builds tech building if they have minerals and gas, and no tech building yet
-    if (!enemyTech && this.enemyMinerals >= this.race.structures.techBuilding.cost && this.enemyGas >= (this.race.structures.techBuilding.gasCost || 0) && enemyProduction) {
+    if (!enemyTech && this.enemyWave >= this.aiDifficulty.enemyTechWave && this.enemyMinerals >= this.race.structures.techBuilding.cost && this.enemyGas >= (this.race.structures.techBuilding.gasCost || 0) && enemyProduction) {
       const slot = this.findBuildSlot('techBuilding', 'enemy');
       if (slot) {
         this.enemyMinerals -= this.race.structures.techBuilding.cost;
@@ -1882,8 +1944,8 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     // Enemy spawns combat units
-    // Wave frequency increases over time
-    const waveInterval = Math.max(4, 7.5 - this.enemyWave * 0.3);
+    // Wave frequency scales with the selected AI difficulty.
+    const waveInterval = getEnemyWaveInterval(this.aiDifficulty, this.enemyWave);
     if (this.enemyAttackTimer >= waveInterval && this.enemyMinerals >= this.race.units.enemySoldier.cost && this.enemySupplyUsed < this.enemySupplyCap) {
       this.enemyAttackTimer = 0;
 
@@ -1892,11 +1954,11 @@ export default class BattleScene extends Phaser.Scene {
       let spawnSignature = false;
 
       // Unlock signature units after tech building is complete and enough time has passed
-      if (hasTech && this.enemyWave >= 3) {
+      if (hasTech && this.enemyWave >= this.aiDifficulty.enemySignatureWave) {
         const sigCost = this.race.units.enemySignature.cost;
         const sigGasCost = this.race.units.enemySignature.gasCost || 0;
-        if (this.enemyMinerals >= sigCost && this.enemyGas >= sigGasCost && this.enemyWave % 2 === 0) {
-          // Every other wave after wave 3, spawn signature units
+        if (this.enemyMinerals >= sigCost && this.enemyGas >= sigGasCost && this.enemyWave % this.aiDifficulty.enemySignatureCadence === 0) {
+          // Every other wave after the signature threshold, spawn signature units.
           spawnSignature = true;
         }
       }
@@ -1956,6 +2018,7 @@ export default class BattleScene extends Phaser.Scene {
           if (distance > unit.range) {
             this.moveEntityTowards(unit, target.x, target.y, dt);
           } else if (unit.cooldown <= 0) {
+            if (this.audioManager) this.audioManager.attack(unit);
             target.hp -= unit.attack;
             unit.cooldown = unit.cooldownTime;
           }
@@ -1971,6 +2034,9 @@ export default class BattleScene extends Phaser.Scene {
     const unitType = isSignature ? 'signature' : 'soldier';
     const enemyKind = isSignature ? 'enemySignature' : 'enemySoldier';
     const unitDef = this.getUnitDef('enemy', unitType);
+
+    this.enemySpawnTimer = 0;
+    this.enemyAttackTimer = 0;
 
     if (this.enemyMinerals < unitDef.cost) {
       return;
@@ -2097,6 +2163,19 @@ export default class BattleScene extends Phaser.Scene {
     entity.y += (dy / distance) * step;
     entity.x = Phaser.Math.Clamp(entity.x, 18, WORLD_WIDTH - 18);
     entity.y = Phaser.Math.Clamp(entity.y, 18, WORLD_HEIGHT - 18);
+    entity._motionState = 'move';
+  }
+
+  applyMotionScale(entity, dt) {
+    if (!entity?.sprite) {
+      return;
+    }
+
+    const target = MOTION_SCALE_TARGETS[entity._motionState] ?? MOTION_SCALE_TARGETS.idle;
+    entity.motionScale = entity.motionScale ?? 1;
+    const blend = Math.min(1, dt * 10);
+    entity.motionScale = Phaser.Math.Linear(entity.motionScale, target, blend);
+    entity.sprite.setScale(entity.motionScale);
   }
 
   // --- Unit separation (prevents overlap/clumping) ---
@@ -2173,7 +2252,7 @@ export default class BattleScene extends Phaser.Scene {
     const deadUnits = this.units.filter((unit) => unit.hp <= 0);
     deadUnits.forEach((unit) => {
       // Death explosion visual + audio feedback
-      this.showDeathExplosion(unit.x, unit.y);
+      this.showDeathExplosion(unit.x, unit.y, unit);
       this.destroyEntity(unit);
     });
     this.units = this.units.filter((unit) => unit.hp > 0);
@@ -2183,7 +2262,7 @@ export default class BattleScene extends Phaser.Scene {
     const deadStructures = this.structures.filter((structure) => structure.hp <= 0);
     deadStructures.forEach((structure) => {
       // Death explosion for structures too
-      this.showDeathExplosion(structure.x, structure.y);
+      this.showDeathExplosion(structure.x, structure.y, structure);
       this.destroyEntity(structure);
     });
     this.structures = this.structures.filter((structure) => structure.hp > 0);
@@ -2447,7 +2526,7 @@ export default class BattleScene extends Phaser.Scene {
       alpha: 0.3,
       scaleX: 1.08,
       scaleY: 1.08,
-      duration: 700,
+      duration: FEEDBACK_TIMINGS.selectionPulse,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut'
@@ -2490,7 +2569,7 @@ export default class BattleScene extends Phaser.Scene {
     this.tweens.add({
       targets: [hLine, vLine],
       alpha: 0,
-      duration: 450,
+      duration: FEEDBACK_TIMINGS.tapFlash,
       ease: 'Cubic.easeOut',
       onComplete: () => {
         this.tapFeedback?.destroy();
@@ -2516,7 +2595,7 @@ export default class BattleScene extends Phaser.Scene {
       scaleX: 4,
       scaleY: 4,
       alpha: 0,
-      duration: 350,
+      duration: FEEDBACK_TIMINGS.deselectRipple,
       ease: 'Cubic.easeOut',
       onComplete: () => {
         this.tapFeedback?.destroy();
@@ -2534,7 +2613,7 @@ export default class BattleScene extends Phaser.Scene {
       unit._damageFlash = this.tweens.add({
         targets: unit.sprite,
         tint: 0xff4444,
-        duration: 60,
+        duration: FEEDBACK_TIMINGS.damageFlash,
         yoyo: true,
         repeat: 0,
         ease: 'Linear',
@@ -2548,11 +2627,11 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     // Audio: hit sound
-    if (this.audioManager) this.audioManager.hit();
+    if (this.audioManager) this.audioManager.hit(unit);
   }
 
   /** Unit dies — explosion particle burst + audio feedback. */
-  showDeathExplosion(x, y) {
+  showDeathExplosion(x, y, entity = null) {
     const palette = this.particleManager?.getPalette?.() || this.particleManager?.palettes?.terran || {
       mineral: [0x60a5fa, 0x93c5fd, 0x2563eb, 0x38bdf8],
       mineralBright: [0xdbeafe, 0x67e8f9],
@@ -2590,7 +2669,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     // Audio: explosion/death sound
-    if (this.audioManager) this.audioManager.explosion();
+    if (this.audioManager) this.audioManager.explosion(entity);
   }
 
   /** Wave announcement — brief banner showing wave number. */
@@ -2635,16 +2714,16 @@ export default class BattleScene extends Phaser.Scene {
     this.tweens.add({
       targets: [bg, text, subtitle],
       alpha: 1,
-      duration: 300,
+      duration: FEEDBACK_TIMINGS.waveFadeIn,
       ease: 'Cubic.easeOut',
       delay: 0,
       onComplete: () => {
         this.tweens.add({
           targets: [bg, text, subtitle],
           alpha: 0,
-          duration: 500,
+          duration: FEEDBACK_TIMINGS.waveFadeOut,
           ease: 'Cubic.easeIn',
-          delay: 1500,
+          delay: FEEDBACK_TIMINGS.waveHold,
           onComplete: () => {
             this.waveBanner?.destroy();
             this.waveBanner = null;
@@ -2652,6 +2731,8 @@ export default class BattleScene extends Phaser.Scene {
         });
       }
     });
+
+    if (this.audioManager) this.audioManager.waveWarn();
   }
 
   /** Building completion glow — brief highlight when a structure finishes construction. */
@@ -2670,7 +2751,7 @@ export default class BattleScene extends Phaser.Scene {
       scaleX: 5,
       scaleY: 5,
       alpha: 0,
-      duration: 600,
+      duration: FEEDBACK_TIMINGS.completionGlow,
       ease: 'Cubic.easeOut',
       onComplete: () => {
         glow.destroy();
@@ -2694,7 +2775,7 @@ export default class BattleScene extends Phaser.Scene {
       scaleX: 4,
       scaleY: 4,
       alpha: 0,
-      duration: 300,
+      duration: FEEDBACK_TIMINGS.chargeImpact,
       ease: 'Cubic.easeOut',
       onComplete: () => {
         impact.destroy();

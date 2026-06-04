@@ -12,11 +12,32 @@ const FONT_FAMILY = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", s
 
 const BUTTON_LABEL_STYLE = {
   fontFamily: FONT_FAMILY,
-  fontSize: 'clamp(9px, 1.8vw, 12px)',
+  fontSize: 'clamp(10px, 2vw, 13px)',
   fontStyle: '700',
   color: COLOR_WHITE,
-  align: 'center'
+  align: 'center',
+  shadowOffsetX: 1,
+  shadowOffsetY: 1,
+  shadowColor: '#000000',
+  shadowBlur: 2,
+  shadowFill: true
 };
+
+const buttonLabelStyle = (layout) => ({
+  ...BUTTON_LABEL_STYLE,
+  fontSize: layout.buttonWidth <= 60 ? '10px' : BUTTON_LABEL_STYLE.fontSize
+});
+
+const COMPACT_LABEL_ABBREVIATIONS = {
+  'Train Worker': 'Trn Wkr',
+  'Train Soldier': 'Trn Sold',
+  'Train Sig.': 'Trn Sig.',
+  'Tech Lab': 'Tech'
+};
+
+const compactLabelText = (label) => COMPACT_LABEL_ABBREVIATIONS[label] ?? label;
+
+const buttonLabelText = (layout, label) => (layout.buttonWidth <= 60 ? compactLabelText(label) : label);
 
 // ── HudScene spacing constants (extracted from inline literals) ─────────
 const PANEL_X = 18;                          // left margin for panels
@@ -81,7 +102,7 @@ const COMPACT_TOP_Y = 36;
 const COMPACT_BOTTOM_BAR_HEIGHT = 260;
 const COMPACT_SELECTION_PANEL_HEIGHT = 108;
 const COMPACT_BUTTON_WIDTH_MAX = 90;
-const COMPACT_BUTTON_HEIGHT = 38;
+const COMPACT_BUTTON_HEIGHT = 44;
 const COMPACT_BUTTON_GAP = 5;
 const COMPACT_BUTTON_TOP_Y_OFFSET = 92;      // subtracted from height for buttonTopY
 const COMPACT_BUTTON_BOTTOM_Y_OFFSET = 48;    // subtracted from height for buttonBottomY
@@ -92,7 +113,7 @@ const COMPACT_NARROW_TOP_Y = 32;
 const COMPACT_NARROW_BOTTOM_BAR_HEIGHT = 280;
 const COMPACT_NARROW_SELECTION_PANEL_HEIGHT = 100;
 const COMPACT_NARROW_BUTTON_WIDTH_MAX = 68;
-const COMPACT_NARROW_BUTTON_HEIGHT = 36;
+const COMPACT_NARROW_BUTTON_HEIGHT = 44;
 const COMPACT_NARROW_BUTTON_GAP = 4;
 const COMPACT_NARROW_BUTTON_TOP_Y_OFFSET = 84; // subtracted from height for buttonTopY
 const COMPACT_NARROW_BUTTON_BOTTOM_Y_OFFSET = 42; // subtracted from height for buttonBottomY
@@ -109,18 +130,117 @@ const WIDE_BUTTON_GAP_MIN = 3;
 const WIDE_BUTTON_GAP_MAX = 8;
 const WIDE_BUTTON_MARGIN = 40;               // margin used in button width calc
 
+// ── Top-bar border center Y helper (extracted from create/handleResize) ────
+const topBarBorderCenterY = (layout) => layout.topBarY + layout.topBarHeight / 2;
+
 // ── Selection panel Y helper (extracted from create/handleResize) ─────────
-const selectionPanelY = (width, height) => height - getLayout(width, height).bottomBarHeight + SELECTION_PANEL_GAP;
+const selectionPanelY = (width, height) => {
+  const layout = getLayout(width, height);
+  const bottomBarY = height - layout.bottomBarHeight;
+  if (layout.compact) {
+    return bottomBarY - layout.selectionPanelHeight - SELECTION_PANEL_GAP;
+  }
+  return bottomBarY + SELECTION_PANEL_GAP;
+};
+
+// ── Bottom-bar center Y helper (extracted from create/handleResize) ────────
+const bottomBarCenterYValue = (textPos, bottomBarHeight) => textPos.bottomBarY + bottomBarHeight / 2;
 
 // ── Bottom-bar text baseline helper (extracted from create/handleResize) ──
 const computeTextPositions = (width, height) => {
-  const bottomBarY = height - getLayout(width, height).bottomBarHeight;
+  const layout = getLayout(width, height);
+  const bottomBarY = height - layout.bottomBarHeight;
+  const panelY = selectionPanelY(width, height);
+
+  if (layout.compact) {
+    return {
+      bottomBarY,
+      selectionTitleY: panelY + 12,
+      selectionDetailsY: panelY + 38,
+      statusTextY: panelY + layout.selectionPanelHeight - STATUS_TEXT_OFFSET,
+      logTextY: panelY + 12
+    };
+  }
+
   return {
     bottomBarY,
     selectionTitleY: bottomBarY + SELECTION_TITLE_OFFSET,
     selectionDetailsY: bottomBarY + SELECTION_DETAILS_OFFSET,
-    statusTextY: bottomBarY + getLayout(width, height).selectionPanelHeight - STATUS_TEXT_OFFSET,
+    statusTextY: bottomBarY + layout.selectionPanelHeight - STATUS_TEXT_OFFSET,
     logTextY: bottomBarY + LOG_Y_OFFSET
+  };
+};
+
+// ── Compact-narrow button-row placement helper (extracted from getLayout) ──
+const compactNarrowButtonRowPositions = (height) => {
+  const narrowBottomBarY = height - COMPACT_NARROW_BOTTOM_BAR_HEIGHT;
+  const narrowSelectionPanelY = narrowBottomBarY - COMPACT_NARROW_SELECTION_PANEL_HEIGHT - SELECTION_PANEL_GAP;
+  const narrowButtonBottomY = narrowSelectionPanelY - COMPACT_NARROW_BUTTON_HEIGHT - 12;
+  return {
+    buttonTopY: narrowButtonBottomY - COMPACT_NARROW_BUTTON_HEIGHT - 8,
+    buttonBottomY: narrowButtonBottomY
+  };
+};
+
+// ── Layout computation (extracted from class method for file-scoped helpers) ──
+const getLayout = (width, height) => {
+  const aspectRatio = width / height;
+  const compact = width < COMPACT_WIDTH_THRESHOLD;
+  const narrowPortrait = aspectRatio < NARROW_PORTRAIT_ASPECT_RATIO && height > width * NARROW_PORTRAIT_HEIGHT_MULTIPLIER;
+
+  if (compact && narrowPortrait) {
+    const compactNarrowBtnWidth = Math.min(COMPACT_NARROW_BUTTON_WIDTH_MAX, Math.floor((width - PANEL_MARGIN) / 3) - COMPACT_NARROW_BUTTON_GAP);
+    const { buttonTopY, buttonBottomY } = compactNarrowButtonRowPositions(height);
+    return {
+      compact: true, narrowPortrait: true,
+      topBarHeight: COMPACT_NARROW_TOP_BAR_HEIGHT,
+      topBarY: COMPACT_NARROW_TOP_Y,
+      bottomBarHeight: COMPACT_NARROW_BOTTOM_BAR_HEIGHT,
+      selectionPanelHeight: COMPACT_NARROW_SELECTION_PANEL_HEIGHT,
+      buttonRows: [3, 4],
+      buttonWidth: compactNarrowBtnWidth,
+      buttonHeight: COMPACT_NARROW_BUTTON_HEIGHT,
+      buttonGap: COMPACT_NARROW_BUTTON_GAP,
+      buttonTopY,
+      buttonBottomY
+    };
+  }
+
+  if (compact) {
+    const compactBtnWidth = Math.min(COMPACT_BUTTON_WIDTH_MAX, Math.floor((width - BUTTON_COMPACT_MARGIN) / 5) - BUTTON_COMPACT_GAP);
+    const compactBottomBarY = height - COMPACT_BOTTOM_BAR_HEIGHT;
+    const compactSelectionPanelY = compactBottomBarY - COMPACT_SELECTION_PANEL_HEIGHT - SELECTION_PANEL_GAP;
+    const compactButtonBottomY = compactSelectionPanelY - COMPACT_BUTTON_HEIGHT - 12;
+    const compactButtonTopY = compactButtonBottomY - COMPACT_BUTTON_HEIGHT - 8;
+    return {
+      compact: true, narrowPortrait: false,
+      topBarHeight: COMPACT_TOP_BAR_HEIGHT,
+      topBarY: COMPACT_TOP_Y,
+      bottomBarHeight: COMPACT_BOTTOM_BAR_HEIGHT,
+      selectionPanelHeight: COMPACT_SELECTION_PANEL_HEIGHT,
+      buttonRows: [5, 4],
+      buttonWidth: compactBtnWidth,
+      buttonHeight: COMPACT_BUTTON_HEIGHT,
+      buttonGap: COMPACT_BUTTON_GAP,
+      buttonTopY: compactButtonTopY,
+      buttonBottomY: compactButtonBottomY
+    };
+  }
+
+  const wideBtnWidth = Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 9 - WIDE_BUTTON_GAP_MAX));
+  const wideBtnGap = Math.max(WIDE_BUTTON_GAP_MIN, (width - WIDE_BUTTON_MARGIN - wideBtnWidth * 9) / 8);
+  return {
+    compact: false, narrowPortrait: false,
+    topBarHeight: WIDE_TOP_BAR_HEIGHT,
+    topBarY: WIDE_TOP_Y,
+    bottomBarHeight: WIDE_BOTTOM_BAR_HEIGHT,
+    selectionPanelHeight: WIDE_SELECTION_PANEL_HEIGHT,
+    buttonRows: [9],
+    buttonWidth: wideBtnWidth,
+    buttonHeight: WIDE_BUTTON_HEIGHT,
+    buttonGap: Math.min(WIDE_BUTTON_GAP_MAX, wideBtnGap),
+    buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
+    buttonBottomY: height - COMPACT_BUTTON_BOTTOM_Y_OFFSET
   };
 };
 
@@ -136,6 +256,7 @@ export default class HudScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     this.layout = this.getLayout(width, height);
+    const textPos = computeTextPositions(width, height);
     this.buttonDefs = [
       { key: 'select', label: 'Select' },
       { key: 'move', label: 'Move' },
@@ -152,9 +273,8 @@ export default class HudScene extends Phaser.Scene {
     this.topBar = this.add.rectangle(width / 2, this.layout.topBarY, width, this.layout.topBarHeight, 0x020617, 0.85).setOrigin(0.5);
     this.topBarBorder = this.add.rectangle(width / 2, this.layout.topBarY + this.layout.topBarHeight / 2, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.6).setOrigin(0.5);
 
-    // Bottom bar
-    const bottomBarY = height - this.layout.bottomBarHeight;
-    const bottomBarCenterY = bottomBarY + this.layout.bottomBarHeight / 2;
+    // Bottom bar (uses file-scoped computeTextPositions baseline)
+    const bottomBarCenterY = bottomBarCenterYValue(textPos, this.layout.bottomBarHeight);
     this.bottomBar = this.add.rectangle(width / 2, bottomBarCenterY, width, this.layout.bottomBarHeight, 0x020617, 0.9).setOrigin(0.5);
     this.bottomBarBorder = this.add.rectangle(width / 2, bottomBarCenterY, width, BORDER_LINE_HEIGHT, 0x1e3a5f, 0.5).setOrigin(0.5);
 
@@ -200,8 +320,8 @@ export default class HudScene extends Phaser.Scene {
       align: 'right',
       wordWrap: { width: objectiveWrapWidth(width) }
     }).setOrigin(1, 0);
-    // --- Selection panel (bottom bar Y baseline extracted for reuse) ---
-    const textPos = computeTextPositions(width, height);
+
+    // --- Selection panel (reuses textPos from top of create) ---
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
     const panelW = panelWidth(width);
@@ -223,7 +343,7 @@ export default class HudScene extends Phaser.Scene {
     // Selection title
     this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionTitleY, '', {
       fontFamily: FONT_FAMILY,
-      fontSize: 'clamp(14px, 2.6vw, 18px)',
+      fontSize: 'clamp(15px, 2.8vw, 19px)',
       fontStyle: '700',
       color: COLOR_WHITE
     });
@@ -231,7 +351,7 @@ export default class HudScene extends Phaser.Scene {
     // Selection details
     this.selectionDetails = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionDetailsY, '', {
       fontFamily: FONT_FAMILY,
-      fontSize: 'clamp(11px, 2.1vw, 14px)',
+      fontSize: 'clamp(12px, 2.2vw, 15px)',
       color: COLOR_SLAKE_200,
       wordWrap: { width: selectionWrapWidth(width) },
       lineSpacing: LINE_SPACING_DETAILS
@@ -240,14 +360,14 @@ export default class HudScene extends Phaser.Scene {
     // Status text
     this.statusText = this.add.text(STATUS_TEXT_OFFSET, textPos.statusTextY, '', {
       fontFamily: FONT_FAMILY,
-      fontSize: 'clamp(11px, 2.1vw, 14px)',
+      fontSize: 'clamp(12px, 2.2vw, 15px)',
       color: COLOR_BLUE_300
     });
 
     // Log text (right side of selection panel)
     this.logText = this.add.text(width - LOG_X_OFFSET, textPos.logTextY, '', {
       fontFamily: FONT_FAMILY,
-      fontSize: 'clamp(11px, 2vw, 13px)',
+      fontSize: 'clamp(12px, 2.1vw, 14px)',
       color: COLOR_SLAKE_400,
       align: 'right',
       wordWrap: { width: logWrapWidth(width) },
@@ -315,7 +435,7 @@ export default class HudScene extends Phaser.Scene {
 
     // Build the initial text (with old values)
     const baseText = `Supply ${supplyUsedVal}/${supplyCapVal}  |  Enemy ${enemyMineralsVal}`;
-    const mineralsLabel = 'Mines ';
+    const mineralsLabel = 'Minerals ';
     const gasLabel = '  Gas ';
 
     this._resourceTween = this.tweens.add({
@@ -385,65 +505,7 @@ export default class HudScene extends Phaser.Scene {
   }
 
   getLayout(width, height) {
-    const aspectRatio = width / height;
-    const compact = width < COMPACT_WIDTH_THRESHOLD;
-    const narrowPortrait = aspectRatio < NARROW_PORTRAIT_ASPECT_RATIO && height > width * NARROW_PORTRAIT_HEIGHT_MULTIPLIER;
-
-    if (compact && narrowPortrait) {
-      // Very narrow portrait (e.g. phone held vertically, small screen)
-      const compactNarrowBtnWidth = Math.min(COMPACT_NARROW_BUTTON_WIDTH_MAX, Math.floor((width - PANEL_MARGIN) / 3) - COMPACT_NARROW_BUTTON_GAP);
-      return {
-        compact: true,
-        narrowPortrait: true,
-        topBarHeight: COMPACT_NARROW_TOP_BAR_HEIGHT,
-        topBarY: COMPACT_NARROW_TOP_Y,
-        bottomBarHeight: COMPACT_NARROW_BOTTOM_BAR_HEIGHT,
-        selectionPanelHeight: COMPACT_NARROW_SELECTION_PANEL_HEIGHT,
-        buttonRows: [3, 4],
-        buttonWidth: compactNarrowBtnWidth,
-        buttonHeight: COMPACT_NARROW_BUTTON_HEIGHT,
-        buttonGap: COMPACT_NARROW_BUTTON_GAP,
-        buttonTopY: height - COMPACT_NARROW_BUTTON_TOP_Y_OFFSET,
-        buttonBottomY: height - COMPACT_NARROW_BUTTON_BOTTOM_Y_OFFSET
-      };
-    }
-
-    if (compact) {
-      // Compact wide layout: 2 rows (5 top, 4 bottom), columns = 5
-      const compactBtnWidth = Math.min(COMPACT_BUTTON_WIDTH_MAX, Math.floor((width - BUTTON_COMPACT_MARGIN) / 5) - BUTTON_COMPACT_GAP);
-      return {
-        compact: true,
-        narrowPortrait: false,
-        topBarHeight: COMPACT_TOP_BAR_HEIGHT,
-        topBarY: COMPACT_TOP_Y,
-        bottomBarHeight: COMPACT_BOTTOM_BAR_HEIGHT,
-        selectionPanelHeight: COMPACT_SELECTION_PANEL_HEIGHT,
-        buttonRows: [5, 4],
-        buttonWidth: compactBtnWidth,
-        buttonHeight: COMPACT_BUTTON_HEIGHT,
-        buttonGap: COMPACT_BUTTON_GAP,
-        buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
-        buttonBottomY: height - COMPACT_BUTTON_BOTTOM_Y_OFFSET
-      };
-    }
-
-    // Wide (non-compact) layout: single row of 9 buttons
-    const wideBtnWidth = Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 9 - WIDE_BUTTON_GAP_MAX));
-    const wideBtnGap = Math.max(WIDE_BUTTON_GAP_MIN, (width - WIDE_BUTTON_MARGIN - wideBtnWidth * 9) / 8);
-    return {
-      compact: false,
-      narrowPortrait: false,
-      topBarHeight: WIDE_TOP_BAR_HEIGHT,
-      topBarY: WIDE_TOP_Y,
-      bottomBarHeight: WIDE_BOTTOM_BAR_HEIGHT,
-      selectionPanelHeight: WIDE_SELECTION_PANEL_HEIGHT,
-      buttonRows: [9],
-      buttonWidth: wideBtnWidth,
-      buttonHeight: WIDE_BUTTON_HEIGHT,
-      buttonGap: Math.min(WIDE_BUTTON_GAP_MAX, wideBtnGap),
-      buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
-      buttonBottomY: height - COMPACT_BUTTON_BOTTOM_Y_OFFSET
-    };
+    return getLayout(width, height);
   }
 
   createButtons(width, height) {
@@ -468,6 +530,7 @@ export default class HudScene extends Phaser.Scene {
         let x = (width - rowWidth) / 2 + this.layout.buttonWidth / 2;
         row.keys.forEach((defIndex) => {
           const def = this.buttonDefs[defIndex];
+          const button = { key: def.key, bg: null, label: null, row: rowIndex, pulse: null, hoverGlow: null };
           const bg = this.add.rectangle(x, row.y, this.layout.buttonWidth, this.layout.buttonHeight, 0x12304a, 1)
             .setStrokeStyle(1, 0x2d4f72, 1)
             .setInteractive({ useHandCursor: true });
@@ -548,10 +611,12 @@ export default class HudScene extends Phaser.Scene {
             }
           });
 
-          const label = this.add.text(x, row.y, def.label, BUTTON_LABEL_STYLE).setOrigin(0.5);
+          const label = this.add.text(x, row.y, buttonLabelText(this.layout, def.label), buttonLabelStyle(this.layout)).setOrigin(0.5);
 
           bg.on('pointerdown', () => this.battleScene?.handleHudAction(def.key));
-          this.buttons.push({ key: def.key, bg, label, row: rowIndex, pulse: null, hoverGlow: null });
+          button.bg = bg;
+          button.label = label;
+          this.buttons.push(button);
           x += this.layout.buttonWidth + this.layout.buttonGap;
         });
       });
@@ -564,6 +629,7 @@ export default class HudScene extends Phaser.Scene {
     let x = (width - total) / 2 + buttonWidth / 2;
 
     this.buttonDefs.forEach((def) => {
+      const button = { key: def.key, bg: null, label: null, row: 0, pulse: null, hoverGlow: null };
       const bg = this.add.rectangle(x, this.layout.buttonTopY, buttonWidth, this.layout.buttonHeight, 0x12304a, 1)
         .setStrokeStyle(1, 0x2d4f72, 1)
         .setInteractive({ useHandCursor: true });
@@ -639,10 +705,12 @@ export default class HudScene extends Phaser.Scene {
         }
       });
 
-      const label = this.add.text(x, this.layout.buttonTopY, def.label, BUTTON_LABEL_STYLE).setOrigin(0.5);
+      const label = this.add.text(x, this.layout.buttonTopY, buttonLabelText(this.layout, def.label), buttonLabelStyle(this.layout)).setOrigin(0.5);
 
       bg.on('pointerdown', () => this.battleScene?.handleHudAction(def.key));
-      this.buttons.push({ key: def.key, bg, label, row: 0, pulse: null, hoverGlow: null });
+      button.bg = bg;
+      button.label = label;
+      this.buttons.push(button);
       x += buttonWidth + buttonGap;
     });
   }
@@ -802,6 +870,7 @@ export default class HudScene extends Phaser.Scene {
     const { width, height } = gameSize;
     const oldLayout = this.layout;
     this.layout = this.getLayout(width, height);
+    const textPos = computeTextPositions(width, height);
 
     // Check if layout mode changed (compact <-> non-compact, or narrow portrait)
     const layoutChanged = (oldLayout.compact !== this.layout.compact) ||
@@ -816,10 +885,13 @@ export default class HudScene extends Phaser.Scene {
 
     this.accentLine.setPosition(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET);
     this.accentLine.width = width;
-    this.raceIcon?.setPosition(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
-    this.raceIconAlt?.setPosition(RACE_ICON_ALT_X, this.layout.topBarY + RACE_ICON_Y_OFFSET);
 
-    const bottomBarCenterY = height - this.layout.bottomBarHeight / 2;
+    const raceIconY = this.layout.topBarY + RACE_ICON_Y_OFFSET;
+    this.raceIcon?.setPosition(RACE_ICON_X, raceIconY);
+    this.raceIconAlt?.setPosition(RACE_ICON_ALT_X, raceIconY);
+
+    // Bottom bar (uses file-scoped computeTextPositions baseline)
+    const bottomBarCenterY = bottomBarCenterYValue(textPos, this.layout.bottomBarHeight);
     this.bottomBar.setPosition(width / 2, bottomBarCenterY);
     this.bottomBar.height = this.layout.bottomBarHeight;
     this.bottomBar.width = width;
@@ -829,8 +901,7 @@ export default class HudScene extends Phaser.Scene {
 
     this.objectiveText.setPosition(width - OBJECTIVE_X_OFFSET, OBJECTIVE_Y);
 
-    // Update text positions (bottom bar Y baseline extracted for reuse)
-    const textPos = computeTextPositions(width, height);
+    // Update text positions (reuses textPos from top of handleResize)
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
     this.hpBarBack.setPosition(panelX, panelY + HP_BAR_Y_OFFSET);

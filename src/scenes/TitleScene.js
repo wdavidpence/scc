@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameStates, session } from '../game/state/gameSession.js';
+import { DIFFICULTY_ORDER, getDifficulty } from '../game/data/difficulties.js';
 import { RACE_ORDER, getRace } from '../game/data/races.js';
 import { getShellSize } from '../game/shellSize.js';
 
@@ -68,6 +69,7 @@ export default class MenuScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.layout = this.getLayout(width, height);
     this.selectedRaceId = session.raceId ?? 'terran';
+    this.selectedDifficultyId = session.difficultyId ?? 'normal';
 
     this.cameras.main.setBackgroundColor('#07111c');
 
@@ -104,6 +106,9 @@ export default class MenuScene extends Phaser.Scene {
       const race = getRace(raceId);
       this.cardEntries.push(this.createRaceCard(race, index));
     });
+
+    this.difficultyEntries = [];
+    this.createDifficultyControls();
 
     this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, START_BUTTON.height, 0x2563eb, 1)
       .setStrokeStyle(2, 0x60a5fa, 1)
@@ -156,9 +161,46 @@ export default class MenuScene extends Phaser.Scene {
   getLayout(width, height) {
     const card = this.getCardLayout(width, height);
     if (card.compact) {
-      return { ...card, titleY: height * 0.16, subtitleY: height * 0.16 + 54, descriptionY: height * 0.16 + 94, startY: Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320), startWidth: Math.min(width - 50, START_BUTTON.widthCompact), footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset) };
+      const startY = Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320);
+      const difficultyY = startY - 126;
+      const difficultyButtonWidth = Math.min(144, Math.max(88, Math.floor((width - 72) / 3)));
+      const difficultyGap = Math.min(14, Math.max(8, Math.floor((width - difficultyButtonWidth * 3) / 4)));
+      const difficultyTotalWidth = difficultyButtonWidth * 3 + difficultyGap * 2;
+      const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
+      return {
+        ...card,
+        titleY: height * 0.16,
+        subtitleY: height * 0.16 + 54,
+        descriptionY: height * 0.16 + 94,
+        startY,
+        startWidth: Math.min(width - 50, START_BUTTON.widthCompact),
+        footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset),
+        difficultyY,
+        difficultyButtonWidth,
+        difficultyButtonHeight: 34,
+        difficultyPositions: DIFFICULTY_ORDER.map((difficultyId, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
+      };
     }
-    return { ...card, titleY: height / 2 - 220, subtitleY: height / 2 - 160, descriptionY: height / 2 - 122, startY: height / 2 + 202, startWidth: START_BUTTON.widthWide, footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset };
+
+    const startY = height / 2 + 202;
+    const difficultyY = startY - 126;
+    const difficultyButtonWidth = Math.min(144, Math.max(88, Math.floor((width - 72) / 3)));
+    const difficultyGap = Math.min(14, Math.max(8, Math.floor((width - difficultyButtonWidth * 3) / 4)));
+    const difficultyTotalWidth = difficultyButtonWidth * 3 + difficultyGap * 2;
+    const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
+    return {
+      ...card,
+      titleY: height / 2 - 220,
+      subtitleY: height / 2 - 160,
+      descriptionY: height / 2 - 122,
+      startY,
+      startWidth: START_BUTTON.widthWide,
+      footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset,
+      difficultyY,
+      difficultyButtonWidth,
+      difficultyButtonHeight: 34,
+      difficultyPositions: DIFFICULTY_ORDER.map((difficultyId, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
+    };
   }
 
   createRaceCard(race, index) {
@@ -258,13 +300,65 @@ export default class MenuScene extends Phaser.Scene {
     this.startButton.setFillStyle(activeRace.accent, 1);
     this.startButton.setStrokeStyle(2, activeRace.glow, 1);
     this.startLabel.setText(`Deploy as ${activeRace.name}`);
+    this.refreshDifficultyControls();
+  }
+
+  createDifficultyControls() {
+    this.difficultyLabelText = this.add.text(this.scale.width / 2, this.layout.difficultyY - 26, 'AI difficulty', {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(12px, 2.1vw, 15px)',
+      fontStyle: '700',
+      color: '#cbd5e1',
+      align: 'center'
+    }).setOrigin(0.5);
+
+    this.difficultyEntries = DIFFICULTY_ORDER.map((difficultyId, index) => {
+      const difficulty = getDifficulty(difficultyId);
+      const position = this.layout.difficultyPositions[index];
+      const button = this.add.rectangle(position.x, position.y, this.layout.difficultyButtonWidth, this.layout.difficultyButtonHeight, 0x0b1220, 1)
+        .setStrokeStyle(2, difficulty.id === 'easy' ? 0x22c55e : difficulty.id === 'hard' ? 0xf59e0b : 0x334155, 1)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add.text(position.x, position.y, difficulty.label, {
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: 'clamp(11px, 2vw, 13px)',
+        fontStyle: '700',
+        color: '#e2e8f0',
+        align: 'center'
+      }).setOrigin(0.5);
+
+      button.on('pointerdown', () => this.selectDifficulty(difficulty.id));
+      return { difficulty, button, label };
+    });
+  }
+
+  refreshDifficultyControls() {
+    const activeDifficulty = getDifficulty(this.selectedDifficultyId);
+    this.difficultyLabelText?.setText(`AI difficulty • ${activeDifficulty.label}`);
+
+    this.difficultyEntries.forEach((entry) => {
+      const selected = entry.difficulty.id === this.selectedDifficultyId;
+      const accent = selected ? (entry.difficulty.id === 'easy' ? 0x22c55e : entry.difficulty.id === 'hard' ? 0xfbbf24 : 0x60a5fa) : 0x334155;
+      entry.button.setStrokeStyle(selected ? 3 : 2, accent, 1);
+      entry.button.setFillStyle(selected ? 0x12213a : 0x0b1220, 1);
+      entry.label.setColor(selected ? '#ffffff' : '#cbd5e1');
+      entry.label.setAlpha(selected ? 1 : 0.78);
+      entry.button.setAlpha(selected ? 1 : 0.84);
+    });
+  }
+
+  selectDifficulty(difficultyId) {
+    this.selectedDifficultyId = getDifficulty(difficultyId).id;
+    session.setDifficulty(this.selectedDifficultyId);
+    this.refreshDifficultyControls();
   }
 
   startBattle() {
     const race = getRace(this.selectedRaceId);
+    session.setDifficulty(this.selectedDifficultyId);
     session.setRace(race.id, race.name);
     this.scene.start('BattleScene');
   }
+
 
   applyLayout(gameSize) {
     const { width, height } = gameSize;
@@ -299,6 +393,14 @@ export default class MenuScene extends Phaser.Scene {
       entry.accentRight?.setPosition(pos.x + this.layout.cardWidth / 2 - 24, pos.y - cardHeight / 2 + 24);
     });
 
+    this.difficultyLabelText?.setPosition(width / 2, this.layout.difficultyY - 26);
+    this.difficultyEntries.forEach((entry, index) => {
+      const pos = this.layout.difficultyPositions[index];
+      entry.button.setPosition(pos.x, pos.y).setSize(this.layout.difficultyButtonWidth, this.layout.difficultyButtonHeight);
+      entry.label.setPosition(pos.x, pos.y);
+    });
+    this.refreshDifficultyControls();
+
     this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, START_BUTTON.height);
     this.startLabel.setPosition(width / 2, this.layout.startY);
     this.footerText.setPosition(width / 2, this.layout.footerY);
@@ -315,7 +417,14 @@ export default class MenuScene extends Phaser.Scene {
     if (this.shell) this.shell.destroy();
     if (this.titleText) this.titleText.destroy();
     if (this.footerText) this.footerText.destroy();
+    if (this.difficultyLabelText) this.difficultyLabelText.destroy();
     if (this.startButton) this.startButton.destroy();
+    if (this.difficultyEntries) {
+      for (const entry of this.difficultyEntries) {
+        if (entry.button) entry.button.destroy();
+        if (entry.label) entry.label.destroy();
+      }
+    }
     if (this.raceCards) {
       for (const card of this.raceCards) {
         if (card.icon) card.icon.destroy();

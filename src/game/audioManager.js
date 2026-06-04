@@ -26,6 +26,27 @@ export function createAudioManager(game) {
   let audioCtx = null;
   let masterGain = null;
   let enabled = true;
+  const cueCooldowns = new Map();
+
+  function nowMs() {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  function cueKey(base, entity) {
+    return entity && entity.id != null ? `${base}:${entity.id}` : base;
+  }
+
+  function canPlay(key, minGapMs) {
+    const now = nowMs();
+    if (!cueCooldowns.has(key)) {
+      cueCooldowns.set(key, now);
+      return true;
+    }
+    const last = cueCooldowns.get(key) || 0;
+    if (now - last < minGapMs) return false;
+    cueCooldowns.set(key, now);
+    return true;
+  }
 
   // Lazy-initialise AudioContext on first user gesture (required by browsers).
   function ensureAudio() {
@@ -33,7 +54,7 @@ export function createAudioManager(game) {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       masterGain = audioCtx.createGain();
-      masterGain.gain.value = 0.5; // default at 50 % volume
+      masterGain.gain.value = 0.35; // keep cues present without crowding the mix
       masterGain.connect(audioCtx.destination);
     } catch (_) {
       // Audio API not available — silently skip.
@@ -102,45 +123,78 @@ export function createAudioManager(game) {
   // --- sound effects ---------------------------------------------------------
 
   /** Selection chirp: quick ascending two-tone. */
-  function select() {
+  function select(entity = null) {
+    if (!canPlay(cueKey('select', entity), 80)) return;
     ensureAudio();
-    playTone(880, 'square', 0.06, 0.4);
-    setTimeout(() => playTone(1320, 'square', 0.08, 0.35), 40);
+    playTone(860, 'square', 0.05, 0.22);
+    setTimeout(() => playTone(1240, 'square', 0.07, 0.18), 35);
   }
 
   /** Deselect blip: short downward tone. */
-  function deselect() {
+  function deselect(entity = null) {
+    if (!canPlay(cueKey('deselect', entity), 90)) return;
     ensureAudio();
-    playSweep(600, 250, 0.1, 'square', 0.25);
+    playSweep(560, 240, 0.09, 'square', 0.16);
   }
 
   /** Move command: low whoosh (filtered noise burst). */
   function moveCommand() {
+    if (!canPlay('moveCommand', 100)) return;
     ensureAudio();
-    playNoise(0.18, 400, 3, 0.25);
-    playSweep(120, 350, 0.15, 'triangle', 0.2);
+    playNoise(0.14, 420, 3, 0.16);
+    playSweep(120, 320, 0.12, 'triangle', 0.12);
   }
 
   /** Attack move: sharper, higher whoosh. */
   function attackCommand() {
+    if (!canPlay('attackCommand', 100)) return;
     ensureAudio();
-    playNoise(0.15, 900, 2, 0.3);
-    playSweep(200, 600, 0.12, 'sawtooth', 0.2);
-    setTimeout(() => playTone(1100, 'sawtooth', 0.06, 0.15), 60);
+    playNoise(0.12, 900, 2, 0.18);
+    playSweep(220, 620, 0.1, 'sawtooth', 0.12);
+    setTimeout(() => playTone(1080, 'sawtooth', 0.05, 0.09), 55);
+  }
+
+  /** Unit attack impact: a subtle cue for weapons firing/combat engagement. */
+  function attack(unit = null) {
+    const key = cueKey('attack', unit);
+    if (!canPlay(key, 60)) return;
+    ensureAudio();
+
+    const range = unit?.range ?? 0;
+    const isStructure = unit?.type === 'structure' || unit?.type === 'construction';
+    const isMelee = isStructure ? false : (unit?.isCharging || range <= 50 || unit?.attackType === 'melee');
+
+    if (isStructure) {
+      playNoise(0.05, 560, 2.8, 0.12);
+      playSweep(180, 85, 0.08, 'sine', 0.08);
+      return;
+    }
+
+    if (isMelee) {
+      playNoise(0.04, 1250, 4, 0.11);
+      playTone(230, 'triangle', 0.045, 0.09);
+      setTimeout(() => playTone(170, 'square', 0.025, 0.05), 12);
+      return;
+    }
+
+    playSweep(1220, 360, 0.065, 'sawtooth', 0.08);
+    playTone(920, 'sine', 0.03, 0.06, 6);
   }
 
   /** Error buzz: low, discordant. */
   function error() {
+    if (!canPlay('error', 110)) return;
     ensureAudio();
-    playTone(150, 'sawtooth', 0.2, 0.3);
-    playTone(155, 'sawtooth', 0.2, 0.2); // slight detune for dissonance
+    playTone(150, 'sawtooth', 0.16, 0.16);
+    playTone(157, 'sawtooth', 0.16, 0.12); // slight detune for dissonance
   }
 
   /** Construction start: mechanical click + rising tone. */
   function buildStart() {
+    if (!canPlay('buildStart', 120)) return;
     ensureAudio();
-    playNoise(0.04, 3000, 5, 0.15);
-    setTimeout(() => playSweep(200, 600, 0.25, 'square', 0.2), 30);
+    playNoise(0.035, 3000, 5, 0.1);
+    setTimeout(() => playSweep(200, 560, 0.2, 'square', 0.12), 24);
   }
 
   /** Training complete: bright ascending arpeggio. */
@@ -154,35 +208,46 @@ export function createAudioManager(game) {
 
   /** Wave warning: pulsing alert. */
   function waveWarn() {
+    if (!canPlay('waveWarn', 200)) return;
     ensureAudio();
     for (let i = 0; i < 3; i++) {
-      setTimeout(() => playTone(440, 'square', 0.1, 0.3), i * 150);
+      setTimeout(() => playTone(440, 'square', 0.09, 0.18), i * 140);
     }
   }
 
   /** Hit sound: short impact burst (unit takes damage). */
-  function hit() {
+  function hit(unit = null) {
+    const key = cueKey('hit', unit);
+    if (!canPlay(key, 55)) return;
     ensureAudio();
+    const shielded = (unit?.shield ?? 0) > 0;
     // Quick percussive click + low thud
-    playNoise(0.05, 1500, 4, 0.2);
-    setTimeout(() => playTone(200, 'square', 0.04, 0.15), 10);
+    playNoise(0.04, shielded ? 2100 : 1550, 4.5, shielded ? 0.12 : 0.14);
+    setTimeout(() => playTone(shielded ? 520 : 190, 'square', 0.032, shielded ? 0.08 : 0.1), 8);
   }
 
   /** Explosion: noise burst with low rumble (unit death). */
-  function explosion() {
+  function explosion(unit = null) {
+    const key = cueKey('explosion', unit);
+    if (!canPlay(key, unit?.type === 'structure' || unit?.type === 'construction' ? 70 : 55)) return;
     ensureAudio();
+    const isStructure = unit?.type === 'structure' || unit?.type === 'construction';
+    const volume = isStructure ? 0.22 : 0.16;
+    const freq = isStructure ? 520 : 720;
+    const q = isStructure ? 1.8 : 2.4;
     // Noise burst (explosion crackle)
-    playNoise(0.25, 600, 2, 0.35);
+    playNoise(isStructure ? 0.22 : 0.16, freq, q, volume);
     // Low rumble
-    setTimeout(() => playSweep(80, 40, 0.2, 'sine', 0.25), 50);
+    setTimeout(() => playSweep(isStructure ? 92 : 120, isStructure ? 36 : 52, isStructure ? 0.22 : 0.16, 'sine', isStructure ? 0.12 : 0.08), 40);
   }
 
   /** Completion chime: bright ascending tones (building/unit completes). */
   function complete() {
+    if (!canPlay('complete', 180)) return;
     ensureAudio();
     const notes = [660, 880, 1100]; // E5 A5 C6
     notes.forEach((freq, i) => {
-      setTimeout(() => playTone(freq, 'square', 0.1, 0.18), i * 40);
+      setTimeout(() => playTone(freq, 'square', 0.085, 0.12), i * 38);
     });
   }
 
@@ -213,6 +278,7 @@ export function createAudioManager(game) {
     deselect,
     moveCommand,
     attackCommand,
+    attack,
     error,
     buildStart,
     trainComplete,

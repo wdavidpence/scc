@@ -59,6 +59,21 @@
   - Done when: the game feels closer to a real RTS rather than a prototype.
   - Completed: Five visual feedback systems + four new audio SFX wired up across GameScene.js and audioManager.js. (1) **Damage flash** — `showDamageFlash(unit)` briefly tints enemy sprites red (60ms yoyo) and plays a percussive hit sound (filtered noise burst + square thud) every time a unit takes damage in `updateCombatUnit()`. (2) **Death explosion** — `showDeathExplosion(x, y)` spawns 16-24 colored particles in a radial burst pattern (size 3-7, speeds 40-120) that expand outward and fade over 400-600ms, plus a low rumble death sound — called from `reapDeadEntities()` for both units and structures. (3) **Wave announcement** — `showWaveAnnouncement(waveNumber)` displays a centered banner ("Wave X — advancing") with dark background panel and blue accent stroke, fades in over 300ms, holds 1.5s, fades out over 500ms — called from `spawnEnemyWave()` on every wave increment. (4) **Completion glow** — `showCompletionGlow(x, y, raceId)` shows a race-colored expanding ring (blue=terran, orange=zerg, purple=protoss) that scales 5× and fades — called from `updateConstructions()` when buildings finish AND from `updateStructures()` when units deploy from production queues. (5) **Charge impact** — `showChargeImpact(x, y)` shows a purple impact ring scaling 4× — called from `updateCombatUnit()` when Protoss charge hits land. (6) **Audio** — 4 new SFX added to audioManager.js: `hit()` (percussive click + thud), `explosion()` (noise burst + low rumble), `complete()` (E5-A5-C6 ascending chime), `chargeHit()` (sharp impact + high sine ring). All 192/194 smoke tests pass (baseline unchanged).
 
+- [ ] **task-p2-11 — HudScene mobile layout smoke sweep**
+  - Goal: Verify the HudScene computeTextPositions/layout refactor on real mobile breakpoints.
+  - Done when: top bar, bottom bar, selection panel, and command buttons render correctly in wide, compact, and narrow portrait viewports.
+  - Verification: run the smallest build + layout smoke check, confirm no regressions in the HUD resize path.
+
+- [ ] **task-p2-12 — Compact HUD label-fit recheck**
+  - Goal: Re-run the smallest viewport QA after any compact HUD tweak and confirm no label overflow or touch-target regressions.
+  - Done when: `viewport-360x640.js` and `narrow-320x568.js` both pass, or the remaining failures are explicitly documented for the next slice.
+  - Verification: `node scripts/qa/viewport-360x640.js --json` and `node scripts/qa/narrow-320x568.js --json`.
+
+- [ ] **task-p2-13 — Compact HUD breakpoint remediation**
+  - Goal: Fix the current compact/mobile HUD regressions surfaced by the latest viewport QA.
+  - Exit criteria: `viewport-360x640.js` passes with no compact label overflow; `narrow-320x568.js` passes with no selection-panel overlap and no touch-target regression.
+  - Verification: rerun `node scripts/qa/viewport-360x640.js --json` and `node scripts/qa/narrow-320x568.js --json` after the smallest code slice lands.
+
 ## Overnight iteration loop
 1. Pick the highest-priority unfinished card.
 2. Make the smallest useful change.

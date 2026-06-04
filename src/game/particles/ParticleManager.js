@@ -51,6 +51,11 @@ export default class ParticleManager {
     return this.palettes[this.scene.race?.id] || this.palettes.terran;
   }
 
+  /** Merge the mineral spark colors for the current palette. */
+  resourceSparkColors(palette) {
+    return [...palette.mineral, ...palette.mineralBright];
+  }
+
   // ─── Resource Node Sparks ────────────────────────────────────────
 
   /**
@@ -59,7 +64,7 @@ export default class ParticleManager {
    */
   spawnResourceSpark(x, y) {
     const palette = this.getPalette();
-    const colors = [...palette.mineral, ...palette.mineralBright];
+    const colors = this.resourceSparkColors(palette);
 
     // Spawn 12-18 sparks in a radial pattern
     const count = Phaser.Math.Between(12, 18);
