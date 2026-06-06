@@ -79,15 +79,19 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image('terran-scv',     'sprites/terran-scv.png');
     this.load.image('terran-marine',  'sprites/terran-marine.png');
     loadAssetManifest(this.load, ASSET_MANIFEST);
-    // Protoss building single-frame images (render keys used by GameScene).
-    this.load.image('protoss-command-center', 'sprites/protoss-command-center.png');
-    this.load.image('protoss-tech',         'sprites/protoss-tech.png');
-    this.load.image('protoss-production',  'sprites/protoss-production.png');
-    // Terran and Zerg building single-frame images (render keys used by GameScene).
-    this.load.image('terran-marauder',  'sprites/terran-marauder.png');
-    this.load.image('zerg-command-center', 'sprites/zerg-command-center.png');
-    this.load.image('zerg-tech',       'sprites/zerg-tech.png');
-    this.load.image('zerg-production', 'sprites/zerg-production.png');
+    // Production/render single-frame images — centralized preload keys.
+    const PRODUCTION_RENDER_ASSETS = [
+      { key: 'protoss-command-center', path: 'sprites/protoss-command-center.png' },
+      { key: 'protoss-tech',         path: 'sprites/protoss-tech.png' },
+      { key: 'protoss-production',  path: 'sprites/protoss-production.png' },
+      { key: 'terran-marauder',     path: 'sprites/terran-marauder.png' },
+      { key: 'zerg-command-center', path: 'sprites/zerg-command-center.png' },
+      { key: 'zerg-tech',           path: 'sprites/zerg-tech.png' },
+      { key: 'zerg-production',     path: 'sprites/zerg-production.png' },
+    ];
+    for (const { key, path: assetPath } of PRODUCTION_RENDER_ASSETS) {
+      this.load.image(key, assetPath);
+    }
 
   }
 
