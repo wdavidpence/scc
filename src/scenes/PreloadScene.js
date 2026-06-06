@@ -35,14 +35,10 @@ function detailWrapWidth(w) {
 // Asset manifest: every spritesheet loaded during preload.
 // Each descriptor is { key, path, frameWidth, frameHeight }.
 const ASSET_MANIFEST = [
-  // Terran unit animation spritesheets (16 frames each: idle, walk, attack, death)
-  { key: 'terran-scv',         path: 'assets/sprites/terran-anim/scv.png',       frameWidth: 56, frameHeight: 28 },
-  { key: 'terran-marine',      path: 'assets/sprites/terran-anim/marine.png',    frameWidth: 60, frameHeight: 30 },
-  { key: 'terran-marauder',    path: 'assets/sprites/terran-anim/marauder.png',  frameWidth: 68, frameHeight: 34 },
   // Terran building spritesheets
-  { key: 'terran-command-center', path: 'assets/sprites/terran/command-center.png', frameWidth: 110, frameHeight: 72 },
-  { key: 'terran-barracks',       path: 'assets/sprites/terran/barracks.png',     frameWidth: 88, frameHeight: 56 },
-  { key: 'terran-factory',        path: 'assets/sprites/terran/factory.png',      frameWidth: 76, frameHeight: 52 },
+  { key: 'terran-command-center', path: 'sprites/terran-command-center.png', frameWidth: 110, frameHeight: 72 },
+  { key: 'terran-barracks',       path: 'sprites/terran-barracks.png',     frameWidth: 88, frameHeight: 56 },
+  { key: 'terran-factory',        path: 'sprites/terran-factory.png',      frameWidth: 76, frameHeight: 52 },
   // Zerg unit animation spritesheets (16 frames each)
   { key: 'zerg-drone',     path: 'assets/sprites/zerg/drone.png',      frameWidth: 26, frameHeight: 26 },
   { key: 'zerg-zergling',  path: 'assets/sprites/zerg/zergling.png',   frameWidth: 26, frameHeight: 26 },
@@ -76,7 +72,23 @@ export default class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
+    // Preload Terran menu/HUD icons as single-frame images (not spritesheets).
+    // These are loaded early so TitleScene and HudScene can use them
+    // via this.add.image('terran-scv') / this.add.image('terran-marine')
+    // without hitting missing-texture placeholders.
+    this.load.image('terran-scv',     'sprites/terran-scv.png');
+    this.load.image('terran-marine',  'sprites/terran-marine.png');
     loadAssetManifest(this.load, ASSET_MANIFEST);
+    // Protoss building single-frame images (render keys used by GameScene).
+    this.load.image('protoss-command-center', 'sprites/protoss-command-center.png');
+    this.load.image('protoss-tech',         'sprites/protoss-tech.png');
+    this.load.image('protoss-production',  'sprites/protoss-production.png');
+    // Terran and Zerg building single-frame images (render keys used by GameScene).
+    this.load.image('terran-marauder',  'sprites/terran-marauder.png');
+    this.load.image('zerg-command-center', 'sprites/zerg-command-center.png');
+    this.load.image('zerg-tech',       'sprites/zerg-tech.png');
+    this.load.image('zerg-production', 'sprites/zerg-production.png');
+
   }
 
   create() {
