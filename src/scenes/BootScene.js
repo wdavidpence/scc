@@ -7,10 +7,7 @@ export default class BootScene extends Phaser.Scene {
   }
 
   create() {
-    // Generate all unit/building/resource textures procedurally.
-    // This replaces the missing spritesheet assets so the game runs with zero external files.
     generateAllTextures(this);
-
     this.scene.start('PreloadScene');
   }
 
