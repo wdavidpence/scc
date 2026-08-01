@@ -734,17 +734,16 @@ export default class BattleScene extends Phaser.Scene {
   createUnit(team, kind, x, y, options = {}) {
     const def = getUnitDef(this.race, team, kind, options.enemyKind);
     let spriteKey;
-    let frameConfig = null; // { frameWidth, frameHeight, endFrame } for spritesheet
     if (this.race.id === 'protoss') {
       if (kind === 'worker') spriteKey = 'protoss-probe';
       else if (kind === 'soldier') spriteKey = 'protoss-zealot';
       else if (kind === 'signature') spriteKey = 'protoss-dragoon';
       else spriteKey = 'protoss-zealot';
     } else if (this.race.id === 'zerg') {
-      if (kind === 'worker') { spriteKey = 'zerg-drone'; frameConfig = { fw: 52, fh: 26, end: 11 }; }
-      else if (kind === 'soldier') { spriteKey = 'zerg-zergling'; frameConfig = { fw: 52, fh: 26, end: 12 }; }
-      else if (kind === 'signature') { spriteKey = 'zerg-hydralisk'; frameConfig = { fw: 60, fh: 30, end: 14 }; }
-      else { spriteKey = 'zerg-zergling'; frameConfig = { fw: 52, fh: 26, end: 12 }; }
+      if (kind === 'worker') spriteKey = 'zerg-drone';
+      else if (kind === 'soldier') spriteKey = 'zerg-zergling';
+      else if (kind === 'signature') spriteKey = 'zerg-hydralisk';
+      else spriteKey = 'zerg-zergling';
     } else {
       if (kind === 'worker') spriteKey = 'terran-scv';
       else if (kind === 'soldier') spriteKey = 'terran-marine';
@@ -752,18 +751,9 @@ export default class BattleScene extends Phaser.Scene {
       else spriteKey = 'terran-marine';
     }
 
-    const sprite = this.add.sprite(x, y, spriteKey);
-    if (frameConfig) {
-      const { fw, fh, end } = frameConfig;
-      const numFrames = end + 1;
-      this.textures.addSpriteSheet(spriteKey, spriteKey, {
-        frameWidth: fw,
-        frameHeight: fh,
-        maxFrame: end
-      });
-    }
-    const scale = def.radius * 2 / (frameConfig ? frameConfig.fw : sprite.width);
-    sprite.setScale(scale);
+    // Use add.image() with procedural textures from BootScene (no spritesheets).
+    const sprite = this.add.image(x, y, spriteKey);
+    sprite.setDisplaySize(def.radius * 2, def.radius * 2);
     if (team === 'enemy') {
       sprite.setTint(0xf97316);
     }
@@ -853,22 +843,6 @@ export default class BattleScene extends Phaser.Scene {
       stimpackOriginalAttack: def.attack,
       stimpackGlow: null
     };
-
-    // Animation state tracking for Zerg units (must be after entity is created)
-    if (this.race.id === 'zerg' && frameConfig) {
-      const isWorker = kind === 'worker';
-      const isSignature = kind === 'signature';
-      entity.animState = 'idle';
-      entity.animFrameIndex = 0;
-      entity.animTimer = 0;
-      entity.idleEnd = 1;
-      entity.walkStart = 2;
-      entity.walkEnd = 5;
-      entity.attackStart = isWorker ? 6 : (isSignature ? 6 : 6);
-      entity.deathStart = isWorker ? 8 : (isSignature ? 11 : 9);
-      entity.deathFrameCount = isWorker ? 4 : (isSignature ? 4 : 4);
-      entity.isZerg = true;
-    }
 
     if (team === 'player') {
       this.playerUnits.push(entity);

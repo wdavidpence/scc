@@ -32,51 +32,9 @@ function detailWrapWidth(w) {
   return Math.min(w - DETAIL_PAD_X, DETAIL_MAX_WIDTH);
 }
 
-// Asset manifest: every spritesheet loaded during preload.
-// Each descriptor is { key, path, frameWidth, frameHeight }.
-const ASSET_MANIFEST = [
-  // Terran unit animation spritesheets (16 frames each: idle, walk, attack, death)
-  { key: 'terran-scv',         path: 'assets/sprites/terran-anim/scv.png',       frameWidth: 56, frameHeight: 28 },
-  { key: 'terran-marine',      path: 'assets/sprites/terran-anim/marine.png',    frameWidth: 60, frameHeight: 30 },
-  { key: 'terran-marauder',    path: 'assets/sprites/terran-anim/marauder.png',  frameWidth: 68, frameHeight: 34 },
-  // Terran building spritesheets
-  { key: 'terran-command-center', path: 'assets/sprites/terran/command-center.png', frameWidth: 110, frameHeight: 72 },
-  { key: 'terran-barracks',       path: 'assets/sprites/terran/barracks.png',     frameWidth: 88, frameHeight: 56 },
-  { key: 'terran-factory',        path: 'assets/sprites/terran/factory.png',      frameWidth: 76, frameHeight: 52 },
-  // Zerg unit animation spritesheets (16 frames each)
-  { key: 'zerg-drone',     path: 'assets/sprites/zerg/drone.png',      frameWidth: 26, frameHeight: 26 },
-  { key: 'zerg-zergling',  path: 'assets/sprites/zerg/zergling.png',   frameWidth: 26, frameHeight: 26 },
-  { key: 'zerg-hydralisk', path: 'assets/sprites/zerg/hydralisk.png',  frameWidth: 30, frameHeight: 30 },
-  { key: 'zerg-baneling',  path: 'assets/sprites/zerg/baneling.png',   frameWidth: 32, frameHeight: 32 },
-  // Zerg building spritesheets
-  { key: 'zerg-spawning-pool', path: 'assets/sprites/zerg/spawning-pool.png', frameWidth: 84, frameHeight: 58 },
-  { key: 'zerg-spire',       path: 'assets/sprites/zerg/spire.png',       frameWidth: 72, frameHeight: 50 },
-  // Protoss unit animation spritesheets (16 frames each: idle, walk, attack, death)
-  { key: 'protoss-probe',          path: 'assets/sprites/protoss/probe-anim.png',         frameWidth: 28, frameHeight: 28 },
-  { key: 'protoss-zealot',         path: 'assets/sprites/protoss/zealot-anim.png',        frameWidth: 32, frameHeight: 32 },
-  { key: 'protoss-dragoon',        path: 'assets/sprites/protoss/dragoon-anim.png',       frameWidth: 34, frameHeight: 34 },
-  // Protoss building spritesheets
-  { key: 'protoss-nexus',              path: 'assets/sprites/protoss/nexus.png',            frameWidth: 112, frameHeight: 74 },
-  { key: 'protoss-gateway',            path: 'assets/sprites/protoss/gateway.png',          frameWidth: 90, frameHeight: 60 },
-  { key: 'protoss-cybernetics-core',   path: 'assets/sprites/protoss/cybernetics-core.png', frameWidth: 78, frameHeight: 54 },
-];
-
-function loadAssetManifest(loader, manifest) {
-  for (const asset of manifest) {
-    loader.spritesheet(asset.key, asset.path, {
-      frameWidth: asset.frameWidth,
-      frameHeight: asset.frameHeight,
-    });
-  }
-}
-
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
     super('PreloadScene');
-  }
-
-  preload() {
-    loadAssetManifest(this.load, ASSET_MANIFEST);
   }
 
   create() {
