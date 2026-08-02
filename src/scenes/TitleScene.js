@@ -119,14 +119,14 @@ export default class MenuScene extends Phaser.Scene {
       color: '#475569'
     }).setOrigin(1, 0);
 
-    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY + 10, 'StarCraft-inspired mobile RTS skirmish', {
+    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY, 'StarCraft-inspired mobile RTS skirmish', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(14px, 3vw, 22px)',
       color: '#cbd5e1',
       align: 'center'
     }).setOrigin(0.5);
 
-    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY + 10, 'Choose a race, then build, scout, and push across the battlefield.', {
+    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY, 'Choose a race, then build, scout, and push across the battlefield.', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(13px, 2.6vw, 18px)',
       color: '#94a3b8',
@@ -143,6 +143,7 @@ export default class MenuScene extends Phaser.Scene {
     this.difficultyEntries = [];
     this.createDifficultyControls();
 
+    // Start button - simple rectangle with reliable input
     this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, START_BUTTON.height, 0x2563eb, 1)
       .setStrokeStyle(2, 0x60a5fa, 1)
       .setInteractive({ useHandCursor: true });
@@ -162,7 +163,9 @@ export default class MenuScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
+    // Multiple input handlers for maximum compatibility
     this.startButton.on('pointerdown', () => this.startBattle());
+    this.startButton.on('click', () => this.startBattle());
     this.refreshCards();
     this.scale.on('resize', this.handleResize, this);
   }
@@ -202,9 +205,9 @@ export default class MenuScene extends Phaser.Scene {
       const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
       return {
         ...card,
-        titleY: height * 0.16,
-        subtitleY: height * 0.16 + 54,
-        descriptionY: height * 0.16 + 94,
+        titleY: height * 0.12,
+        subtitleY: height * 0.12 + 72,
+        descriptionY: height * 0.12 + 110,
         startY,
         startWidth: Math.min(width - 50, START_BUTTON.widthCompact),
         footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset),
@@ -223,9 +226,9 @@ export default class MenuScene extends Phaser.Scene {
     const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
     return {
       ...card,
-      titleY: height / 2 - 220,
-      subtitleY: height / 2 - 160,
-      descriptionY: height / 2 - 122,
+      titleY: height / 2 - 240,
+      subtitleY: height / 2 - 170,
+      descriptionY: height / 2 - 130,
       startY,
       startWidth: START_BUTTON.widthWide,
       footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset,
