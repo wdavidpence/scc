@@ -2121,7 +2121,8 @@ export default class BattleScene extends Phaser.Scene {
       this.enemyGas -= totalGas;
     }
 
-    // Spawn squad with staggered positions
+    // Spawn squad with staggered positions + wave-scaling stats
+    const waveBonus = Math.min(0.4, this.enemyWave * 0.05); // +5% per wave, capped at +40%
     for (let i = 0; i < squadSize; i += 1) {
       this.enemySupplyUsed += unitDef.supply;
       const spawnY = slot.y + Phaser.Math.Between(-30, 30) + i * 24;
@@ -2130,6 +2131,9 @@ export default class BattleScene extends Phaser.Scene {
         enemyKind: enemyKind,
         isSignature: isSignature
       });
+      // Scale HP and attack with wave number for escalating pressure
+      unit.hp = Math.floor(unit.maxHp * (1 + waveBonus));
+      unit.attack = Math.floor(unitDef.attack * (1 + waveBonus));
       unit.order = 'attack';
       unit.targetX = this.playerCommandCenter.x + Phaser.Math.Between(-60, 60);
       unit.targetY = this.playerCommandCenter.y + Phaser.Math.Between(-40, 40);
