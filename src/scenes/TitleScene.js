@@ -112,7 +112,7 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Version number (top-right corner)
-    this.versionText = this.add.text(width - 16, 16, 'v1.1.1', {
+    this.versionText = this.add.text(width - 16, 16, 'v1.1.2', {
       ...MENU_TEXT_STYLE,
       fontSize: '12px',
       fontStyle: '600',
@@ -205,9 +205,9 @@ export default class MenuScene extends Phaser.Scene {
       const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
       return {
         ...card,
-        titleY: height * 0.12,
-        subtitleY: height * 0.12 + 72,
-        descriptionY: height * 0.12 + 110,
+        titleY: height * 0.10,
+        subtitleY: height * 0.10 + 80,
+        descriptionY: height * 0.10 + 120,
         startY,
         startWidth: Math.min(width - 50, START_BUTTON.widthCompact),
         footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset),
@@ -226,9 +226,9 @@ export default class MenuScene extends Phaser.Scene {
     const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
     return {
       ...card,
-      titleY: height / 2 - 240,
-      subtitleY: height / 2 - 170,
-      descriptionY: height / 2 - 130,
+      titleY: height / 2 - 260,
+      subtitleY: height / 2 - 180,
+      descriptionY: height / 2 - 135,
       startY,
       startWidth: START_BUTTON.widthWide,
       footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset,
