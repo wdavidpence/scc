@@ -329,6 +329,14 @@ export default class HudScene extends Phaser.Scene {
       color: '#f59e0b'
     }).setOrigin(1, 0);
 
+    // Unit count indicator (top-right, below wave counter)
+    this.unitCountText = this.add.text(width - OBJECTIVE_X_OFFSET, OBJECTIVE_Y + 38, '', {
+      fontFamily: FONT_FAMILY,
+      fontSize: 'clamp(10px, 1.8vw, 12px)',
+      fontStyle: '600',
+      color: COLOR_SLAKE_400
+    }).setOrigin(1, 0);
+
     // --- Selection panel (reuses textPos from top of create) ---
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
@@ -740,6 +748,11 @@ export default class HudScene extends Phaser.Scene {
     // Wave counter
     if (this.waveCounter && battle.wave) {
       this.waveCounter.setText(`Wave: ${battle.wave}`);
+    }
+
+    // Unit count indicator (player vs enemy)
+    if (this.unitCountText && battle.playerUnits !== undefined && battle.enemyUnits !== undefined) {
+      this.unitCountText.setText(`${battle.playerUnits} vs ${battle.enemyUnits}`);
     }
 
     // --- Animated resource text ---
