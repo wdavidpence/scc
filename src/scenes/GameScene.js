@@ -557,6 +557,34 @@ export default class BattleScene extends Phaser.Scene {
       .setStrokeStyle(1, 0x60a5fa, 0.5);
     // Unit dots container (canvas texture for performance)
     this.minimapCanvas = this.add.graphics();
+
+    // Clickable overlay — tap to pan camera
+    const minimapHit = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw, mh, 0x000000, 0)
+      .setInteractive({ useHandCursor: true });
+
+    minimapHit.on('pointerdown', (pointer) => {
+      const localX = pointer.x - MINIMAP_X;
+      const localY = pointer.y - MINIMAP_Y;
+      const worldX = (localX / MINIMAP_WIDTH) * WORLD_WIDTH;
+      const worldY = (localY / MINIMAP_HEIGHT) * WORLD_HEIGHT;
+
+      // Smoothly pan camera to clicked location
+      const cam = this.cameras.main;
+      const targetScrollX = Math.max(0, Math.min(worldX - cam.width / cam.zoom / 2, WORLD_WIDTH - cam.width / cam.zoom));
+      const targetScrollY = Math.max(0, Math.min(worldY - cam.height / cam.zoom / 2, WORLD_HEIGHT - cam.height / cam.zoom));
+
+      this.tweens.add({
+        targets: { sx: cam.scrollX, sy: cam.scrollY },
+        sx: targetScrollX,
+        sy: targetScrollY,
+        duration: 300,
+        ease: 'Cubic.easeOut',
+        onUpdate: (tween) => {
+          cam.scrollX = tween.getValue('sx');
+          cam.scrollY = tween.getValue('sy');
+        }
+      });
+    });
   }
 
   updateMinimap() {
