@@ -111,14 +111,22 @@ export default class MenuScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
-    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY, 'StarCraft-inspired mobile RTS skirmish', {
+    // Version number (top-right corner)
+    this.versionText = this.add.text(width - 16, 16, 'v1.1.1', {
+      ...MENU_TEXT_STYLE,
+      fontSize: '12px',
+      fontStyle: '600',
+      color: '#475569'
+    }).setOrigin(1, 0);
+
+    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY + 10, 'StarCraft-inspired mobile RTS skirmish', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(14px, 3vw, 22px)',
       color: '#cbd5e1',
       align: 'center'
     }).setOrigin(0.5);
 
-    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY, 'Choose a race, then build, scout, and push across the battlefield.', {
+    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY + 10, 'Choose a race, then build, scout, and push across the battlefield.', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(13px, 2.6vw, 18px)',
       color: '#94a3b8',
@@ -413,8 +421,9 @@ export default class MenuScene extends Phaser.Scene {
     this.shell.setSize(shell.width, shell.height);
 
     this.titleText.setPosition(width / 2, this.layout.titleY);
-    this.subtitleText.setPosition(width / 2, this.layout.subtitleY);
-    this.descriptionText.setPosition(width / 2, this.layout.descriptionY);
+    this.versionText.setPosition(width - 16, 16);
+    this.subtitleText.setPosition(width / 2, this.layout.subtitleY + 10);
+    this.descriptionText.setPosition(width / 2, this.layout.descriptionY + 10);
     this.descriptionText.setWordWrapWidth(descWrapWidth(width));
 
     this.cardEntries.forEach((entry, index) => {
