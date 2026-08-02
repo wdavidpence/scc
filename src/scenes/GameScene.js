@@ -2846,6 +2846,14 @@ export default class BattleScene extends Phaser.Scene {
 
     // Audio: explosion/death sound
     if (this.audioManager) this.audioManager.explosion(entity);
+
+    // Screen shake on structure death for dramatic impact
+    const isStructure = entity?.type === 'structure';
+    if (isStructure) {
+      this.cameras.main.shake(300, 0.015);
+    } else {
+      this.cameras.main.shake(100, 0.005);
+    }
   }
 
   /** Wave announcement — brief banner showing wave number. */
