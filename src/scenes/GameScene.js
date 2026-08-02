@@ -2455,15 +2455,73 @@ export default class BattleScene extends Phaser.Scene {
     session.setMessage(`${message} Tap anywhere to return to the menu.`);
     session.pushLog(message);
     this.syncSession(message);
-    this.time.delayedCall(900, () => {
-      this.endTapReady = true;
-    });
+
+    // Show dramatic victory/defeat overlay
+    const { width, height } = this.scale;
+    const cx = width / 2, cy = height / 2 - 30;
+
+    // Dark overlay
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x020617, outcome === 'victory' ? 0.55 : 0.7)
+      .setAlpha(0).setDepth(100);
+
+    // Banner background
+    const banner = this.add.rectangle(cx, cy - 20, Math.min(480, width - 60), 120, outcome === 'victory' ? 0x1e3a5f : 0x7c2d12, outcome === 'victory' ? 0.85 : 0.9)
+      .setStrokeStyle(2, outcome === 'victory' ? 0x60a5fa : 0xf97316, 0.8).setAlpha(0).setDepth(101);
+
+    // Result title
+    const resultText = this.add.text(cx, cy - 40, outcome === 'victory' ? 'VICTORY' : 'DEFEAT', {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(32px, 8vw, 56px)',
+      fontStyle: '900',
+      color: outcome === 'victory' ? '#60a5fa' : '#f97316'
+    }).setOrigin(0.5).setAlpha(0).setDepth(102);
+
+    // Subtitle
+    const subtitle = this.add.text(cx, cy + 10, message.replace(/^Victory!\s*\/\s*Defeat\s*\.\s*/, ''), {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(14px, 3vw, 20px)',
+      color: '#cbd5e1'
+    }).setOrigin(0.5).setAlpha(0).setDepth(102);
+
+    // Return prompt
+    const prompt = this.add.text(cx, cy + 60, 'Tap anywhere to return', {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(12px, 2.5vw, 16px)',
+      fontStyle: '700',
+      color: '#94a3b8'
+    }).setOrigin(0.5).setAlpha(0).setDepth(102);
+
+    // Fade in sequence
+    this.tweens.add({ targets: overlay, alpha: outcome === 'victory' ? 0.55 : 0.7, duration: 400 });
+    this.tweens.addChain([{ targets: [banner, resultText], alpha: 1, duration: 300, ease: 'Cubic.easeOut', delay: 200 },
+      { targets: subtitle, alpha: 1, duration: 250, ease: 'Cubic.easeOut' },
+      { targets: prompt, alpha: 1, duration: 250, ease: 'Cubic.easeOut',
+        onComplete: () => { this.endTapReady = true; } }]);
+
+    // Store overlay refs for cleanup
+    this._endOverlay = { overlay, banner, resultText, subtitle, prompt };
   }
 
   returnToMenu() {
+    // Clean up end-of-battle overlay if present
+    if (this._endOverlay) {
+      const o = this._endOverlay;
+      o.overlay.destroy(); o.banner.destroy(); o.resultText.destroy();
+      o.subtitle.destroy(); o.prompt.destroy();
+      this._endOverlay = null;
+    }
+
     this.scene.stop('HudScene');
     session.resetForMenu('Choose a faction and start the mission.');
     this.scene.start('MenuScene');
+  }
+
+  shutdown() {
+    // Clean up end-of-battle overlay if battle ended without returnToMenu being called.
+    this._endOverlay = null; // Phaser scene shutdown destroys all children automatically
+    this.inputController?.destroy();
+    this.scene.stop('HudScene');
+    this.scale.off('resize', this.handleResize, this);
   }
 
   handleResize() {
