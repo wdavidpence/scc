@@ -350,6 +350,21 @@ export default class HudScene extends Phaser.Scene {
       color: '#94a3b8'
     }).setOrigin(0, 0);
 
+    // Enemy base HP bar (right below player's)
+    this.enemyBaseHpBack = this.add.rectangle(PANEL_X, RESOURCE_TEXT_Y + 30, hpBarWidth, 5, 0x0f172a, 0.8)
+      .setOrigin(0, 0);
+    this.enemyBaseHpFront = this.add.rectangle(PANEL_X, RESOURCE_TEXT_Y + 30, hpBarWidth, 5, '#fb7185', 0.9)
+      .setOrigin(0, 0);
+    this.enemyBaseHpLabel = this.add.text(PANEL_X, RESOURCE_TEXT_Y + 26, 'Enemy Base', {
+      fontFamily: FONT_FAMILY,
+      fontSize: 'clamp(8px, 1.4vw, 10px)',
+      fontStyle: '600',
+      color: '#94a3b8'
+    }).setOrigin(0, 0);
+
+    // Store hpBarWidth for onDataChange updates
+    this.hpBarWidth = hpBarWidth;
+
     // --- Selection panel (reuses textPos from top of create) ---
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
@@ -772,7 +787,7 @@ export default class HudScene extends Phaser.Scene {
     if (this.playerBaseHpFront && battle.playerBaseHp !== undefined) {
       const maxHp = this.race?.maxBaseHp ?? 1000; // default fallback
       const ratio = Math.max(0, battle.playerBaseHp / maxHp);
-      this.playerBaseHpFront.setSize(hpBarWidth * ratio, 5);
+      this.playerBaseHpFront.setSize(this.hpBarWidth * ratio, 5);
 
       // Color changes with health: green > yellow > red
       if (ratio > 0.5) {
@@ -781,6 +796,22 @@ export default class HudScene extends Phaser.Scene {
         this.playerBaseHpFront.setFillStyle('#fbbf24', 0.9);
       } else {
         this.playerBaseHpFront.setFillStyle('#ef4444', 0.9);
+      }
+    }
+
+    // Enemy base HP bar
+    if (this.enemyBaseHpFront && battle.enemyBaseHp !== undefined) {
+      const maxHp = this.race?.maxBaseHp ?? 1000; // default fallback
+      const ratio = Math.max(0, battle.enemyBaseHp / maxHp);
+      this.enemyBaseHpFront.setSize(this.hpBarWidth * ratio, 5);
+
+      // Color: red when high HP (bad), green when low (good - almost won)
+      if (ratio > 0.5) {
+        this.enemyBaseHpFront.setFillStyle('#fb7185', 0.9);
+      } else if (ratio > 0.25) {
+        this.enemyBaseHpFront.setFillStyle('#f97316', 0.9);
+      } else {
+        this.enemyBaseHpFront.setFillStyle('#22c55e', 0.9);
       }
     }
 
