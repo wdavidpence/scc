@@ -585,6 +585,67 @@ export default class BattleScene extends Phaser.Scene {
       fill(ctx, 8, 28, 3, 6, c.protoDark);
       fill(ctx, 49, 28, 3, 6, c.protoDark);
     });
+
+    // --- Terran Bunker (72x54) ---
+    makeTexture('terran-defense', 72, 54, (ctx, w, h, c) => {
+      drawPanel(ctx, 8, 10, 56, 34, c.dark, c.navy2);
+      fill(ctx, 12, 14, 48, 4, c.blue);
+      fill(ctx, 14, 18, 44, 6, c.steel);
+      fill(ctx, 16, 26, 40, 8, c.navy);
+      fill(ctx, 12, 24, 48, 2, c.blue3);
+      // Gun port (center)
+      fill(ctx, 30, 28, 12, 6, c.dark);
+      fill(ctx, 32, 30, 8, 4, c.blue);
+      // Side armor plates
+      fill(ctx, 10, 20, 3, 16, c.steel);
+      fill(ctx, 59, 20, 3, 16, c.steel);
+      // Warning lights
+      fill(ctx, 14, 12, 6, 2, c.amber);
+      fill(ctx, 52, 12, 6, 2, c.amber);
+    });
+
+    // --- Zerg Spore Colony (68x52) ---
+    makeTexture('zerg-defense', 68, 52, (ctx, w, h, c) => {
+      // Organic base
+      fill(ctx, 10, 38, 48, 6, c.zergDark);
+      fill(ctx, 12, 36, 44, 4, c.zergRock);
+      // Spore dome (main body)
+      fill(ctx, 14, 20, 40, 18, c.zergMineral);
+      fill(ctx, 18, 14, 32, 8, c.zergMineral2);
+      fill(ctx, 22, 10, 24, 6, c.zergGlow);
+      fill(ctx, 28, 6, 12, 6, c.zergAmber);
+      // Spore tendrils (attack indicators)
+      fill(ctx, 16, 24, 3, 10, c.zergGas);
+      fill(ctx, 28, 26, 3, 8, c.zergGas);
+      fill(ctx, 40, 24, 3, 10, c.zergGas);
+      // Pulsing nodes
+      fill(ctx, 24, 18, 6, 4, c.zergAmber);
+      fill(ctx, 38, 20, 4, 3, c.zergAmber);
+      // Dark ridges
+      fill(ctx, 10, 34, 3, 6, c.zergDark);
+      fill(ctx, 55, 34, 3, 6, c.zergDark);
+    });
+
+    // --- Protoss Shield Generator (64x50) ---
+    makeTexture('protoss-defense', 64, 50, (ctx, w, h, c) => {
+      // Angular base platform
+      fill(ctx, 8, 36, 48, 6, c.protoDark);
+      fill(ctx, 10, 34, 44, 4, c.protoRock);
+      // Shield dome (energy field)
+      fill(ctx, 12, 20, 40, 16, c.protoMineral);
+      fill(ctx, 16, 14, 32, 8, c.protoMineral2);
+      fill(ctx, 20, 10, 24, 6, c.protoGlow);
+      fill(ctx, 26, 6, 12, 6, c.protoAmber);
+      // Energy arcs (shield field lines)
+      fill(ctx, 18, 24, 2, 10, c.protoGlow);
+      fill(ctx, 32, 26, 2, 8, c.protoGlow);
+      fill(ctx, 44, 24, 2, 10, c.protoGlow);
+      // Angular facet highlights
+      fill(ctx, 24, 10, 16, 3, c.protoMineral2);
+      // Dark edges
+      fill(ctx, 8, 32, 3, 6, c.protoDark);
+      fill(ctx, 53, 32, 3, 6, c.protoDark);
+    });
   }
 
   createBattleFieldTitle() {
@@ -871,19 +932,22 @@ export default class BattleScene extends Phaser.Scene {
     const baseDef = role === 'commandCenter' ? this.race.structures.commandCenter :
                     role === 'techBuilding' ? this.race.structures.techBuilding :
                     role === 'supplyStructure' ? this.race.structures.supplyStructure :
+                    role === 'defenseStructure' ? this.race.structures.defenseStructure :
                     this.race.structures.production;
     const width = baseDef.width;
     const height = baseDef.height;
     const active = options.active ?? true;
     const construction = options.construction ?? false;
-    const roleName = options.roleName ?? (role === 'commandCenter' ? this.race.commandCenterName : role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName);
+    const roleName = options.roleName ?? (role === 'commandCenter' ? this.race.commandCenterName : role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : role === 'defenseStructure' ? this.race.defenseStructureName : this.race.productionName);
     const textureKey = role === 'commandCenter'
       ? (this.race.id === 'zerg' ? 'zerg-command-center' : this.race.id === 'protoss' ? 'protoss-command-center' : 'terran-command-center')
       : role === 'techBuilding'
         ? (this.race.id === 'zerg' ? 'zerg-tech' : this.race.id === 'protoss' ? 'protoss-tech' : 'terran-factory')
         : role === 'supplyStructure'
           ? (this.race.id === 'zerg' ? 'zerg-supply' : this.race.id === 'protoss' ? 'protoss-supply' : 'terran-supply')
-          : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
+          : role === 'defenseStructure'
+            ? (this.race.id === 'zerg' ? 'zerg-defense' : this.race.id === 'protoss' ? 'protoss-defense' : 'terran-defense')
+            : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
 
     const sprite = this.add.image(x, y, textureKey)
       .setDisplaySize(width, height)
@@ -1389,6 +1453,9 @@ export default class BattleScene extends Phaser.Scene {
       case 'build-supply':
         this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'supplyStructure');
         break;
+      case 'build-defense':
+        this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'defenseStructure');
+        break;
       default:
         this.syncSession('Command unavailable.');
         break;
@@ -1497,12 +1564,12 @@ export default class BattleScene extends Phaser.Scene {
 
     const def = this.race.structures[role];
     if (this.playerMinerals < def.cost) {
-      const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName;
+      const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : role === 'defenseStructure' ? this.race.defenseStructureName : this.race.productionName;
       session.setMessage(`Not enough minerals to build ${structName}.`);
       return;
     }
 
-    // Check gas cost for tech building
+    // Check gas cost for tech/defense buildings
     if (def.gasCost !== undefined && this.playerGas < def.gasCost) {
       session.setMessage(`Not enough gas to build ${this.race.techBuildingName}.`);
       return;
@@ -1513,7 +1580,7 @@ export default class BattleScene extends Phaser.Scene {
       this.playerGas -= def.gasCost;
     }
 
-    const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName;
+    const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : role === 'defenseStructure' ? this.race.defenseStructureName : this.race.productionName;
     const construction = this.createStructure('player', role, slot.x, slot.y, {
       active: false,
       construction: true,
@@ -1875,9 +1942,97 @@ export default class BattleScene extends Phaser.Scene {
 
       this.applyMotionScale(structure, dt);
 
+      // Defense structure combat behavior
+      if (structure.role === 'defenseStructure') {
+        this.updateDefenseStructure(structure, dt);
+      }
+
       structure.hpFront.width = (structure.hp / structure.maxHp) * (structure.width + 8);
       structure.hpFront.setPosition(structure.x - (structure.width + 8) / 2, structure.y + structure.height / 2 + 10);
     });
+  }
+
+  updateDefenseStructure(structure, dt) {
+    const def = this.race.structures.defenseStructure;
+    if (!def) return;
+
+    // Protoss Shield Generator: regen shields for nearby friendly units/structures
+    if (def.shieldRadius) {
+      structure._attackCooldown = Math.max(0, (structure._attackCooldown ?? 0) - dt);
+      if (structure._attackCooldown <= 0) {
+        structure._attackCooldown = 1; // tick every second
+        let shielded = 0;
+        // Shield nearby friendly units
+        this.units.forEach((unit) => {
+          if (unit.team === structure.team && unit.maxShield > 0 && unit.shield < unit.maxShield) {
+            const dist = Phaser.Math.Distance.Between(structure.x, structure.y, unit.x, unit.y);
+            if (dist <= def.shieldRadius) {
+              unit.shield = Math.min(unit.maxShield, unit.shield + def.shieldRegenPerSecond);
+              shielded++;
+            }
+          }
+        });
+        // Shield nearby friendly structures
+        this.structures.forEach((s) => {
+          if (s.team === structure.team && s.type === 'structure' && s.id !== structure.id) {
+            const dist = Phaser.Math.Distance.Between(structure.x, structure.y, s.x, s.y);
+            if (dist <= def.shieldRadius) {
+              shielded++;
+            }
+          }
+        });
+        structure.statusText.setText(`Shielding ${shielded} units`);
+        structure._motionState = 'attack';
+      }
+      return;
+    }
+
+    // Terran Bunker / Zerg Spore Colony: auto-attack enemies in range
+    structure._attackCooldown = Math.max(0, (structure._attackCooldown ?? 0) - dt);
+    if (structure._attackCooldown > 0) {
+      structure.statusText.setText('Charging');
+      return;
+    }
+
+    // Find nearest enemy in range
+    let target = null;
+    let bestDist = def.attackRange;
+
+    for (let i = 0; i < this.enemyUnits.length; i++) {
+      const u = this.enemyUnits[i];
+      if (u.hp <= 0) continue;
+      const d = Phaser.Math.Distance.Between(structure.x, structure.y, u.x, u.y);
+      if (d < bestDist) {
+        bestDist = d;
+        target = u;
+      }
+    }
+
+    // Also check enemy structures
+    for (let i = 0; i < this.structures.length; i++) {
+      const s = this.structures[i];
+      if (s.team === 'enemy' && s.hp > 0) {
+        const d = Phaser.Math.Distance.Between(structure.x, structure.y, s.x, s.y);
+        if (d < bestDist) {
+          bestDist = d;
+          target = s;
+        }
+      }
+    }
+
+    if (target) {
+      structure._attackCooldown = def.attackCooldown;
+      target.hp -= def.attackDamage;
+      structure._motionState = 'attack';
+      structure.statusText.setText('Firing');
+      // Visual feedback: muzzle flash + damage number
+      spawnMuzzleFlash(this, structure.x, structure.y, this.race?.id || 'terran');
+      this.showDamageFlash(target, def.attackDamage);
+      if (this.audioManager) this.audioManager.attack(structure);
+    } else {
+      structure.statusText.setText('Defending');
+      structure._motionState = 'idle';
+    }
   }
 
   updateUnits(dt) {
@@ -2640,7 +2795,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     if (entity.type === 'worker') {
-      commands.splice(1, 0, 'move', 'build-supply', 'build-production', 'build-tech');
+      commands.splice(1, 0, 'move', 'build-supply', 'build-defense', 'build-production', 'build-tech');
       return commands;
     }
 

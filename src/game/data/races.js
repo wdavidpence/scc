@@ -12,6 +12,7 @@ export const RACES = {
     productionName: 'Barracks',
     techBuildingName: 'Tech Lab',
     supplyStructureName: 'Supply Depot',
+    defenseStructureName: 'Bunker',
     workerName: 'SCV',
     soldierName: 'Marine',
     signatureName: 'Marauder',
@@ -32,7 +33,8 @@ export const RACES = {
       commandCenter: { cost: 0, buildTime: 0, maxHp: 1600, width: 110, height: 72, supplyBonus: 0, color: 0x1d4ed8 },
       production: { cost: 150, buildTime: 10, maxHp: 900, width: 88, height: 56, supplyBonus: 8, color: 0x2563eb },
       techBuilding: { cost: 200, buildTime: 12, maxHp: 750, width: 76, height: 52, supplyBonus: 0, color: 0x7c3aed, requiredStructure: 'production' },
-      supplyStructure: { cost: 100, buildTime: 8, maxHp: 500, width: 64, height: 48, supplyBonus: 8, color: 0x3b82f6 }
+      supplyStructure: { cost: 100, buildTime: 8, maxHp: 500, width: 64, height: 48, supplyBonus: 8, color: 0x3b82f6 },
+      defenseStructure: { cost: 150, gasCost: 0, buildTime: 12, maxHp: 800, width: 72, height: 54, supplyBonus: 0, color: 0x1d4ed8, requiredStructure: 'production', attackRange: 90, attackDamage: 12, attackCooldown: 0.8 }
     },
     units: {
       worker: { label: 'SCV', cost: 50, gasCost: 0, buildTime: 7, hp: 45, maxHp: 45, speed: 128, attack: 4, range: 24, cooldown: 0.8, supply: 1, radius: 14, color: 0x93c5fd },
@@ -61,6 +63,7 @@ export const RACES = {
     productionName: 'Spawning Pool',
     techBuildingName: 'Spire',
     supplyStructureName: 'Overgrowth',
+    defenseStructureName: 'Spore Colony',
     workerName: 'Drone',
     soldierName: 'Zergling',
     signatureName: 'Hydralisk',
@@ -81,7 +84,8 @@ export const RACES = {
       commandCenter: { cost: 0, buildTime: 0, maxHp: 1450, width: 112, height: 76, supplyBonus: 0, color: 0x7c2d12 },
       production: { cost: 125, buildTime: 8, maxHp: 820, width: 84, height: 58, supplyBonus: 10, color: 0xea580c },
       techBuilding: { cost: 175, buildTime: 10, maxHp: 680, width: 72, height: 50, supplyBonus: 0, color: 0xa855f7, requiredStructure: 'production' },
-      supplyStructure: { cost: 75, buildTime: 6, maxHp: 400, width: 56, height: 42, supplyBonus: 6, color: 0xf97316 }
+      supplyStructure: { cost: 75, buildTime: 6, maxHp: 400, width: 56, height: 42, supplyBonus: 6, color: 0xf97316 },
+      defenseStructure: { cost: 125, gasCost: 0, buildTime: 10, maxHp: 650, width: 68, height: 52, supplyBonus: 0, color: 0x7c2d12, requiredStructure: 'production', attackRange: 85, attackDamage: 10, attackCooldown: 0.9 }
     },
     units: {
       worker: { label: 'Drone', cost: 40, gasCost: 0, buildTime: 6, hp: 35, maxHp: 35, speed: 156, attack: 3, range: 20, cooldown: 0.75, supply: 1, radius: 13, color: 0xf97316 },
@@ -103,6 +107,7 @@ export const RACES = {
     productionName: 'Gateway',
     techBuildingName: 'Cybernetics Core',
     supplyStructureName: 'Assimilator',
+    defenseStructureName: 'Shield Generator',
     workerName: 'Probe',
     soldierName: 'Zealot',
     signatureName: 'Dragoon',
@@ -123,7 +128,8 @@ export const RACES = {
       commandCenter: { cost: 0, buildTime: 0, maxHp: 1700, width: 112, height: 74, supplyBonus: 0, color: 0x7c3aed },
       production: { cost: 175, buildTime: 11, maxHp: 980, width: 90, height: 60, supplyBonus: 9, color: 0x8b5cf6 },
       techBuilding: { cost: 225, buildTime: 13, maxHp: 800, width: 78, height: 54, supplyBonus: 0, color: 0xc084fc, requiredStructure: 'production' },
-      supplyStructure: { cost: 125, buildTime: 9, maxHp: 600, width: 60, height: 46, supplyBonus: 8, color: 0xa78bfa }
+      supplyStructure: { cost: 125, buildTime: 9, maxHp: 600, width: 60, height: 46, supplyBonus: 8, color: 0xa78bfa },
+      defenseStructure: { cost: 150, gasCost: 75, buildTime: 12, maxHp: 700, width: 64, height: 50, supplyBonus: 0, color: 0x7c3aed, requiredStructure: 'production', shieldRadius: 120, shieldRegenPerSecond: 3 }
     },
     units: {
       worker: { label: 'Probe', cost: 50, gasCost: 0, buildTime: 7, hp: 40, maxHp: 40, speed: 132, attack: 3, range: 22, cooldown: 0.76, supply: 1, radius: 14, color: 0xc4b5fd },

@@ -33,7 +33,8 @@ const COMPACT_LABEL_ABBREVIATIONS = {
   'Train Soldier': 'Trn Sold',
   'Train Sig.': 'Trn Sig.',
   'Tech Lab': 'Tech',
-  'Supply': 'Sply'
+  'Supply': 'Sply',
+  'Defense': 'Def'
 };
 
 const compactLabelText = (label) => COMPACT_LABEL_ABBREVIATIONS[label] ?? label;
@@ -198,7 +199,7 @@ const getLayout = (width, height) => {
       topBarY: COMPACT_NARROW_TOP_Y,
       bottomBarHeight: COMPACT_NARROW_BOTTOM_BAR_HEIGHT,
       selectionPanelHeight: COMPACT_NARROW_SELECTION_PANEL_HEIGHT,
-      buttonRows: [5, 5],
+      buttonRows: [5, 6],
       buttonWidth: compactNarrowBtnWidth,
       buttonHeight: COMPACT_NARROW_BUTTON_HEIGHT,
       buttonGap: COMPACT_NARROW_BUTTON_GAP,
@@ -219,7 +220,7 @@ const getLayout = (width, height) => {
       topBarY: COMPACT_TOP_Y,
       bottomBarHeight: COMPACT_BOTTOM_BAR_HEIGHT,
       selectionPanelHeight: COMPACT_SELECTION_PANEL_HEIGHT,
-      buttonRows: [5, 5],
+      buttonRows: [5, 6],
       buttonWidth: compactBtnWidth,
       buttonHeight: COMPACT_BUTTON_HEIGHT,
       buttonGap: COMPACT_BUTTON_GAP,
@@ -228,15 +229,15 @@ const getLayout = (width, height) => {
     };
   }
 
-  const wideBtnWidth = Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 10 - WIDE_BUTTON_GAP_MAX));
-  const wideBtnGap = Math.max(WIDE_BUTTON_GAP_MIN, (width - WIDE_BUTTON_MARGIN - wideBtnWidth * 10) / 9);
+  const wideBtnWidth = Math.min(WIDE_BUTTON_WIDTH_MAX, Math.max(WIDE_BUTTON_WIDTH_MIN, (width - WIDE_BUTTON_MARGIN) / 11 - WIDE_BUTTON_GAP_MAX));
+  const wideBtnGap = Math.max(WIDE_BUTTON_GAP_MIN, (width - WIDE_BUTTON_MARGIN - wideBtnWidth * 11) / 10);
   return {
     compact: false, narrowPortrait: false,
     topBarHeight: WIDE_TOP_BAR_HEIGHT,
     topBarY: WIDE_TOP_Y,
     bottomBarHeight: WIDE_BOTTOM_BAR_HEIGHT,
     selectionPanelHeight: WIDE_SELECTION_PANEL_HEIGHT,
-    buttonRows: [10],
+    buttonRows: [11],
     buttonWidth: wideBtnWidth,
     buttonHeight: WIDE_BUTTON_HEIGHT,
     buttonGap: Math.min(WIDE_BUTTON_GAP_MAX, wideBtnGap),
@@ -266,6 +267,7 @@ export default class HudScene extends Phaser.Scene {
       { key: 'train-soldier', label: 'Train Soldier' },
       { key: 'train-signature', label: 'Train Sig.' },
       { key: 'build-supply', label: 'Supply' },
+      { key: 'build-defense', label: 'Defense' },
       { key: 'build-production', label: 'Build' },
       { key: 'build-tech', label: 'Tech Lab' },
       { key: 'pause', label: 'Pause' }
