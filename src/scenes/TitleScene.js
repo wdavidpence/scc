@@ -105,7 +105,7 @@ export default class MenuScene extends Phaser.Scene {
 
     this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
       ...MENU_TEXT_STYLE,
-      fontSize: 'clamp(48px, 12vw, 88px)',
+      fontSize: 'clamp(36px, 8vw, 64px)',
       fontStyle: '800',
       color: '#ffffff',
       align: 'center'
