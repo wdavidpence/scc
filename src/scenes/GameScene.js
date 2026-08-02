@@ -2243,8 +2243,19 @@ export default class BattleScene extends Phaser.Scene {
     const enemyTech = this.structures.find((structure) => structure.team === 'enemy' && structure.role === 'techBuilding' && structure.type === 'structure');
     const enemyBase = this.enemyCommandCenter;
 
-    // Enemy AI: Build production if not exists (already exists at start)
-    // Enemy AI: Build gas harvesters
+    // AI state tracking (persist across frames)
+    if (!this._aiState) {
+      this._aiState = {
+        trainWorkerTimer: 0,
+        attackTimer: 0,
+        buildSupplyTimer: 0,
+        nextAttackWave: 0,
+        attackCooldown: 15, // seconds between coordinated attacks
+        hasAttackedThisWave: false
+      };
+    }
+    const ai = this._aiState;
+
     // Optimized: single-pass count of enemy workers, gas workers, mineral workers.
     let enemyWorkerCount = 0;
     let gasWorkerCount = 0;
@@ -2257,10 +2268,37 @@ export default class BattleScene extends Phaser.Scene {
     }
     const mineralWorkerCount = enemyWorkerCount - gasWorkerCount;
 
+    // Count enemy combat units
+    let enemyCombatCount = 0;
+    for (let i = 0; i < this.enemyUnits.length; i++) {
+      if (this.enemyUnits[i].team === 'enemy' && this.enemyUnits[i].type !== 'worker' && this.enemyUnits[i].hp > 0) {
+        enemyCombatCount++;
+      }
+    }
+
+    // Count existing supply structures
+    let enemySupplyCount = 0;
+    for (let i = 0; i < this.structures.length; i++) {
+      if (this.structures[i].team === 'enemy' && this.structures[i].role === 'supplyStructure') enemySupplyCount++;
+    }
+
+    // --- ECONOMY MANAGEMENT ---
+
+    // Train more workers over time (aim for 8-12 workers)
+    ai.trainWorkerTimer += dt;
+    const targetWorkers = Math.min(12, 6 + Math.floor(this.enemyWave / 3));
+    if (enemyWorkerCount < targetWorkers && this.enemyMinerals >= this.race.units.worker.cost && ai.trainWorkerTimer > 5) {
+      const cc = this.enemyCommandCenter;
+      if (cc && cc.type === 'structure' && cc.queue.length < 2) {
+        this.enemyMinerals -= this.race.units.worker.cost;
+        cc.queue.push({ kind: 'worker', progress: this.race.units.worker.buildTime, def: this.race.units.worker });
+        ai.trainWorkerTimer = 0;
+      }
+    }
+
     // Assign workers to gas if geysers available and not enough gas workers
     const availableGeysers = this.gasGeysers.filter((g) => g.amount > 0 && g.assignedWorkers < g.maxWorkers);
-    if (availableGeysers.length > 0 && gasWorkerCount < availableGeysers.length && mineralWorkerCount > 1) {
-      // Move a mineral worker to gas — find the last mineral (non-gas) worker.
+    if (availableGeysers.length > 0 && gasWorkerCount < availableGeysers.length && mineralWorkerCount > 2) {
       let mover = null;
       for (let i = this.enemyUnits.length - 1; i >= 0; i--) {
         const u = this.enemyUnits[i];
@@ -2271,7 +2309,6 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (mover) {
         const geyser = availableGeysers[0];
-        // Unassign from minerals (just stop auto-harvest, will find new node)
         mover.harvestType = 'gas';
         mover.order = 'gasHarvest';
         mover.geyserId = geyser.id;
@@ -2280,7 +2317,39 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Enemy builds tech building if they have minerals and gas, and no tech building yet
+    // --- BUILDING MANAGEMENT ---
+
+    // Build supply structures when needed (check every 3 seconds)
+    ai.buildSupplyTimer += dt;
+    if (ai.buildSupplyTimer > 3) {
+      ai.buildSupplyTimer = 0;
+      const supplyNeeded = this.enemySupplyUsed + 4 > this.enemySupplyCap;
+      if (supplyNeeded && this.enemyMinerals >= this.race.structures.supplyStructure.cost) {
+        const slot = this.findBuildSlot('supplyStructure', 'enemy');
+        if (slot) {
+          const def = this.race.structures.supplyStructure;
+          this.enemyMinerals -= def.cost;
+          const construction = this.createStructure('enemy', 'supplyStructure', slot.x, slot.y, {
+            active: false,
+            construction: true,
+            buildProgress: 0,
+            buildTimeRemaining: def.buildTime,
+            roleName: this.race.supplyStructureName
+          });
+          construction.finalRole = 'supplyStructure';
+          construction.finalLabel = this.race.supplyStructureName;
+          construction.buildTimeRemaining = def.buildTime;
+          construction.hp = def.maxHp * 0.55;
+          construction.maxHp = def.maxHp;
+          construction.sprite.setAlpha(0.3);
+          construction.ridge.setAlpha(0.18);
+          construction.statusText.setText('Under construction');
+          this.constructions.push(construction);
+        }
+      }
+    }
+
+    // Build tech building if they have minerals and gas, and no tech building yet
     if (!enemyTech && this.enemyWave >= this.aiDifficulty.enemyTechWave && this.enemyMinerals >= this.race.structures.techBuilding.cost && this.enemyGas >= (this.race.structures.techBuilding.gasCost || 0) && enemyProduction) {
       const slot = this.findBuildSlot('techBuilding', 'enemy');
       if (slot) {
@@ -2297,45 +2366,79 @@ export default class BattleScene extends Phaser.Scene {
         });
         construction.finalRole = 'techBuilding';
         construction.finalLabel = this.race.techBuildingName;
-        construction.statusText.setText('Under construction');
+        construction.buildTimeRemaining = this.race.structures.techBuilding.buildTime;
+        construction.hp = this.race.structures.techBuilding.maxHp * 0.55;
+        construction.maxHp = this.race.structures.techBuilding.maxHp;
         construction.sprite.setAlpha(0.3);
         construction.ridge.setAlpha(0.18);
+        construction.statusText.setText('Under construction');
+        this.constructions.push(construction);
         this.enemyTechBuilt = true;
       }
     }
 
-    // Enemy spawns combat units
-    // Wave frequency scales with the selected AI difficulty.
-    const waveInterval = getEnemyWaveInterval(this.aiDifficulty, this.enemyWave);
-    if (this.enemyAttackTimer >= waveInterval && this.enemyMinerals >= this.race.units.enemySoldier.cost && this.enemySupplyUsed < this.enemySupplyCap) {
-      this.enemyAttackTimer = 0;
+    // --- UNIT PRODUCTION (through production queues, not spawning) ---
 
-      // Decide what to spawn based on game progress
-      const hasTech = this.structures.some((s) => s.team === 'enemy' && s.role === 'techBuilding' && s.type === 'structure');
-      let spawnSignature = false;
-
-      // Unlock signature units after tech building is complete and enough time has passed
-      if (hasTech && this.enemyWave >= this.aiDifficulty.enemySignatureWave) {
-        const sigCost = this.race.units.enemySignature.cost;
-        const sigGasCost = this.race.units.enemySignature.gasCost || 0;
-        if (this.enemyMinerals >= sigCost && this.enemyGas >= sigGasCost && this.enemyWave % this.aiDifficulty.enemySignatureCadence === 0) {
-          // Every other wave after the signature threshold, spawn signature units.
-          spawnSignature = true;
-        }
-      }
-
-      if (spawnSignature) {
-        this.spawnEnemyWave(true);
-      } else {
-        this.spawnEnemyWave(false);
+    // Train soldiers when production is idle and we have resources
+    if (enemyProduction && enemyProduction.queue.length === 0 && this.enemyMinerals >= this.race.units.enemySoldier.cost && this.enemySupplyUsed + this.race.units.enemySoldier.supply <= this.enemySupplyCap) {
+      // Train 2 soldiers at a time for economy pressure
+      const soldierCost = this.race.units.enemySoldier.cost;
+      if (this.enemyMinerals >= soldierCost * 2) {
+        this.enemyMinerals -= soldierCost * 2;
+        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
+        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
+      } else if (this.enemyMinerals >= soldierCost) {
+        this.enemyMinerals -= soldierCost;
+        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
       }
     }
 
-    // Enemy workers harvest
-    this.enemyUnits.forEach((unit) => {
-      if (unit.hp <= 0) {
-        return;
+    // Train signature units when tech is available
+    if (enemyTech && enemyProduction && enemyProduction.queue.length < 2 && this.enemyWave >= this.aiDifficulty.enemySignatureWave) {
+      const sigDef = this.race.units.enemySignature;
+      const sigCost = sigDef.cost;
+      const sigGasCost = sigDef.gasCost || 0;
+      if (this.enemyMinerals >= sigCost && this.enemyGas >= sigGasCost && this.enemySupplyUsed + sigDef.supply <= this.enemySupplyCap) {
+        this.enemyMinerals -= sigCost;
+        if (sigGasCost) this.enemyGas -= sigGasCost;
+        enemyProduction.queue.push({ kind: 'signature', progress: sigDef.buildTime, def: sigDef });
       }
+    }
+
+    // --- COORDINATED ATTACKS ---
+
+    ai.attackTimer += dt;
+    const attackThreshold = Math.max(4, 8 - this.enemyWave); // More units needed as waves progress
+    if (ai.attackTimer >= ai.attackCooldown && enemyCombatCount >= attackThreshold && !ai.hasAttackedThisWave) {
+      ai.attackTimer = 0;
+      ai.hasAttackedThisWave = true;
+      ai.attackCooldown = Math.max(10, 20 - this.enemyWave * 0.5); // Attacks get more frequent
+
+      // Send all combat units to attack player base
+      this.enemyUnits.forEach((unit) => {
+        if (unit.type === 'worker' || unit.hp <= 0) return;
+        unit.order = 'attack';
+        unit.targetEntity = this.playerCommandCenter;
+        unit.targetX = this.playerCommandCenter.x + Phaser.Math.Between(-80, 80);
+        unit.targetY = this.playerCommandCenter.y + Phaser.Math.Between(-60, 60);
+        unit.statusText.setText('Assault');
+      });
+
+      // Wave announcement for player awareness
+      this.enemyWave += 1;
+      this.showWaveAnnouncement(this.enemyWave);
+      session.pushLog(`Enemy wave ${this.enemyWave} — coordinated attack with ${enemyCombatCount} units.`);
+      session.setMessage(`Enemy wave ${this.enemyWave} advancing — ${enemyCombatCount} units attacking!`);
+    }
+
+    // Reset attack flag when units return home or are depleted
+    if (ai.hasAttackedThisWave && enemyCombatCount < 2) {
+      ai.hasAttackedThisWave = false;
+    }
+
+    // --- ENEMY WORKER HARVESTING ---
+    this.enemyUnits.forEach((unit) => {
+      if (unit.hp <= 0) return;
 
       if (unit.type === 'worker') {
         if (unit.cargo > 0) {
@@ -2349,7 +2452,6 @@ export default class BattleScene extends Phaser.Scene {
             unit.cargo = 0;
           }
         } else if (unit.harvestType === 'gas') {
-          // Gas harvesting
           const geyser = this.gasGeysers.find((g) => g.id === unit.geyserId);
           if (geyser && geyser.amount > 0 && Phaser.Math.Distance.Between(unit.x, unit.y, geyser.x, geyser.y) > 24) {
             this.moveEntityTowards(unit, geyser.x, geyser.y, dt);
@@ -2357,11 +2459,9 @@ export default class BattleScene extends Phaser.Scene {
             const mined = Math.min(this.race.workerGasHarvest * dt, geyser.amount);
             geyser.amount = Math.max(0, geyser.amount - mined);
             unit.cargo += mined;
-            // Update geyser visual
             geyser.sprite.setAlpha(Math.max(0.35, 0.45 + geyser.amount / geyser.maxAmount * 0.5));
           }
         } else {
-          // Mineral harvesting
           const node = this.findNearestResourceNode(unit.x, unit.y);
           if (node && Phaser.Math.Distance.Between(unit.x, unit.y, node.x, node.y) > 28) {
             this.moveEntityTowards(unit, node.x - 20, node.y - 12, dt);
@@ -2372,19 +2472,32 @@ export default class BattleScene extends Phaser.Scene {
           }
         }
       } else {
-        const target = this.findNearestPlayerTarget(unit);
-        if (target) {
-          unit.targetEntity = target;
-          const distance = Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y);
+        // Combat unit behavior: attack if ordered, otherwise advance toward player
+        if (unit.order === 'attack' && unit.targetEntity && unit.targetEntity.hp > 0) {
+          const distance = Phaser.Math.Distance.Between(unit.x, unit.y, unit.targetEntity.x, unit.targetEntity.y);
           if (distance > unit.range) {
-            this.moveEntityTowards(unit, target.x, target.y, dt);
+            this.moveEntityTowards(unit, unit.targetEntity.x, unit.targetEntity.y, dt);
           } else if (unit.cooldown <= 0) {
             if (this.audioManager) this.audioManager.attack(unit);
-            target.hp -= unit.attack;
+            unit.targetEntity.hp -= unit.attack;
             unit.cooldown = unit.cooldownTime;
           }
         } else {
-          this.moveEntityTowards(unit, enemyBase.x - 90, enemyBase.y + Phaser.Math.Between(-44, 44), dt);
+          const target = this.findNearestPlayerTarget(unit);
+          if (target) {
+            unit.targetEntity = target;
+            const distance = Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y);
+            if (distance > unit.range) {
+              this.moveEntityTowards(unit, target.x, target.y, dt);
+            } else if (unit.cooldown <= 0) {
+              if (this.audioManager) this.audioManager.attack(unit);
+              target.hp -= unit.attack;
+              unit.cooldown = unit.cooldownTime;
+            }
+          } else {
+            // Idle: advance toward player base
+            this.moveEntityTowards(unit, enemyBase.x - 90, enemyBase.y + Phaser.Math.Between(-44, 44), dt);
+          }
         }
       }
     });
