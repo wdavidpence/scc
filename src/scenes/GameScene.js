@@ -19,6 +19,12 @@ const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.15;
 const SEPARATION_FORCE = 2.5;
+
+// Minimap settings
+const MINIMAP_WIDTH = 160;
+const MINIMAP_HEIGHT = 94; // ~1:1.75 aspect matching world
+const MINIMAP_X = 16;
+const MINIMAP_Y = TOP_UI_HEIGHT + 8;
 const MOTION_SCALE_TARGETS = {
   idle: 1,
   move: 1.03,
@@ -159,6 +165,7 @@ export default class BattleScene extends Phaser.Scene {
     this.createGasGeysers();
     this.spawnStartingForces();
     this.createBattleFieldTitle();
+    this.createMinimap();
 
     session.startBattle(this.race.id, this.race.name, {
       minerals: this.playerMinerals,
@@ -532,6 +539,65 @@ export default class BattleScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5, 0);
     this.banner.setScrollFactor(1);
+  }
+
+  // ── Minimap (top-left corner, shows units + camera viewport) ─────────
+  createMinimap() {
+    const mw = MINIMAP_WIDTH, mh = MINIMAP_HEIGHT;
+    // Background panel
+    this.minimapBg = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw, mh, 0x020617, 0.8)
+      .setStrokeStyle(1, 0x334155, 0.6);
+    // Camera viewport rectangle (updated each frame)
+    this.minimapViewport = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw * 0.3, mh * 0.4, 0x60a5fa, 0.12)
+      .setStrokeStyle(1, 0x60a5fa, 0.5);
+    // Unit dots container (canvas texture for performance)
+    this.minimapCanvas = this.add.graphics();
+  }
+
+  updateMinimap() {
+    if (!this.minimapCanvas || this.ended) return;
+    const mw = MINIMAP_WIDTH, mh = MINIMAP_HEIGHT;
+    const sx = mw / WORLD_WIDTH, sy = mh / WORLD_HEIGHT;
+
+    this.minimapCanvas.clear();
+    const ox = MINIMAP_X, oy = MINIMAP_Y;
+
+    // Resource nodes (small cyan dots)
+    this.minimapCanvas.fillStyle(0x67e8f9, 0.5);
+    this.resourceNodes.forEach((n) => {
+      if (n.amount > 0) this.minimapCanvas.fillCircle(ox + n.x * sx, oy + n.y * sy, 1.5);
+    });
+
+    // Gas geysers (purple dots)
+    this.minimapCanvas.fillStyle(0xa855f7, 0.4);
+    this.gasGeysers.forEach((g) => {
+      if (g.amount > 0) this.minimapCanvas.fillCircle(ox + g.x * sx, oy + g.y * sy, 1.5);
+    });
+
+    // Structures (small squares)
+    this.structures.forEach((s) => {
+      const color = s.team === 'player' ? 0x3b82f6 : (s.team === 'enemy' ? 0xf97316 : 0x64748b);
+      this.minimapCanvas.fillStyle(color, s.hp > 0 ? 0.7 : 0);
+      this.minimapCanvas.fillRect(ox + s.x * sx - 1.5, oy + s.y * sy - 1.5, 3, 3);
+    });
+
+    // Player units (blue dots)
+    this.minimapCanvas.fillStyle(0x60a5fa, 0.7);
+    this.playerUnits.forEach((u) => {
+      if (u.hp > 0 && u.type !== 'worker') this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.5);
+    });
+
+    // Enemy units (orange dots) — only show when near player side or known
+    this.minimapCanvas.fillStyle(0xf97316, 0.5);
+    this.enemyUnits.forEach((u) => {
+      if (u.hp > 0 && u.type !== 'worker') this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.5);
+    });
+
+    // Camera viewport rectangle
+    const cam = this.cameras.main;
+    const vw = (cam.width / cam.zoom) * sx, vh = (cam.height / cam.zoom) * sy;
+    this.minimapViewport.setSize(vw, vh);
+    this.minimapViewport.setPosition(ox + cam.scrollX * sx - vw / 2, oy + cam.scrollY * sy - vh / 2);
   }
 
   createMap() {
@@ -1568,6 +1634,7 @@ export default class BattleScene extends Phaser.Scene {
     this.resolveCombat(dt);
     this.reapDeadEntities();
     this.syncSession();
+    this.updateMinimap();
     this.checkVictoryDefeat();
   }
 
