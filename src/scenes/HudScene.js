@@ -321,6 +321,14 @@ export default class HudScene extends Phaser.Scene {
       wordWrap: { width: objectiveWrapWidth(width) }
     }).setOrigin(1, 0);
 
+    // Wave counter (top-right, below objective)
+    this.waveCounter = this.add.text(width - OBJECTIVE_X_OFFSET, OBJECTIVE_Y + 20, 'Wave: 0', {
+      fontFamily: FONT_FAMILY,
+      fontSize: 'clamp(11px, 2vw, 14px)',
+      fontStyle: '700',
+      color: '#f59e0b'
+    }).setOrigin(1, 0);
+
     // --- Selection panel (reuses textPos from top of create) ---
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
@@ -728,6 +736,11 @@ export default class HudScene extends Phaser.Scene {
     this.accentLine.setFillStyle(accentColor, 0.7);
 
     this.titleText.setText(`${raceName} • ${screen}${outcome !== 'none' ? ` • ${outcome.toUpperCase()}` : ''}`);
+
+    // Wave counter
+    if (this.waveCounter && battle.wave) {
+      this.waveCounter.setText(`Wave: ${battle.wave}`);
+    }
 
     // --- Animated resource text ---
     const newMinerals = resources.minerals;
