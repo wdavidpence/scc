@@ -45,11 +45,17 @@ const FEEDBACK_TIMINGS = {
 };
 const PLAYER_BUILD_SLOTS = [
   { x: 315, y: WORLD_HEIGHT / 2 - 150 },
-  { x: 315, y: WORLD_HEIGHT / 2 + 150 }
+  { x: 315, y: WORLD_HEIGHT / 2 + 150 },
+  { x: 400, y: WORLD_HEIGHT / 2 - 80 },
+  { x: 400, y: WORLD_HEIGHT / 2 + 80 },
+  { x: 450, y: WORLD_HEIGHT / 2 }
 ];
 const ENEMY_BUILD_SLOTS = [
   { x: WORLD_WIDTH - 315, y: WORLD_HEIGHT / 2 - 150 },
-  { x: WORLD_WIDTH - 315, y: WORLD_HEIGHT / 2 + 150 }
+  { x: WORLD_WIDTH - 315, y: WORLD_HEIGHT / 2 + 150 },
+  { x: WORLD_WIDTH - 400, y: WORLD_HEIGHT / 2 - 80 },
+  { x: WORLD_WIDTH - 400, y: WORLD_HEIGHT / 2 + 80 },
+  { x: WORLD_WIDTH - 450, y: WORLD_HEIGHT / 2 }
 ];
 
 function clampCamera(camera) {
@@ -533,6 +539,52 @@ export default class BattleScene extends Phaser.Scene {
       fill(ctx, 4, 26, 3, 4, c.protoDark);
       fill(ctx, 29, 26, 3, 4, c.protoDark);
     });
+
+    // --- Terran Supply Depot (64x48) ---
+    makeTexture('terran-supply', 64, 48, (ctx, w, h, c) => {
+      drawPanel(ctx, 6, 8, 52, 32, c.dark, c.navy2);
+      fill(ctx, 10, 12, 44, 4, c.blue);
+      fill(ctx, 12, 16, 40, 8, c.steel);
+      fill(ctx, 14, 26, 36, 8, c.navy);
+      fill(ctx, 10, 24, 44, 2, c.blue3);
+      fill(ctx, 16, 18, 2, 6, c.steel2);
+      fill(ctx, 30, 18, 2, 6, c.steel2);
+      fill(ctx, 44, 18, 2, 6, c.steel2);
+      fill(ctx, 14, 10, 6, 2, c.amber);
+      fill(ctx, 44, 10, 6, 2, c.amber);
+      fill(ctx, 8, 14, 3, 20, c.steel);
+      fill(ctx, 53, 14, 3, 20, c.steel);
+    });
+
+    // --- Zerg Overgrowth (56x42) ---
+    makeTexture('zerg-supply', 56, 42, (ctx, w, h, c) => {
+      fill(ctx, 8, 30, 40, 6, c.zergDark);
+      fill(ctx, 10, 28, 36, 4, c.zergRock);
+      fill(ctx, 12, 16, 32, 14, c.zergMineral);
+      fill(ctx, 16, 10, 24, 8, c.zergMineral2);
+      fill(ctx, 20, 6, 16, 6, c.zergGlow);
+      fill(ctx, 14, 20, 3, 8, c.zergGas);
+      fill(ctx, 39, 20, 3, 8, c.zergGas);
+      fill(ctx, 20, 14, 6, 4, c.zergAmber);
+      fill(ctx, 30, 18, 4, 3, c.zergAmber);
+      fill(ctx, 8, 26, 3, 6, c.zergDark);
+      fill(ctx, 45, 26, 3, 6, c.zergDark);
+    });
+
+    // --- Protoss Assimilator (60x46) ---
+    makeTexture('protoss-supply', 60, 46, (ctx, w, h, c) => {
+      fill(ctx, 8, 32, 44, 6, c.protoDark);
+      fill(ctx, 10, 30, 40, 4, c.protoRock);
+      fill(ctx, 14, 18, 32, 14, c.protoMineral);
+      fill(ctx, 18, 12, 24, 8, c.protoMineral2);
+      fill(ctx, 22, 6, 16, 8, c.protoGlow);
+      fill(ctx, 26, 2, 8, 6, c.protoAmber);
+      fill(ctx, 20, 14, 2, 18, c.protoGlow);
+      fill(ctx, 38, 14, 2, 18, c.protoGlow);
+      fill(ctx, 24, 10, 12, 3, c.protoMineral2);
+      fill(ctx, 8, 28, 3, 6, c.protoDark);
+      fill(ctx, 49, 28, 3, 6, c.protoDark);
+    });
   }
 
   createBattleFieldTitle() {
@@ -818,17 +870,20 @@ export default class BattleScene extends Phaser.Scene {
   createStructure(team, role, x, y, options = {}) {
     const baseDef = role === 'commandCenter' ? this.race.structures.commandCenter :
                     role === 'techBuilding' ? this.race.structures.techBuilding :
+                    role === 'supplyStructure' ? this.race.structures.supplyStructure :
                     this.race.structures.production;
     const width = baseDef.width;
     const height = baseDef.height;
     const active = options.active ?? true;
     const construction = options.construction ?? false;
-    const roleName = options.roleName ?? (role === 'commandCenter' ? this.race.commandCenterName : role === 'techBuilding' ? this.race.techBuildingName : this.race.productionName);
+    const roleName = options.roleName ?? (role === 'commandCenter' ? this.race.commandCenterName : role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName);
     const textureKey = role === 'commandCenter'
       ? (this.race.id === 'zerg' ? 'zerg-command-center' : this.race.id === 'protoss' ? 'protoss-command-center' : 'terran-command-center')
       : role === 'techBuilding'
         ? (this.race.id === 'zerg' ? 'zerg-tech' : this.race.id === 'protoss' ? 'protoss-tech' : 'terran-factory')
-        : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
+        : role === 'supplyStructure'
+          ? (this.race.id === 'zerg' ? 'zerg-supply' : this.race.id === 'protoss' ? 'protoss-supply' : 'terran-supply')
+          : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
 
     const sprite = this.add.image(x, y, textureKey)
       .setDisplaySize(width, height)
@@ -1331,6 +1386,9 @@ export default class BattleScene extends Phaser.Scene {
       case 'build-tech':
         this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'techBuilding');
         break;
+      case 'build-supply':
+        this.startConstructionForWorker(this.selectedEntity?.type === 'worker' && this.selectedEntity.team === 'player' ? this.selectedEntity : defaultWorker, 'supplyStructure');
+        break;
       default:
         this.syncSession('Command unavailable.');
         break;
@@ -1439,7 +1497,8 @@ export default class BattleScene extends Phaser.Scene {
 
     const def = this.race.structures[role];
     if (this.playerMinerals < def.cost) {
-      session.setMessage(`Not enough minerals to build ${role === 'techBuilding' ? this.race.techBuildingName : this.race.productionName}.`);
+      const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName;
+      session.setMessage(`Not enough minerals to build ${structName}.`);
       return;
     }
 
@@ -1454,15 +1513,16 @@ export default class BattleScene extends Phaser.Scene {
       this.playerGas -= def.gasCost;
     }
 
+    const structName = role === 'techBuilding' ? this.race.techBuildingName : role === 'supplyStructure' ? this.race.supplyStructureName : this.race.productionName;
     const construction = this.createStructure('player', role, slot.x, slot.y, {
       active: false,
       construction: true,
       buildProgress: 0,
       buildTimeRemaining: def.buildTime,
-      roleName: role === 'techBuilding' ? this.race.techBuildingName : this.race.productionName
+      roleName: structName
     });
     construction.finalRole = role;
-    construction.finalLabel = role === 'techBuilding' ? this.race.techBuildingName : this.race.productionName;
+    construction.finalLabel = structName;
     construction.buildTimeRemaining = def.buildTime;
     construction.hp = def.maxHp * 0.55;
     construction.maxHp = def.maxHp;
@@ -1487,6 +1547,8 @@ export default class BattleScene extends Phaser.Scene {
     const slot = slots.find((candidate) => {
       const hasConstruction = this.constructions.some((c) => Phaser.Math.Distance.Between(c.x, c.y, candidate.x, candidate.y) < 10);
       if (hasConstruction) return false;
+      // Supply structures can be built in any free slot (no limit on count)
+      if (role === 'supplyStructure') return true;
       const existingStructures = this.structures.filter((s) => s.team === team && s.role === role);
       const hasProduction = existingStructures.some((s) => Phaser.Math.Distance.Between(s.x, s.y, candidate.x, candidate.y) < 12);
       return !hasProduction;
@@ -2578,7 +2640,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     if (entity.type === 'worker') {
-      commands.splice(1, 0, 'move', 'build-production', 'build-tech');
+      commands.splice(1, 0, 'move', 'build-supply', 'build-production', 'build-tech');
       return commands;
     }
 
