@@ -358,7 +358,7 @@ export default class MenuScene extends Phaser.Scene {
     // Difficulty description (below difficulty buttons)
     const descY = this.layout.difficultyPositions[0].y + this.layout.difficultyButtonHeight + 16;
     const activeDifficulty = getDifficulty(this.selectedDifficultyId);
-    this.difficultyDescText = this.add.text(width / 2, descY, activeDifficulty.description, {
+    this.difficultyDescText = this.add.text(this.scale.width / 2, descY, activeDifficulty.description, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(10px, 1.8vw, 13px)',
       fontStyle: '600',

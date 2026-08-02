@@ -25,9 +25,12 @@ function ellipse(ctx, cx, cy, rx, ry) {
 
 function createTex(scene, key, w, h, draw) {
   if (scene.textures.exists(key)) return;
-  const tex = scene.textures.createCanvas(key, w, h);
-  draw(tex.context, w, h);
-  tex.refresh();
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  draw(ctx, w, h);
+  scene.textures.addCanvas(key, canvas);
 }
 
 // ── TERRAN (industrial/mech aesthetic) ─────────────────────────────────
@@ -190,9 +193,9 @@ function zergHydralisk(ctx, w, h) {
   // Tall body (green)
   ctx.fillStyle = '#15803d'; ellipse(ctx, cx - 2, h - 34, w / 3 + 2, 20);
   // Neck (thick)
-  ctx.fillStyle = '#16a34a'; ellipse(ctx - 2, h - 54, 8, 10);
+  ctx.fillStyle = '#16a34a'; ellipse(ctx, cx - 2, h - 54, 8, 10);
   // Head (with spikes)
-  ctx.fillStyle = '#2d5a1e'; ellipse(ctx, h - 62, 12, 9);
+  ctx.fillStyle = '#2d5a1e'; ellipse(ctx, cx, h - 62, 12, 9);
   // Spikes on back (purple)
   for (let i = 0; i < 4; i++) {
     ctx.fillStyle = '#a855f7';
