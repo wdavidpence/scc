@@ -354,11 +354,27 @@ export default class MenuScene extends Phaser.Scene {
       button.on('pointerdown', () => this.selectDifficulty(difficulty.id));
       return { difficulty, button, label };
     });
+
+    // Difficulty description (below difficulty buttons)
+    const descY = this.layout.difficultyPositions[0].y + this.layout.difficultyButtonHeight + 16;
+    const activeDifficulty = getDifficulty(this.selectedDifficultyId);
+    this.difficultyDescText = this.add.text(width / 2, descY, activeDifficulty.description, {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(10px, 1.8vw, 13px)',
+      fontStyle: '600',
+      color: '#94a3b8',
+      align: 'center'
+    }).setOrigin(0.5);
   }
 
   refreshDifficultyControls() {
     const activeDifficulty = getDifficulty(this.selectedDifficultyId);
     this.difficultyLabelText?.setText(`AI difficulty • ${activeDifficulty.label}`);
+
+    // Update description text
+    if (this.difficultyDescText) {
+      this.difficultyDescText.setText(activeDifficulty.description);
+    }
 
     this.difficultyEntries.forEach((entry) => {
       const selected = entry.difficulty.id === this.selectedDifficultyId;
