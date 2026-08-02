@@ -74,6 +74,31 @@ export default class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#07111c');
 
     this.background = this.add.rectangle(width / 2, height / 2, width, height, 0x07111c, 1);
+
+    // Subtle floating particles in the background
+    const particleGroup = this.add.group();
+    for (let i = 0; i < 40; i += 1) {
+      const px = Phaser.Math.Between(0, width);
+      const py = Phaser.Math.Between(0, height);
+      const size = Phaser.Math.FloatBetween(1, 3);
+      const alpha = Phaser.Math.FloatBetween(0.1, 0.4);
+      const particle = this.add.circle(px, py, size, 0x3b82f6, alpha);
+      particleGroup.add(particle);
+    }
+
+    // Gently drift particles upward
+    this.tweens.addCounter({
+      from: 0, to: 1, duration: Infinity, ease: 'Linear',
+      onUpdate: (tween) => {
+        particleGroup.getChildren().forEach((p, idx) => {
+          p.setY(p.y - 0.2 * (1 + (idx % 3) * 0.5));
+          if (p.y < -10) {
+            p.setPosition(Phaser.Math.Between(0, width), height + 10);
+          }
+        });
+      }
+    });
+
     const shell = getShellSize(width, height, this.layout.compact);
     this.shell = this.add.rectangle(shell.x, shell.y, shell.width, shell.height, 0x0a1524, 0.92)
       .setStrokeStyle(2, 0x1f3b61, 1);
