@@ -337,6 +337,19 @@ export default class HudScene extends Phaser.Scene {
       color: COLOR_SLAKE_400
     }).setOrigin(1, 0);
 
+    // Player base HP bar (top-left area, below resources)
+    const hpBarWidth = Math.min(120, width * 0.15);
+    this.playerBaseHpBack = this.add.rectangle(PANEL_X, RESOURCE_TEXT_Y + 16, hpBarWidth, 5, 0x0f172a, 0.8)
+      .setOrigin(0, 0);
+    this.playerBaseHpFront = this.add.rectangle(PANEL_X, RESOURCE_TEXT_Y + 16, hpBarWidth, 5, '#22c55e', 0.9)
+      .setOrigin(0, 0);
+    this.playerBaseHpLabel = this.add.text(PANEL_X, RESOURCE_TEXT_Y + 12, 'Your Base', {
+      fontFamily: FONT_FAMILY,
+      fontSize: 'clamp(8px, 1.4vw, 10px)',
+      fontStyle: '600',
+      color: '#94a3b8'
+    }).setOrigin(0, 0);
+
     // --- Selection panel (reuses textPos from top of create) ---
     const panelX = PANEL_X;
     const panelY = selectionPanelY(width, height);
@@ -753,6 +766,22 @@ export default class HudScene extends Phaser.Scene {
     // Unit count indicator (player vs enemy)
     if (this.unitCountText && battle.playerUnits !== undefined && battle.enemyUnits !== undefined) {
       this.unitCountText.setText(`${battle.playerUnits} vs ${battle.enemyUnits}`);
+    }
+
+    // Player base HP bar
+    if (this.playerBaseHpFront && battle.playerBaseHp !== undefined) {
+      const maxHp = this.race?.maxBaseHp ?? 1000; // default fallback
+      const ratio = Math.max(0, battle.playerBaseHp / maxHp);
+      this.playerBaseHpFront.setSize(hpBarWidth * ratio, 5);
+
+      // Color changes with health: green > yellow > red
+      if (ratio > 0.5) {
+        this.playerBaseHpFront.setFillStyle('#22c55e', 0.9);
+      } else if (ratio > 0.25) {
+        this.playerBaseHpFront.setFillStyle('#fbbf24', 0.9);
+      } else {
+        this.playerBaseHpFront.setFillStyle('#ef4444', 0.9);
+      }
     }
 
     // --- Animated resource text ---
