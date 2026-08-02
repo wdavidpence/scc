@@ -189,6 +189,9 @@ export default class BattleScene extends Phaser.Scene {
       session.setMessage('Command Center selected by default. Use the HUD to grow your army.');
     }
 
+    // Show a brief "how to play" hint banner that fades after 5 seconds
+    this.showStartHint();
+
     this.scene.launch('HudScene', { battleScene: this });
     this.scene.bringToTop('HudScene');
 
@@ -599,6 +602,40 @@ export default class BattleScene extends Phaser.Scene {
     this.minimapViewport.setSize(vw, vh);
     this.minimapViewport.setPosition(ox + cam.scrollX * sx - vw / 2, oy + cam.scrollY * sy - vh / 2);
   }
+
+  // ── Brief start-of-battle hint banner ─────────────────────────────
+  showStartHint() {
+    const { width, height } = this.scale;
+    const cx = width / 2;
+
+    // Hint background panel
+    const hintBg = this.add.rectangle(cx, height - 140, Math.min(520, width - 60), 48, 0x1e3a5f, 0.9)
+      .setStrokeStyle(1, 0x60a5fa, 0.5).setOrigin(0.5);
+
+    // Hint text
+    const hintText = this.add.text(cx, height - 140, 'Tap Move/Attack to command • HUD buttons build units & structures', {
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 'clamp(12px, 2.5vw, 16px)',
+      fontStyle: '700',
+      color: '#93c5fd'
+    }).setOrigin(0.5);
+
+    // Fade in, hold 4s, fade out
+    this.tweens.addCounter({
+      from: 0, to: 1, duration: 5500, ease: 'Sine.easeInOut',
+      onUpdate: (tween) => {
+        const p = tween.progress;
+        let alpha;
+        if (p < 0.1) alpha = p / 0.1; // fade in
+        else if (p < 0.8) alpha = 1;   // hold
+        else alpha = 1 - ((p - 0.8) / 0.2); // fade out
+        hintBg.setAlpha(alpha * 0.9);
+        hintText.setAlpha(alpha);
+      },
+      onComplete: () => { hintBg.destroy(); hintText.destroy(); }
+    });
+  }
+
 
   createMap() {
     const mineralSpots = [
