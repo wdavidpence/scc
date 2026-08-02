@@ -93,9 +93,11 @@ export default class BattleScene extends Phaser.Scene {
     this.enemySpawnTimer = 0;
     this.enemyWave = 0;
     this.enemyAttackTimer = 0;
+    this.waveWarnActive = false;
     this.enemyTechBuilt = false;
     this.enemySignatureUnlocked = false;
-    // Performance cache: tech building reference (avoids repeated scans).
+
+  // Performance cache: tech building reference (avoids repeated scans).
     this._cachedTechBuilding = null;
     this._updateTechCache();
     this.inputController = createInputController(this);
@@ -1658,6 +1660,17 @@ export default class BattleScene extends Phaser.Scene {
 
     // Enemy wave spawning frequency scales with the selected AI difficulty.
     const waveInterval = getEnemyWaveInterval(this.aiDifficulty, this.enemyWave);
+
+    // Show edge warning flash 2 seconds before wave arrives
+    if (!this.ended && !this.waveWarnActive) {
+      const timeUntilWave = waveInterval - this.enemySpawnTimer;
+      if (timeUntilWave <= 2 && timeUntilWave > 0) {
+        this.waveWarnActive = true;
+        this.showEdgeWarning();
+        this.time.delayedCall(2000, () => { this.waveWarnActive = false; });
+      }
+    }
+
     if (this.enemySpawnTimer >= waveInterval) {
       this.enemySpawnTimer = 0;
       this.spawnEnemyWave();
@@ -2902,6 +2915,31 @@ export default class BattleScene extends Phaser.Scene {
     } else {
       this.cameras.main.shake(100, 0.005);
     }
+  }
+
+  // ── Edge warning flash before enemy waves ────────────────────────
+  showEdgeWarning() {
+    const { width, height } = this.scale;
+
+    // Red flash on all four edges
+    const topBar = this.add.rectangle(width / 2, 0, width, 4, 0xf97316, 0.8).setDepth(200);
+    const bottomBar = this.add.rectangle(width / 2, height, width, 4, 0xf97316, 0.8).setDepth(200);
+    const leftBar = this.add.rectangle(0, height / 2, 4, height, 0xf97316, 0.8).setDepth(200);
+    const rightBar = this.add.rectangle(width, height / 2, 4, height, 0xf97316, 0.8).setDepth(200);
+
+    // Pulse and fade
+    this.tweens.add({
+      targets: [topBar, bottomBar, leftBar, rightBar],
+      alpha: 0,
+      duration: 1500,
+      ease: 'Sine.easeOut',
+      repeat: 1,
+      yoyo: true,
+      onComplete: () => { topBar.destroy(); bottomBar.destroy(); leftBar.destroy(); rightBar.destroy(); }
+    });
+
+    // Audio: warning sound
+    if (this.audioManager) this.audioManager.waveWarn();
   }
 
   /** Wave announcement — brief banner showing wave number. */
