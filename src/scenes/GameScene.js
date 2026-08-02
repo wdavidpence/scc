@@ -2009,37 +2009,48 @@ export default class BattleScene extends Phaser.Scene {
     const enemyKind = isSignature ? 'enemySignature' : 'enemySoldier';
     const unitDef = this.getUnitDef('enemy', unitType);
 
+    // Squad size scales with wave number: starts at 1, grows to 3-4 by late game
+    const squadSize = Math.min(4, 1 + Math.floor(this.enemyWave / 2));
+
+    // Check total cost for squad
+    const totalCost = unitDef.cost * squadSize;
+    if (this.enemyMinerals < totalCost) {
+      return;
+    }
+
+    // Check gas for signature squads
+    const totalGas = (unitDef.gasCost || 0) * squadSize;
+    if (totalGas > this.enemyGas) {
+      return;
+    }
+
+    this.enemyMinerals -= totalCost;
+    if (totalGas > 0) {
+      this.enemyGas -= totalGas;
+    }
+
+    // Spawn squad with staggered positions
+    for (let i = 0; i < squadSize; i += 1) {
+      this.enemySupplyUsed += unitDef.supply;
+      const spawnY = slot.y + Phaser.Math.Between(-30, 30) + i * 24;
+      const unit = this.createUnit('enemy', unitType, slot.x + Phaser.Math.Between(-10, 10), spawnY, {
+        mode: 'guard',
+        enemyKind: enemyKind,
+        isSignature: isSignature
+      });
+      unit.order = 'attack';
+      unit.targetX = this.playerCommandCenter.x + Phaser.Math.Between(-60, 60);
+      unit.targetY = this.playerCommandCenter.y + Phaser.Math.Between(-40, 40);
+    }
+
     this.enemySpawnTimer = 0;
     this.enemyAttackTimer = 0;
-
-    if (this.enemyMinerals < unitDef.cost) {
-      return;
-    }
-
-    // Check gas for signature units
-    if (unitDef.gasCost && this.enemyGas < unitDef.gasCost) {
-      return;
-    }
-
-    this.enemyMinerals -= unitDef.cost;
-    if (unitDef.gasCost) {
-      this.enemyGas -= unitDef.gasCost;
-    }
-    this.enemySupplyUsed += unitDef.supply;
-
-    const wave = this.createUnit('enemy', unitType, slot.x, slot.y + Phaser.Math.Between(-26, 26), {
-      mode: 'guard',
-      enemyKind: enemyKind,
-      isSignature: isSignature
-    });
-    wave.order = 'attack';
-    wave.targetX = this.playerCommandCenter.x;
-    wave.targetY = this.playerCommandCenter.y;
     this.enemyWave += 1;
+
     // Visual feedback: wave announcement banner
     this.showWaveAnnouncement(this.enemyWave);
-    session.pushLog(`Enemy wave ${this.enemyWave} ${isSignature ? '(signature units)' : ''} detected.`);
-    session.setMessage(`Enemy wave ${this.enemyWave} advancing.`);
+    session.pushLog(`Enemy wave ${this.enemyWave} (${squadSize} units${isSignature ? ', signature' : ''}) detected.`);
+    session.setMessage(`Enemy wave ${this.enemyWave} advancing — ${squadSize} units.`);
   }
 
   findNearestResourceNode(x, y) {
