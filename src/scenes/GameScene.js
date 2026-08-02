@@ -2707,6 +2707,25 @@ export default class BattleScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut'
     });
+
+    // Attack range indicator (dashed ring) for combat units
+    if (entity.range && entity.type !== 'worker') {
+      this.rangeRing = this.add.circle(entity.x, entity.y, entity.range, highlightColor, 0.08)
+        .setStrokeStyle(1, highlightColor, 0.35)
+        .setAlpha(0.5).setDepth(4);
+
+      // Subtle pulse on range ring
+      this.rangeRingTween = this.tweens.add({
+        targets: this.rangeRing,
+        alpha: 0.25,
+        scaleX: 1.03,
+        scaleY: 1.03,
+        duration: FEEDBACK_TIMINGS.selectionPulse * 2,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
   }
 
   clearSelectionHighlight() {
@@ -2717,6 +2736,14 @@ export default class BattleScene extends Phaser.Scene {
     if (this.selectionHighlightTween) {
       this.selectionHighlightTween.stop();
       this.selectionHighlightTween = null;
+    }
+    if (this.rangeRing) {
+      this.rangeRing.destroy();
+      this.rangeRing = null;
+    }
+    if (this.rangeRingTween) {
+      this.rangeRingTween.stop();
+      this.rangeRingTween = null;
     }
   }
 
