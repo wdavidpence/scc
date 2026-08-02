@@ -111,7 +111,32 @@ export default class BattleScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(this.race.backdrop);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    this.cameras.main.setZoom(0.95);
+
+    // Start zoomed in on player side, then smoothly pan to center
+    this.cameras.main.setZoom(0.7);
+    this.cameras.main.scrollX = 200;
+    this.cameras.main.scrollY = WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2;
+
+    // Smooth zoom out + pan to center after short delay
+    this.time.delayedCall(800, () => {
+      const cam = this.cameras.main;
+      this.tweens.add({
+        targets: { zoom: 0.7, scrollX: 200, scrollY: WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2 },
+        duration: 1800,
+        ease: 'Sine.easeInOut',
+        onUpdate: (tween) => {
+          const p = tween.progress;
+          cam.zoom = Phaser.Math.Linear(0.7, 0.95, p);
+          cam.scrollX = Phaser.Math.Linear(200, WORLD_WIDTH / 2 - (this.scale.width * 0.95) / 2, p);
+          cam.scrollY = Phaser.Math.Linear(
+            WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2,
+            WORLD_HEIGHT / 2 - (this.scale.height * 0.95) / 2,
+            p
+          );
+        }
+      });
+    });
+
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     this.createBattleTextures();
