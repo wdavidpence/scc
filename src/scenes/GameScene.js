@@ -1962,8 +1962,8 @@ export default class BattleScene extends Phaser.Scene {
     spawnMuzzleFlash(this, unit.x, unit.y, attackRace);
     enemy.hp -= unit.attack;
     unit.cooldown = unit.cooldownTime;
-    // Visual feedback: damage flash on the target
-    this.showDamageFlash(enemy);
+    // Visual feedback: damage flash on the target + floating number
+    this.showDamageFlash(enemy, unit.attack);
       // Track damage for shield regen delay (Protoss units)
       if (unit.shield > 0 && unit.team === 'player') {
         unit.lastDamageTime = time / 1000;
@@ -2781,7 +2781,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   /** Unit takes damage — brief red flash + audio feedback. */
-  showDamageFlash(unit) {
+  showDamageFlash(unit, damageAmount) {
     if (!unit || !unit.sprite) return;
 
     // Brief red tint on the sprite
@@ -2799,6 +2799,27 @@ export default class BattleScene extends Phaser.Scene {
             unit._damageFlash = null;
           }
         }
+      });
+    }
+
+    // Floating damage number above the unit
+    if (damageAmount) {
+      const dmgText = this.add.text(unit.x, unit.y - 28, `-${damageAmount}`, {
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: 'clamp(12px, 2vw, 16px)',
+        fontStyle: '900',
+        color: '#ff4444',
+        stroke: '#000000',
+        strokeThickness: 3
+      }).setOrigin(0.5).setScrollFactor(1);
+
+      this.tweens.add({
+        targets: dmgText,
+        y: unit.y - 56,
+        alpha: 0,
+        duration: 800,
+        ease: 'Cubic.easeOut',
+        onComplete: () => { dmgText.destroy(); }
       });
     }
 
