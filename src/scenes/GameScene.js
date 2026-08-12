@@ -265,6 +265,10 @@ export default class BattleScene extends Phaser.Scene {
       .setStrokeStyle(1, enemyColor, 0.35).setDepth(2);
     this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 - 200, 30, 3, enemyColor, 0.7).setDepth(2);
     this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 + 200, 30, 3, enemyColor, 0.7).setDepth(2);
+
+    // Contested-zone boundary markers — subtle faction-colored ground dividers
+    this.add.line(370, WORLD_HEIGHT / 2, -5, -40, -5, 40, laneColor, 0.3).setDepth(2);
+    this.add.line(WORLD_WIDTH - 370, WORLD_HEIGHT / 2, -5, -40, -5, 40, enemyColor, 0.3).setDepth(2);
   }
 
   createBattleTextures() {
