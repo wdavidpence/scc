@@ -9,13 +9,9 @@ const CARD_SPACING = {
   compact: {
     widthMax: 440,
     widthMinPad: 36,
-    heightMax: 144,
-    heightMin: 128,
-    gap: 12,
-    yOffset74: 74,
-    yOffset18: 18,
-    yOffset110: 110,
-    yOffset320: 320,
+    heightMax: 140,
+    heightMin: 116,
+    gap: 10,
   },
   wide: {
     widthMax: 290,
@@ -23,6 +19,7 @@ const CARD_SPACING = {
     widthPad: 56,
     gapMax: 20,
     gapMin: 12,
+    heightMax: 210,
   },
 };
 
@@ -30,12 +27,6 @@ const START_BUTTON = {
   widthCompact: 300,
   widthWide: 270,
   height: 60,
-};
-
-// ── Footer Y-position constants (compact vs wide) ───────────────────────────
-const FOOTER_Y = {
-  compact: { footerMinPad: 28, footerCenterOffset: 388 },
-  wide: { footerCenterOffset: 282 },
 };
 
 // ── Shared menu text style (title, subtitle, description, labels, footer) ────
@@ -177,12 +168,17 @@ export default class MenuScene extends Phaser.Scene {
     const compact = width < 880;
     if (compact) {
       const cardWidth = Math.min(width - CARD_SPACING.compact.widthMinPad, CARD_SPACING.compact.widthMax);
-      const cardHeight = Math.min(CARD_SPACING.compact.heightMax, Math.max(CARD_SPACING.compact.heightMin, (height - CARD_SPACING.compact.yOffset320) / 3));
+      const cardHeight = Math.min(CARD_SPACING.compact.heightMax, Math.max(CARD_SPACING.compact.heightMin, Math.floor((height - 370) / 3)));
       const gap = CARD_SPACING.compact.gap;
+      const titleY = Math.round(height * 0.07);
+      const subtitleY = titleY + 36;
+      const descriptionY = subtitleY + 27;
+      const startCardY = descriptionY + 26 + cardHeight / 2;
+      const cardStep = cardHeight + gap;
       return { compact: true, cardWidth, cardHeight, cardGap: gap, cardPositions: [
-        { x: width / 2, y: height / 2 - cardHeight - CARD_SPACING.compact.yOffset74 },
-        { x: width / 2, y: height / 2 - cardHeight / 2 + CARD_SPACING.compact.yOffset18 },
-        { x: width / 2, y: height / 2 + cardHeight / 2 + CARD_SPACING.compact.yOffset110 }
+        { x: width / 2, y: startCardY },
+        { x: width / 2, y: startCardY + cardStep },
+        { x: width / 2, y: startCardY + cardStep * 2 }
       ]};
     }
 
@@ -190,55 +186,50 @@ export default class MenuScene extends Phaser.Scene {
     const cardGap = Math.min(CARD_SPACING.wide.gapMax, Math.max(CARD_SPACING.wide.gapMin, (width - cardWidth * 3) / 4));
     const totalWidth = cardWidth * 3 + cardGap * 2;
     const startX = (width - totalWidth) / 2 + cardWidth / 2;
-    return { compact: false, cardWidth, cardGap, cardPositions: [
-      { x: startX, y: height / 2 - 10 },
-      { x: startX + cardWidth + cardGap, y: height / 2 - 10 },
-      { x: startX + (cardWidth + cardGap) * 2, y: height / 2 - 10 }
+    const cardHeight = CARD_SPACING.wide.heightMax;
+    const cardY = Math.round(height * 0.42);
+    return { compact: false, cardWidth, cardHeight, cardGap, cardPositions: [
+      { x: startX, y: cardY },
+      { x: startX + cardWidth + cardGap, y: cardY },
+      { x: startX + (cardWidth + cardGap) * 2, y: cardY }
     ]};
   }
 
   getLayout(width, height) {
     const card = this.getCardLayout(width, height);
-    if (card.compact) {
-      const startY = Math.min(height - 106, height / 2 + CARD_SPACING.compact.yOffset320);
-      const difficultyY = startY - 126;
-      const difficultyButtonWidth = Math.min(144, Math.max(88, Math.floor((width - 72) / 3)));
-      const difficultyGap = Math.min(14, Math.max(8, Math.floor((width - difficultyButtonWidth * 3) / 4)));
-      const difficultyTotalWidth = difficultyButtonWidth * 3 + difficultyGap * 2;
-      const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
-      return {
-        ...card,
-        titleY: height * 0.10,
-        subtitleY: height * 0.10 + 80,
-        descriptionY: height * 0.10 + 120,
-        startY,
-        startWidth: Math.min(width - 50, START_BUTTON.widthCompact),
-        footerY: Math.min(height - FOOTER_Y.compact.footerMinPad, height / 2 + FOOTER_Y.compact.footerCenterOffset),
-        difficultyY,
-        difficultyButtonWidth,
-        difficultyButtonHeight: 34,
-        difficultyPositions: DIFFICULTY_ORDER.map((difficultyId, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
-      };
-    }
-
-    const startY = height / 2 + 202;
-    const difficultyY = startY - 126;
     const difficultyButtonWidth = Math.min(144, Math.max(88, Math.floor((width - 72) / 3)));
     const difficultyGap = Math.min(14, Math.max(8, Math.floor((width - difficultyButtonWidth * 3) / 4)));
     const difficultyTotalWidth = difficultyButtonWidth * 3 + difficultyGap * 2;
     const difficultyStartX = (width - difficultyTotalWidth) / 2 + difficultyButtonWidth / 2;
+
+    if (card.compact) {
+      const titleY = Math.round(height * 0.07);
+      const subtitleY = titleY + 36;
+      const descriptionY = subtitleY + 27;
+      const difficultyY = card.cardPositions[2].y + card.cardHeight / 2 + 48;
+      const startY = difficultyY + 86;
+      const footerY = Math.min(height - 20, startY + 56);
+      return {
+        ...card,
+        titleY, subtitleY, descriptionY, startY,
+        startWidth: Math.min(width - 50, START_BUTTON.widthCompact),
+        footerY, difficultyY, difficultyButtonWidth, difficultyButtonHeight: 34,
+        difficultyPositions: DIFFICULTY_ORDER.map((id, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
+      };
+    }
+
+    const titleY = Math.round(height * 0.125);
+    const subtitleY = titleY + 38;
+    const descriptionY = subtitleY + 26;
+    const difficultyY = Math.round(height * 0.64);
+    const startY = Math.round(height * 0.765);
+    const footerY = Math.min(height - 20, Math.round(height * 0.94));
     return {
       ...card,
-      titleY: height / 2 - 260,
-      subtitleY: height / 2 - 180,
-      descriptionY: height / 2 - 135,
-      startY,
+      titleY, subtitleY, descriptionY, startY,
       startWidth: START_BUTTON.widthWide,
-      footerY: height / 2 + FOOTER_Y.wide.footerCenterOffset,
-      difficultyY,
-      difficultyButtonWidth,
-      difficultyButtonHeight: 34,
-      difficultyPositions: DIFFICULTY_ORDER.map((difficultyId, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
+      footerY, difficultyY, difficultyButtonWidth, difficultyButtonHeight: 34,
+      difficultyPositions: DIFFICULTY_ORDER.map((id, index) => ({ x: difficultyStartX + (difficultyButtonWidth + difficultyGap) * index, y: difficultyY }))
     };
   }
 
@@ -269,7 +260,7 @@ export default class MenuScene extends Phaser.Scene {
         : race.id === 'protoss'
           ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'protoss-zealot').setDisplaySize(20, 20)
         : null;
-    const title = this.add.text(position.x, position.y - (layout.compact ? 48 : 74), race.name, {
+    const title = this.add.text(position.x, position.y - (layout.compact ? 42 : 74), race.name, {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(18px, 4vw, 30px)',
       fontStyle: '800',
@@ -277,7 +268,7 @@ export default class MenuScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
-    const subtitle = this.add.text(position.x, position.y - (layout.compact ? 18 : 34), race.subtitle, {
+    const subtitle = this.add.text(position.x, position.y - (layout.compact ? 18 : 45), race.subtitle, {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(12px, 2.4vw, 16px)',
       color: '#cbd5e1',
@@ -285,7 +276,7 @@ export default class MenuScene extends Phaser.Scene {
       wordWrap: { width: raceCardSubtitleWrapWidth(layout.cardWidth) }
     }).setOrigin(0.5);
 
-    const facts = this.add.text(position.x, position.y + (layout.compact ? 18 : 18), [
+    const facts = this.add.text(position.x, position.y + (layout.compact ? 14 : 19), [
       `Worker: ${race.workerName}`,
       `Troop: ${race.soldierName}`,
       `Base: ${race.commandCenterName}`,
@@ -295,10 +286,10 @@ export default class MenuScene extends Phaser.Scene {
       fontSize: 'clamp(11px, 2vw, 14px)',
       color: '#94a3b8',
       align: 'center',
-      lineSpacing: 10
+      lineSpacing: 5
     }).setOrigin(0.5);
 
-    const chipY = layout.compact ? position.y + cardHeight / 2 - 28 : position.y + 86;
+    const chipY = layout.compact ? position.y + cardHeight / 2 - 20 : position.y + 78;
     const chip = this.add.rectangle(position.x, chipY, 128, 28, race.accent, 0.18);
     const chipIcon = race.id === 'terran'
       ? this.add.image(position.x - 38, chipY, 'terran-marauder').setDisplaySize(20, 20)
@@ -347,7 +338,7 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   createDifficultyControls() {
-    this.difficultyLabelText = this.add.text(this.scale.width / 2, this.layout.difficultyY - 26, 'AI difficulty', {
+    this.difficultyLabelText = this.add.text(this.scale.width / 2, this.layout.difficultyY - 24, 'AI difficulty', {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(12px, 2.1vw, 15px)',
       fontStyle: '700',
@@ -374,7 +365,7 @@ export default class MenuScene extends Phaser.Scene {
     });
 
     // Difficulty description (below difficulty buttons)
-    const descY = this.layout.difficultyPositions[0].y + this.layout.difficultyButtonHeight + 16;
+    const descY = this.layout.difficultyY + 34;
     const activeDifficulty = getDifficulty(this.selectedDifficultyId);
     this.difficultyDescText = this.add.text(this.scale.width / 2, descY, activeDifficulty.description, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -436,8 +427,8 @@ export default class MenuScene extends Phaser.Scene {
 
     this.titleText.setPosition(width / 2, this.layout.titleY);
     this.versionText.setPosition(width - 16, 16);
-    this.subtitleText.setPosition(width / 2, this.layout.subtitleY + 10);
-    this.descriptionText.setPosition(width / 2, this.layout.descriptionY + 10);
+    this.subtitleText.setPosition(width / 2, this.layout.subtitleY);
+    this.descriptionText.setPosition(width / 2, this.layout.descriptionY);
     this.descriptionText.setWordWrapWidth(descWrapWidth(width));
 
     this.cardEntries.forEach((entry, index) => {
@@ -448,11 +439,11 @@ export default class MenuScene extends Phaser.Scene {
         entry.cardInner.setPosition(pos.x, pos.y).setSize(this.layout.cardWidth - 8, cardHeight - 8);
       }
       entry.topLine.setPosition(pos.x, pos.y - cardHeight / 2 + 16).setSize(this.layout.cardWidth - 20, 4);
-      entry.title.setPosition(pos.x, pos.y - (this.layout.compact ? 48 : 74));
-      entry.subtitle.setPosition(pos.x, pos.y - (this.layout.compact ? 18 : 34));
+      entry.title.setPosition(pos.x, pos.y - (this.layout.compact ? 42 : 74));
+      entry.subtitle.setPosition(pos.x, pos.y - (this.layout.compact ? 18 : 45));
       entry.subtitle.setWordWrapWidth(raceCardSubtitleWrapWidth(this.layout.cardWidth));
-      entry.facts.setPosition(pos.x, pos.y + (this.layout.compact ? 18 : 18));
-      const chipY = this.layout.compact ? pos.y + cardHeight / 2 - 28 : pos.y + 86;
+      entry.facts.setPosition(pos.x, pos.y + (this.layout.compact ? 14 : 19));
+      const chipY = this.layout.compact ? pos.y + cardHeight / 2 - 20 : pos.y + 78;
       entry.chip.setPosition(pos.x, chipY).setSize(128, 28);
       entry.chipLabel.setPosition(pos.x, chipY);
       entry.chipIcon?.setPosition(pos.x - 38, chipY);
@@ -460,12 +451,15 @@ export default class MenuScene extends Phaser.Scene {
       entry.accentRight?.setPosition(pos.x + this.layout.cardWidth / 2 - 24, pos.y - cardHeight / 2 + 24);
     });
 
-    this.difficultyLabelText?.setPosition(width / 2, this.layout.difficultyY - 26);
+    this.difficultyLabelText?.setPosition(width / 2, this.layout.difficultyY - 24);
     this.difficultyEntries.forEach((entry, index) => {
       const pos = this.layout.difficultyPositions[index];
       entry.button.setPosition(pos.x, pos.y).setSize(this.layout.difficultyButtonWidth, this.layout.difficultyButtonHeight);
       entry.label.setPosition(pos.x, pos.y);
     });
+    if (this.difficultyDescText) {
+      this.difficultyDescText.setPosition(width / 2, this.layout.difficultyY + 34);
+    }
     this.refreshDifficultyControls();
 
     this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, START_BUTTON.height);

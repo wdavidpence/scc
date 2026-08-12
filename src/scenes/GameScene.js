@@ -156,6 +156,9 @@ export default class BattleScene extends Phaser.Scene {
     this.createBattleTextures();
 
     this.background = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, this.race.backdrop, 1);
+    this.terrainTile = this.add.tileSprite(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, `${this.race.id}-terrain`)
+      .setAlpha(0.24)
+      .setDepth(0);
     this.grid = this.add.grid(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, 48, 48, 0x0c1826, 0, 0x223548, 0.35)
       .setOrigin(0.5)
       .setAlpha(0.22);
@@ -232,27 +235,36 @@ export default class BattleScene extends Phaser.Scene {
     const laneColor = this.race.accent;
     const enemyColor = 0xf97316;
 
-    // Tactical boundary rails
-    this.add.rectangle(WORLD_WIDTH / 2, 110, WORLD_WIDTH - 200, 4, 0x1d4ed8, 0.4).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 110, WORLD_WIDTH - 200, 4, enemyColor, 0.4).setDepth(2);
+    // Perimeter ridge plateaus (top and bottom two-tone elevation ridges)
+    this.add.rectangle(WORLD_WIDTH / 2, 95, WORLD_WIDTH - 120, 10, 0x020617, 0.6).setDepth(1);
+    this.add.rectangle(WORLD_WIDTH / 2, 100, WORLD_WIDTH - 120, 2, 0x38bdf8, 0.5).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 95, WORLD_WIDTH - 120, 10, 0x020617, 0.6).setDepth(1);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 100, WORLD_WIDTH - 120, 2, enemyColor, 0.5).setDepth(2);
 
-    // Contested Lane framing
+    // Tactical boundary rails
+    this.add.rectangle(WORLD_WIDTH / 2, 110, WORLD_WIDTH - 200, 4, 0x1d4ed8, 0.45).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 110, WORLD_WIDTH - 200, 4, enemyColor, 0.45).setDepth(2);
+
+    // Contested Lane two-tone ridge framing
     this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 140, laneColor, 0.05).setDepth(2);
     this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, 0x38bdf8, 0.03).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, WORLD_HEIGHT - 180, 0x0f172a, 0.15)
-      .setStrokeStyle(1, 0x334155, 0.4).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 246, WORLD_HEIGHT - 174, 0x020617, 0.4).setDepth(1);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, WORLD_HEIGHT - 180, 0x0f172a, 0.2)
+      .setStrokeStyle(2, 0x38bdf8, 0.5).setDepth(2);
 
-    // Sector Alpha (Player Zone) framing & brackets
-    this.add.rectangle(220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, laneColor, 0.06)
-      .setStrokeStyle(1, laneColor, 0.25).setDepth(2);
-    this.add.rectangle(70, WORLD_HEIGHT / 2 - 200, 30, 2, laneColor, 0.6).setDepth(2);
-    this.add.rectangle(70, WORLD_HEIGHT / 2 + 200, 30, 2, laneColor, 0.6).setDepth(2);
+    // Sector Alpha (Player Zone) two-tone framing & brackets
+    this.add.rectangle(220, WORLD_HEIGHT / 2, 304, WORLD_HEIGHT - 136, 0x020617, 0.35).setDepth(1);
+    this.add.rectangle(220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, laneColor, 0.07)
+      .setStrokeStyle(1, laneColor, 0.35).setDepth(2);
+    this.add.rectangle(70, WORLD_HEIGHT / 2 - 200, 30, 3, laneColor, 0.7).setDepth(2);
+    this.add.rectangle(70, WORLD_HEIGHT / 2 + 200, 30, 3, laneColor, 0.7).setDepth(2);
 
-    // Sector Omega (Enemy Zone) framing & brackets
-    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, enemyColor, 0.06)
-      .setStrokeStyle(1, enemyColor, 0.25).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 - 200, 30, 2, enemyColor, 0.6).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 + 200, 30, 2, enemyColor, 0.6).setDepth(2);
+    // Sector Omega (Enemy Zone) two-tone framing & brackets
+    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 304, WORLD_HEIGHT - 136, 0x020617, 0.35).setDepth(1);
+    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, enemyColor, 0.07)
+      .setStrokeStyle(1, enemyColor, 0.35).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 - 200, 30, 3, enemyColor, 0.7).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 + 200, 30, 3, enemyColor, 0.7).setDepth(2);
   }
 
   createBattleTextures() {
@@ -964,7 +976,7 @@ export default class BattleScene extends Phaser.Scene {
             ? (this.race.id === 'zerg' ? 'zerg-defense' : this.race.id === 'protoss' ? 'protoss-defense' : 'terran-defense')
             : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
 
-    const shadow = this.add.rectangle(x + 4, y + height * 0.35, width + 8, height * 0.45, 0x000000, 0.25)
+    const shadow = this.add.rectangle(x + 4, y + height * 0.35, width + 10, height * 0.48, 0x000000, 0.38)
       .setDepth(4);
 
     const sDepth = 10 + Math.floor(y * 0.03);
@@ -1049,7 +1061,7 @@ export default class BattleScene extends Phaser.Scene {
       else spriteKey = 'terran-marine';
     }
 
-    const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 1.8, def.radius * 0.9, 0x000000, 0.3)
+    const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 2.0, def.radius * 0.95, 0x000000, 0.42)
       .setDepth(4);
 
     const uDepth = 10 + Math.floor(y * 0.03);

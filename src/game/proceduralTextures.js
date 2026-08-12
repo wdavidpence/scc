@@ -399,8 +399,94 @@ function gasGeyser(ctx, w, h, baseColor, glow) {
   ctx.fillStyle = glow; ellipse(ctx, w / 2, h - 38, 5, 4);
 }
 
+// ── Procedural Tiled Terrain Textures (64x64) ───────────────────────────
+function terranTerrain(ctx, w, h) {
+  ctx.fillStyle = '#141d28';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#090e15';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, w, h);
+  ctx.strokeRect(0, 0, 32, 32);
+  ctx.strokeRect(32, 32, 32, 32);
+  ctx.strokeStyle = '#27364d';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(1, 31); ctx.lineTo(1, 1); ctx.lineTo(31, 1);
+  ctx.moveTo(33, 63); ctx.lineTo(33, 33); ctx.lineTo(63, 33);
+  ctx.stroke();
+  ctx.fillStyle = '#3b4e6b';
+  for (const rX of [3, 29, 35, 61]) {
+    for (const rY of [3, 29, 35, 61]) {
+      ctx.fillRect(rX, rY, 2, 2);
+    }
+  }
+  ctx.fillStyle = '#1c2838';
+  ctx.fillRect(8, 12, 16, 2);
+  ctx.fillRect(8, 18, 16, 2);
+  ctx.fillRect(40, 44, 16, 2);
+  ctx.fillRect(40, 50, 16, 2);
+}
+
+function zergTerrain(ctx, w, h) {
+  ctx.fillStyle = '#170919';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#421440';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 16); ctx.bezierCurveTo(20, 8, 44, 28, 64, 16);
+  ctx.moveTo(16, 0); ctx.bezierCurveTo(28, 24, 8, 48, 20, 64);
+  ctx.moveTo(48, 64); ctx.bezierCurveTo(36, 40, 56, 20, 48, 0);
+  ctx.stroke();
+  ctx.strokeStyle = '#75226e';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, 16); ctx.bezierCurveTo(20, 8, 44, 28, 64, 16);
+  ctx.moveTo(16, 0); ctx.bezierCurveTo(28, 24, 8, 48, 20, 64);
+  ctx.stroke();
+  ctx.fillStyle = '#8a2b16';
+  ellipse(ctx, 32, 32, 6, 4);
+  ellipse(ctx, 12, 50, 4, 3);
+  ellipse(ctx, 52, 14, 5, 3);
+  ctx.fillStyle = '#d96818';
+  ellipse(ctx, 31, 31, 3, 2);
+  ellipse(ctx, 51, 13, 2, 1);
+}
+
+function protossTerrain(ctx, w, h) {
+  ctx.fillStyle = '#0b0a16';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#221947';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(4, 4, 56, 56);
+  ctx.beginPath();
+  ctx.moveTo(32, 0); ctx.lineTo(32, 64);
+  ctx.moveTo(0, 32); ctx.lineTo(64, 32);
+  ctx.moveTo(16, 4); ctx.lineTo(32, 20); ctx.lineTo(48, 4);
+  ctx.moveTo(16, 60); ctx.lineTo(32, 44); ctx.lineTo(48, 60);
+  ctx.stroke();
+  ctx.strokeStyle = '#5a3bb8';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(32, 4); ctx.lineTo(32, 60);
+  ctx.moveTo(4, 32); ctx.lineTo(60, 32);
+  ctx.stroke();
+  ctx.fillStyle = '#a855f7';
+  ellipse(ctx, 32, 32, 5, 5);
+  ellipse(ctx, 16, 16, 3, 3);
+  ellipse(ctx, 48, 48, 3, 3);
+  ctx.fillStyle = '#38bdf8';
+  ellipse(ctx, 32, 32, 2, 2);
+  ellipse(ctx, 16, 16, 1, 1);
+  ellipse(ctx, 48, 48, 1, 1);
+}
+
 // ── Main generator function ────────────────────────────────────────────
 export function generateAllTextures(scene) {
+  // Race terrain textures (64x64 tiled surface)
+  createTex(scene, 'terran-terrain', 64, 64, terranTerrain);
+  createTex(scene, 'zerg-terrain', 64, 64, zergTerrain);
+  createTex(scene, 'protoss-terrain', 64, 64, protossTerrain);
+
   // Terran units (procedural pixel art)
   createTex(scene, 'terran-scv', 38, 56, terranScv);
   createTex(scene, 'terran-marine', 38, 56, terranMarine);
