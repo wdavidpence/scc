@@ -985,7 +985,7 @@ export default class BattleScene extends Phaser.Scene {
       .setAlpha(construction ? 0.7 : 0.98)
       .setDepth(sDepth);
     if (team === 'enemy') {
-      sprite.setTint(0xf97316);
+      sprite.setTint(0xc2410c);
     }
     const ridge = this.add.rectangle(x, y - height / 2 + 8, width - 18, 4, 0xffffff, construction ? 0.16 : 0.22).setDepth(sDepth + 1);
     const labelText = this.add.text(x, y - 5, roleName, {
@@ -1061,17 +1061,17 @@ export default class BattleScene extends Phaser.Scene {
       else spriteKey = 'terran-marine';
     }
 
-    const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 2.0, def.radius * 0.95, 0x000000, 0.42)
+    const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 1.8, def.radius * 0.5, 0x000000, 0.5)
       .setDepth(4);
-    const teamMarker = this.add.circle(x, y + def.radius * 0.15, def.radius * 0.72, team === 'player' ? this.race.accent : 0xf97316, 0.16)
-      .setStrokeStyle(1, team === 'player' ? this.race.accent : 0xf97316, 0.42)
+    const teamMarker = this.add.circle(x, y + def.radius * 0.15, def.radius * 0.45, team === 'player' ? this.race.accent : 0xf97316, 0.14)
+      .setStrokeStyle(1, team === 'player' ? this.race.accent : 0xf97316, 0.36)
       .setDepth(5);
 
     const uDepth = 10 + Math.floor(y * 0.03);
     const sprite = this.add.image(x, y, spriteKey);
     sprite.setDisplaySize(def.radius * 2, def.radius * 2).setDepth(uDepth);
     if (team === 'enemy') {
-      sprite.setTint(0xf97316);
+      sprite.setTint(0xc2410c);
     }
 
     const labelText = null;
