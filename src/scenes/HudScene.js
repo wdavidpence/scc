@@ -131,6 +131,7 @@ const WIDE_BUTTON_HEIGHT = 38;
 const WIDE_BUTTON_GAP_MIN = 3;
 const WIDE_BUTTON_GAP_MAX = 8;
 const WIDE_BUTTON_MARGIN = 40;               // margin used in button width calc
+const WIDE_BUTTON_BOTTOM_OFFSET = 24;        // keeps the command deck below the tactical readout
 
 // ── Top-bar border center Y helper (extracted from create/handleResize) ────
 const topBarBorderCenterY = (layout) => layout.topBarY + layout.topBarHeight / 2;
@@ -241,7 +242,7 @@ const getLayout = (width, height) => {
     buttonWidth: wideBtnWidth,
     buttonHeight: WIDE_BUTTON_HEIGHT,
     buttonGap: Math.min(WIDE_BUTTON_GAP_MAX, wideBtnGap),
-    buttonTopY: height - COMPACT_BUTTON_TOP_Y_OFFSET,
+    buttonTopY: height - WIDE_BUTTON_BOTTOM_OFFSET,
     buttonBottomY: height - COMPACT_BUTTON_BOTTOM_Y_OFFSET
   };
 };
@@ -440,6 +441,7 @@ export default class HudScene extends Phaser.Scene {
       wordWrap: { width: logWrapWidth(width) },
       lineSpacing: LINE_SPACING_LOG
     }).setOrigin(1, 0);
+    this.applyPortraitDensity(this.layout);
 
     this.buttons = [];
     this.createButtons(width, height);
@@ -573,6 +575,24 @@ export default class HudScene extends Phaser.Scene {
 
   getLayout(width, height) {
     return getLayout(width, height);
+  }
+
+  applyPortraitDensity(layout) {
+    const canvasRect = this.game?.canvas?.getBoundingClientRect?.();
+    const viewportPortrait = typeof window !== 'undefined' && window.innerWidth / window.innerHeight < 0.75;
+    const visualPortrait = (canvasRect && canvasRect.width / canvasRect.height < 0.75) || viewportPortrait;
+    const portrait = layout.narrowPortrait || visualPortrait;
+    this.logHeader?.setVisible(!portrait);
+    this.logText?.setVisible(!portrait);
+    if (portrait) {
+      this.selectionDetails?.setFontSize('11px');
+      this.selectionDetails?.setLineSpacing(2);
+      this.statusText?.setFontSize('11px');
+    } else {
+      this.selectionDetails?.setFontSize('clamp(12px, 2.2vw, 15px)');
+      this.selectionDetails?.setLineSpacing(LINE_SPACING_DETAILS);
+      this.statusText?.setFontSize('clamp(12px, 2.2vw, 15px)');
+    }
   }
 
   createButtons(width, height) {
@@ -988,6 +1008,7 @@ export default class HudScene extends Phaser.Scene {
     const oldLayout = this.layout;
     this.layout = this.getLayout(width, height);
     const textPos = computeTextPositions(width, height);
+    this.applyPortraitDensity(this.layout);
 
     // Check if layout mode changed (compact <-> non-compact, or narrow portrait)
     const layoutChanged = (oldLayout.compact !== this.layout.compact) ||
