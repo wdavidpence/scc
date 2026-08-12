@@ -232,12 +232,27 @@ export default class BattleScene extends Phaser.Scene {
     const laneColor = this.race.accent;
     const enemyColor = 0xf97316;
 
-    this.add.rectangle(WORLD_WIDTH / 2, 110, WORLD_WIDTH - 200, 8, 0x1d4ed8, 0.35);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 110, WORLD_WIDTH - 200, 8, enemyColor, 0.35);
-    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 120, laneColor, 0.05);
-    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 220, 0x38bdf8, 0.03);
-    this.add.rectangle(220, WORLD_HEIGHT / 2, 280, WORLD_HEIGHT - 120, laneColor, 0.08);
-    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 280, WORLD_HEIGHT - 120, enemyColor, 0.08);
+    // Tactical boundary rails
+    this.add.rectangle(WORLD_WIDTH / 2, 110, WORLD_WIDTH - 200, 4, 0x1d4ed8, 0.4).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 110, WORLD_WIDTH - 200, 4, enemyColor, 0.4).setDepth(2);
+
+    // Contested Lane framing
+    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 140, laneColor, 0.05).setDepth(2);
+    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, 0x38bdf8, 0.03).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, WORLD_HEIGHT - 180, 0x0f172a, 0.15)
+      .setStrokeStyle(1, 0x334155, 0.4).setDepth(2);
+
+    // Sector Alpha (Player Zone) framing & brackets
+    this.add.rectangle(220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, laneColor, 0.06)
+      .setStrokeStyle(1, laneColor, 0.25).setDepth(2);
+    this.add.rectangle(70, WORLD_HEIGHT / 2 - 200, 30, 2, laneColor, 0.6).setDepth(2);
+    this.add.rectangle(70, WORLD_HEIGHT / 2 + 200, 30, 2, laneColor, 0.6).setDepth(2);
+
+    // Sector Omega (Enemy Zone) framing & brackets
+    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, enemyColor, 0.06)
+      .setStrokeStyle(1, enemyColor, 0.25).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 - 200, 30, 2, enemyColor, 0.6).setDepth(2);
+    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 + 200, 30, 2, enemyColor, 0.6).setDepth(2);
   }
 
   createBattleTextures() {
@@ -949,13 +964,18 @@ export default class BattleScene extends Phaser.Scene {
             ? (this.race.id === 'zerg' ? 'zerg-defense' : this.race.id === 'protoss' ? 'protoss-defense' : 'terran-defense')
             : (this.race.id === 'zerg' ? 'zerg-production' : this.race.id === 'protoss' ? 'protoss-production' : 'terran-barracks');
 
+    const shadow = this.add.rectangle(x + 4, y + height * 0.35, width + 8, height * 0.45, 0x000000, 0.25)
+      .setDepth(4);
+
+    const sDepth = 10 + Math.floor(y * 0.03);
     const sprite = this.add.image(x, y, textureKey)
       .setDisplaySize(width, height)
-      .setAlpha(construction ? 0.7 : 0.98);
+      .setAlpha(construction ? 0.7 : 0.98)
+      .setDepth(sDepth);
     if (team === 'enemy') {
       sprite.setTint(0xf97316);
     }
-    const ridge = this.add.rectangle(x, y - height / 2 + 8, width - 18, 4, 0xffffff, construction ? 0.16 : 0.22);
+    const ridge = this.add.rectangle(x, y - height / 2 + 8, width - 18, 4, 0xffffff, construction ? 0.16 : 0.22).setDepth(sDepth + 1);
     const labelText = this.add.text(x, y - 5, roleName, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(10px, 2vw, 14px)',
@@ -963,17 +983,17 @@ export default class BattleScene extends Phaser.Scene {
       color: '#ffffff',
       align: 'center',
       wordWrap: { width: width - 8 }
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(sDepth + 1);
 
-    const hpBack = this.add.rectangle(x, y + height / 2 + 10, width + 8, 6, 0x0f172a, 1);
+    const hpBack = this.add.rectangle(x, y + height / 2 + 10, width + 8, 6, 0x0f172a, 1).setDepth(sDepth + 1);
     const hpFront = this.add.rectangle(x - (width + 8) / 2, y + height / 2 + 10, width + 8, 6, team === 'player' ? 0x22c55e : 0xfb7185, 1)
-      .setOrigin(0, 0.5);
+      .setOrigin(0, 0.5).setDepth(sDepth + 1);
     const statusText = this.add.text(x, y + height / 2 + 24, construction ? 'Construction' : 'Operational', {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(10px, 1.9vw, 13px)',
       color: '#cbd5e1',
       align: 'center'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(sDepth + 1);
 
     const entity = {
       id: this.nextId += 1,
@@ -993,6 +1013,7 @@ export default class BattleScene extends Phaser.Scene {
       buildProgress: options.buildProgress ?? 0,
       buildTimeRemaining: options.buildTimeRemaining ?? baseDef.buildTime,
       spawnOffset: role === 'commandCenter' ? { x: 74, y: 0 } : { x: 58, y: -6 },
+      shadow,
       sprite,
       ridge,
       labelText,
@@ -1028,17 +1049,20 @@ export default class BattleScene extends Phaser.Scene {
       else spriteKey = 'terran-marine';
     }
 
-    // Use add.image() with procedural textures from BootScene (no spritesheets).
+    const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 1.8, def.radius * 0.9, 0x000000, 0.3)
+      .setDepth(4);
+
+    const uDepth = 10 + Math.floor(y * 0.03);
     const sprite = this.add.image(x, y, spriteKey);
-    sprite.setDisplaySize(def.radius * 2, def.radius * 2);
+    sprite.setDisplaySize(def.radius * 2, def.radius * 2).setDepth(uDepth);
     if (team === 'enemy') {
       sprite.setTint(0xf97316);
     }
 
     const labelText = null;
-    const hpBack = this.add.rectangle(x, y + def.radius + 8, def.radius * 2 + 8, 5, 0x0f172a, 1);
+    const hpBack = this.add.rectangle(x, y + def.radius + 8, def.radius * 2 + 8, 5, 0x0f172a, 1).setDepth(uDepth + 1);
     const hpFront = this.add.rectangle(x - (def.radius * 2 + 8) / 2, y + def.radius + 8, def.radius * 2 + 8, 5, team === 'player' ? 0x22c55e : 0xfb7185, 1)
-      .setOrigin(0, 0.5);
+      .setOrigin(0, 0.5).setDepth(uDepth + 1);
 
     const statusLabels = {
       guard: 'Guard',
@@ -1055,7 +1079,7 @@ export default class BattleScene extends Phaser.Scene {
       fontSize: 'clamp(9px, 1.6vw, 11px)',
       color: '#cbd5e1',
       align: 'center'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(uDepth + 1);
 
     const entity = {
       id: this.nextId += 1,
@@ -1066,6 +1090,7 @@ export default class BattleScene extends Phaser.Scene {
       y,
       vx: 0,
       vy: 0,
+      shadow,
       hp: def.hp,
       maxHp: def.maxHp,
       speed: def.speed,
@@ -1363,7 +1388,7 @@ export default class BattleScene extends Phaser.Scene {
       if (this.commandMode === 'move') {
         this.issueMove(this.selectedEntity, worldX, worldY);
         this.commandMode = 'select';
-        this.showTapIndicator(worldX, worldY);
+        this.showTapIndicator(worldX, worldY, 'move');
         this.syncSession('Move order issued.');
         return;
       }
@@ -1371,7 +1396,7 @@ export default class BattleScene extends Phaser.Scene {
       if (this.commandMode === 'attack') {
         this.issueAttackMove(this.selectedEntity, worldX, worldY);
         this.commandMode = 'select';
-        this.showTapIndicator(worldX, worldY);
+        this.showTapIndicator(worldX, worldY, 'attack');
         this.syncSession('Attack move issued.');
         return;
       }
@@ -2043,11 +2068,16 @@ export default class BattleScene extends Phaser.Scene {
 
       unit.cooldown = Math.max(0, unit.cooldown - dt);
       unit._motionState = 'idle';
-      unit.sprite.setPosition(unit.x, unit.y);
-      unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8);
-      unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8);
+
+      const uDepth = 10 + Math.floor(unit.y * 0.03);
+      unit.sprite.setPosition(unit.x, unit.y).setDepth(uDepth);
+      if (unit.shadow) {
+        unit.shadow.setPosition(unit.x, unit.y + unit.radius * 0.4);
+      }
+      unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8).setDepth(uDepth + 1);
+      unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.width = (unit.hp / unit.maxHp) * (unit.radius * 2 + 8);
-      unit.statusText.setPosition(unit.x, unit.y + unit.radius + 20);
+      unit.statusText.setPosition(unit.x, unit.y + unit.radius + 20).setDepth(uDepth + 1);
 
       if (unit.type === 'worker') {
         this.updateWorker(unit, dt);
@@ -2057,6 +2087,8 @@ export default class BattleScene extends Phaser.Scene {
 
       this.applyMotionScale(unit, dt);
     });
+
+    this.updateSelectionHighlightPosition();
   }
 
   updateWorker(worker, dt) {
@@ -2762,6 +2794,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   destroyEntity(entity) {
+    entity.shadow?.destroy();
     entity.sprite?.destroy();
     entity.ridge?.destroy();
     entity.labelText?.destroy();
@@ -3060,19 +3093,29 @@ export default class BattleScene extends Phaser.Scene {
 
     const radius = entity.radius || 20;
     const highlightColor = this.race.accent ?? 0x3b82f6;
+    const teamColor = entity.team === 'enemy' ? 0xf97316 : 0x22c55e;
 
-    // Selection ring - slightly larger than entity radius
-    this.selectionHighlight = this.add.circle(entity.x, entity.y, radius + 10, highlightColor, 0.5)
-      .setStrokeStyle(2, highlightColor, 0.9)
-      .setAlpha(0.8)
+    this.selectionHighlight = this.add.group();
+
+    // Outer pulsing accent halo
+    const glowRing = this.add.circle(entity.x, entity.y, radius + 12, highlightColor, 0.2)
+      .setStrokeStyle(1.5, highlightColor, 0.75)
       .setDepth(5);
+
+    // Inner crisp team selection ring
+    const innerRing = this.add.circle(entity.x, entity.y, radius + 6, teamColor, 0.05)
+      .setStrokeStyle(2, teamColor, 0.95)
+      .setDepth(5);
+
+    this.selectionHighlight.add(glowRing);
+    this.selectionHighlight.add(innerRing);
 
     // Pulsing animation - gentle breathing effect
     this.selectionHighlightTween = this.tweens.add({
-      targets: this.selectionHighlight,
-      alpha: 0.3,
-      scaleX: 1.08,
-      scaleY: 1.08,
+      targets: [glowRing, innerRing],
+      alpha: 0.35,
+      scaleX: 1.06,
+      scaleY: 1.06,
       duration: FEEDBACK_TIMINGS.selectionPulse,
       yoyo: true,
       repeat: -1,
@@ -3081,8 +3124,8 @@ export default class BattleScene extends Phaser.Scene {
 
     // Attack range indicator (dashed ring) for combat units
     if (entity.range && entity.type !== 'worker') {
-      this.rangeRing = this.add.circle(entity.x, entity.y, entity.range, highlightColor, 0.08)
-        .setStrokeStyle(1, highlightColor, 0.35)
+      this.rangeRing = this.add.circle(entity.x, entity.y, entity.range, highlightColor, 0.06)
+        .setStrokeStyle(1, highlightColor, 0.4)
         .setAlpha(0.5).setDepth(4);
 
       // Subtle pulse on range ring
@@ -3099,9 +3142,21 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  updateSelectionHighlightPosition() {
+    if (!this.selectedEntity || !this.selectionHighlight) return;
+    const x = this.selectedEntity.x;
+    const y = this.selectedEntity.y;
+    if (typeof this.selectionHighlight.getChildren === 'function') {
+      this.selectionHighlight.getChildren().forEach((child) => child.setPosition(x, y));
+    }
+    if (this.rangeRing) {
+      this.rangeRing.setPosition(x, y);
+    }
+  }
+
   clearSelectionHighlight() {
     if (this.selectionHighlight) {
-      this.selectionHighlight.destroy();
+      this.selectionHighlight.destroy(true);
       this.selectionHighlight = null;
     }
     if (this.selectionHighlightTween) {
@@ -3119,35 +3174,45 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   /** Brief flash at tap location - confirms move/attack commands on mobile. */
-  showTapIndicator(worldX, worldY) {
+  showTapIndicator(worldX, worldY, mode = 'move') {
     // Clean up previous feedback
     if (this.tapFeedback) {
-      this.tapFeedback.destroy();
+      this.tapFeedback.destroy(true);
     }
 
-    // Small crosshair flash - confirms the command was registered
-    const size = 14;
+    const isAttack = mode === 'attack';
+    const color = isAttack ? 0xef4444 : 0x38bdf8;
+    const ringColor = isAttack ? 0xf87171 : 0x60a5fa;
+
     this.tapFeedback = this.add.group();
 
-    // Horizontal line
-    const hLine = this.add.rectangle(worldX, worldY, size, 2, 0x60a5fa, 0.9)
-      .setOrigin(0.5);
-    // Vertical line
-    const vLine = this.add.rectangle(worldX, worldY, 2, size, 0x60a5fa, 0.9)
-      .setOrigin(0.5);
+    const ring = this.add.circle(worldX, worldY, 14, ringColor, 0.2).setStrokeStyle(2, color, 0.95).setDepth(80);
+    const size = isAttack ? 16 : 12;
+    const hLine = this.add.rectangle(worldX, worldY, size, 2, color, 0.95).setOrigin(0.5).setDepth(80);
+    const vLine = this.add.rectangle(worldX, worldY, 2, size, color, 0.95).setOrigin(0.5).setDepth(80);
 
+    this.tapFeedback.add(ring);
     this.tapFeedback.add(hLine);
     this.tapFeedback.add(vLine);
 
-    // Brief flash then fade out
+    if (isAttack) {
+      const dot = this.add.circle(worldX, worldY, 3, 0xef4444, 0.9).setDepth(80);
+      this.tapFeedback.add(dot);
+    }
+
+    // Brief flash then fade out with scale pulse
     this.tweens.add({
-      targets: [hLine, vLine],
+      targets: this.tapFeedback.getChildren(),
       alpha: 0,
+      scaleX: isAttack ? 0.6 : 1.35,
+      scaleY: isAttack ? 0.6 : 1.35,
       duration: FEEDBACK_TIMINGS.tapFlash,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        this.tapFeedback?.destroy();
-        this.tapFeedback = null;
+        if (this.tapFeedback) {
+          this.tapFeedback.destroy(true);
+          this.tapFeedback = null;
+        }
       }
     });
   }

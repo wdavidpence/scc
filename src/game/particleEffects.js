@@ -39,24 +39,26 @@ export function spawnMuzzleFlash(scene, x, y, race, options = {}) {
   const speed  = options.speed ?? 180;
   const life   = options.life ?? 0.25;
 
-  // Spawn a small group of particles
   const group = scene.add.group();
+
+  // Subtle background glow halo behind muzzle flash
+  const halo = scene.add.circle(x, y, 10, getColorFromString(palette.muzzle[0]), 0.4).setOrigin(0.5).setDepth(62);
+  scene.tweens.add({
+    targets: halo,
+    alpha: 0,
+    scaleX: 0.2,
+    scaleY: 0.2,
+    duration: life * 700,
+    ease: 'Linear',
+    onComplete: () => { halo.destroy(); }
+  });
 
   for (let i = 0; i < count; i += 1) {
     const angle = (Math.PI * 2 / count) * i + Phaser.Math.Between(-15, 15);
     const col   = palette.muzzle[Phaser.Math.Between(0, palette.muzzle.length - 1)];
     const size  = Phaser.Math.Between(3, 6);
 
-    // Draw a small rectangle as particle (pixel-art style)
-    const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1)
-      .setOrigin(0.5)
-      .setAlpha(1)
-      .setDepth(10);
-
-    // Color the particle via canvas texture (pixel art)
-    const key = `_pf_m_${scene.textures.exists(`_pf_m_${race}_${i}`) ? (i + 1) : i}`;
-    // Skip texture creation for performance — use tint instead.
-
+    const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1).setOrigin(0.5).setAlpha(1).setDepth(65);
     p.setTint(getColorFromString(col));
     group.add(p);
 
@@ -67,17 +69,14 @@ export function spawnMuzzleFlash(scene, x, y, race, options = {}) {
       alpha:   0,
       scaleX:  0.3,
       scaleY:  0.3,
+      angle:   Phaser.Math.Between(-45, 45),
       duration: (life * 1000) * Phaser.Math.FloatBetween(0.6, 1.2),
       ease:    'Linear',
       onComplete: () => { p.destroy(); }
     });
   }
 
-  // Quick flash at origin (bright white burst)
-  const flash = scene.add.circle(x, y, 6, 0xffffff, 0.9)
-    .setOrigin(0.5)
-    .setDepth(11);
-
+  const flash = scene.add.circle(x, y, 6, 0xffffff, 0.95).setOrigin(0.5).setDepth(70);
   scene.tweens.add({
     targets: flash,
     alpha:   0,
@@ -101,15 +100,22 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
   const maxDist = isStructure ? 50 : 32;
   const life    = options.life ?? (isStructure ? 0.7 : 0.5);
 
-  // --- Ring burst (expanding circle) ---
-  const ring = scene.add.circle(x, y, 4, 0xffffff, 0.8)
-    .setOrigin(0.5)
-    .setDepth(9);
+  // Ground scorch mark (subtle linger at ground level)
+  const scorch = scene.add.circle(x, y, maxDist * 0.4, 0x05050a, 0.45).setOrigin(0.5).setDepth(3);
+  scene.tweens.add({
+    targets: scorch,
+    alpha: 0,
+    duration: life * 1600,
+    ease: 'Cubic.easeOut',
+    onComplete: () => { scorch.destroy(); }
+  });
 
+  // Ring burst (expanding shockwave)
+  const ring = scene.add.circle(x, y, 5, getColorFromString(palette.death[0]), 0.7).setStrokeStyle(2, 0xffffff, 0.9).setOrigin(0.5).setDepth(65);
   scene.tweens.add({
     targets: ring,
-    scaleX:  (maxDist / 4) * 2,
-    scaleY:  (maxDist / 4) * 2,
+    scaleX:  (maxDist / 5) * 2,
+    scaleY:  (maxDist / 5) * 2,
     alpha:   0,
     duration: life * 800,
     ease:    'Cubic.easeOut',
@@ -128,7 +134,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1)
       .setOrigin(0.5)
       .setAlpha(1)
-      .setDepth(8);
+      .setDepth(68);
 
     p.setTint(getColorFromString(col));
     coreGroup.add(p);
@@ -143,6 +149,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
       alpha:   0,
       scaleX:  0.2,
       scaleY:  0.2,
+      angle:   Phaser.Math.Between(-90, 90),
       duration: life * 1000 * Phaser.Math.FloatBetween(0.7, 1.3),
       ease:    'Cubic.easeOut',
       onComplete: () => { p.destroy(); }
@@ -161,7 +168,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const s = scene.add.rectangle(x, y, size, size, 0xffffff, 1)
       .setOrigin(0.5)
       .setAlpha(1)
-      .setDepth(12);
+      .setDepth(75);
 
     s.setTint(getColorFromString(col));
 
@@ -188,7 +195,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const d = scene.add.rectangle(x, y, size, size, 0xffffff, 0.8)
       .setOrigin(0.5)
       .setAlpha(0.8)
-      .setDepth(7);
+      .setDepth(67);
 
     d.setTint(getColorFromString(col));
 
