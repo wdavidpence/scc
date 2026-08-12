@@ -882,6 +882,9 @@ export default class HudScene extends Phaser.Scene {
     // (The animateResourceCounters builds the full string each frame)
 
     this.objectiveText.setText(`Objective: ${objective}`);
+    const waveY = Math.max(OBJECTIVE_Y + 20, OBJECTIVE_Y + this.objectiveText.displayHeight + 6);
+    this.waveCounter.setY(waveY);
+    this.unitCountText.setY(waveY + this.waveCounter.displayHeight + 2);
     this.selectionTitle.setText(selection.label || 'None selected');
 
     // HP bar in selection panel
