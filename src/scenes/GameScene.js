@@ -1063,6 +1063,9 @@ export default class BattleScene extends Phaser.Scene {
 
     const shadow = this.add.ellipse(x, y + def.radius * 0.4, def.radius * 2.0, def.radius * 0.95, 0x000000, 0.42)
       .setDepth(4);
+    const teamMarker = this.add.circle(x, y + def.radius * 0.15, def.radius * 0.72, team === 'player' ? this.race.accent : 0xf97316, 0.16)
+      .setStrokeStyle(1, team === 'player' ? this.race.accent : 0xf97316, 0.42)
+      .setDepth(5);
 
     const uDepth = 10 + Math.floor(y * 0.03);
     const sprite = this.add.image(x, y, spriteKey);
@@ -1103,6 +1106,7 @@ export default class BattleScene extends Phaser.Scene {
       vx: 0,
       vy: 0,
       shadow,
+      teamMarker,
       hp: def.hp,
       maxHp: def.maxHp,
       speed: def.speed,
@@ -2087,6 +2091,9 @@ export default class BattleScene extends Phaser.Scene {
       if (unit.shadow) {
         unit.shadow.setPosition(unit.x, unit.y + unit.radius * 0.4);
       }
+      if (unit.teamMarker) {
+        unit.teamMarker.setPosition(unit.x, unit.y + unit.radius * 0.15).setDepth(uDepth - 1);
+      }
       unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.width = (unit.hp / unit.maxHp) * (unit.radius * 2 + 8);
@@ -2846,6 +2853,7 @@ export default class BattleScene extends Phaser.Scene {
       entity._dmgTexts = null;
     }
     entity.shadow?.destroy();
+    entity.teamMarker?.destroy();
     entity.sprite?.destroy();
     entity.ridge?.destroy();
     entity.labelText?.destroy();
