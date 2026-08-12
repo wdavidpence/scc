@@ -116,6 +116,12 @@ function terranCommandCenter(ctx, w, h) {
   // Side panels (steel)
   ctx.fillStyle = '#374151'; rrect(ctx, 6, h - 32, 8, 24, 2); ctx.fill();
   rrect(ctx, w - 14, h - 32, 8, 24, 2); ctx.fill();
+  // Hot-metal service vents add readable industrial depth.
+  ctx.fillStyle = '#0b1220';
+  for (let i = 0; i < 3; i++) {
+    rrect(ctx, 44 + i * 9, h - 29, 5, 12, 1); ctx.fill();
+  }
+  ctx.fillStyle = '#bfdbfe'; rrect(ctx, 46, h - 27, 2, 7, 0); ctx.fill();
 }
 
 function terranBarracks(ctx, w, h) {
@@ -231,6 +237,11 @@ function zergHatchery(ctx, w, h) {
     const a = (Math.PI * 2 / 5) * i;
     ctx.beginPath(); ctx.arc(w / 2 + Math.cos(a) * 30, h - 40 + Math.sin(a) * 12, 3, 0, Math.PI * 2); ctx.fill();
   }
+  // Membrane ridges reinforce the organic silhouette.
+  ctx.strokeStyle = '#c2410c'; ctx.lineWidth = 2;
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath(); ctx.arc(w / 2 + i * 18, h - 32, 14, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+  }
 }
 
 function zergSpawningPool(ctx, w, h) {
@@ -338,6 +349,12 @@ function protossNexus(ctx, w, h) {
   ctx.fillStyle = '#e0d4ff'; ellipse(ctx, w / 2, h - 26, 7, 5);
   // Energy beam (vertical)
   ctx.fillStyle = '#c084fc'; rrect(ctx, w / 2 - 1, h - 76, 3, 14, 0); ctx.fill();
+  // Faceted outer braces frame the nexus core.
+  ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(14, h - 34); ctx.lineTo(24, h - 12); ctx.lineTo(w / 2 - 18, h - 8);
+  ctx.moveTo(w - 14, h - 34); ctx.lineTo(w - 24, h - 12); ctx.lineTo(w / 2 + 18, h - 8);
+  ctx.stroke();
 }
 
 function protossGateway(ctx, w, h) {
