@@ -855,6 +855,12 @@ export default class BattleScene extends Phaser.Scene {
         .setAlpha(0.96);
       const glow = this.add.circle(x, y, 20, glowColor, 0.12)
         .setAlpha(0.15);
+      const label = this.add.text(x, y + 20, `Gas • ${amount}`, {
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: '10px',
+        fontStyle: '800',
+        color: '#f3e8ff'
+      }).setOrigin(0.5);
 
       const entity = {
         id: this.nextId += 1,
@@ -868,7 +874,7 @@ export default class BattleScene extends Phaser.Scene {
         radius: 14,
         sprite,
         glow,
-        labelText: null,
+        labelText: label,
         assignedWorkers: 0,
         maxWorkers: 3
       };
@@ -939,9 +945,9 @@ export default class BattleScene extends Phaser.Scene {
       .setAlpha(0.96);
     const glow = this.add.circle(x, y, 20, glowColor, 0.12)
       .setAlpha(0.15);
-    const label = this.add.text(x, y + 20, 'Minerals', {
+    const label = this.add.text(x, y + 20, `Minerals • ${amount}`, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontSize: '12px',
+      fontSize: '10px',
       fontStyle: '800',
       color: '#eff6ff'
     }).setOrigin(0.5);
@@ -2212,6 +2218,7 @@ export default class BattleScene extends Phaser.Scene {
       worker.cargo += mined;
       worker.statusText.setText('Mining Gas');
       geyser.sprite.setAlpha(Math.max(0.35, 0.45 + geyser.amount / geyser.maxAmount * 0.5));
+      geyser.labelText.setText(geyser.amount > 0 ? `Gas • ${Math.ceil(geyser.amount)}` : 'Gas • Depleted');
       return;
     }
 
@@ -2257,9 +2264,7 @@ export default class BattleScene extends Phaser.Scene {
     worker.cargo += mined;
     worker.statusText.setText('Mining');
     node.sprite.setAlpha(Math.max(0.35, 0.45 + node.amount / node.maxAmount * 0.5));
-    if (node.amount <= 0) {
-      node.labelText.setText('Depleted');
-    }
+    node.labelText.setText(node.amount > 0 ? `Minerals • ${Math.ceil(node.amount)}` : 'Minerals • Depleted');
   }
 
   updateCombatUnit(unit, dt) {
@@ -2541,6 +2546,7 @@ export default class BattleScene extends Phaser.Scene {
             geyser.amount = Math.max(0, geyser.amount - mined);
             unit.cargo += mined;
             geyser.sprite.setAlpha(Math.max(0.35, 0.45 + geyser.amount / geyser.maxAmount * 0.5));
+            geyser.labelText.setText(geyser.amount > 0 ? `Gas • ${Math.ceil(geyser.amount)}` : 'Gas • Depleted');
           }
         } else {
           const node = this.findNearestResourceNode(unit.x, unit.y);
