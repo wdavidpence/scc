@@ -1000,6 +1000,8 @@ export default class BattleScene extends Phaser.Scene {
     const hpBack = this.add.rectangle(x, y + height / 2 + 10, width + 8, 6, 0x0f172a, 1).setDepth(sDepth + 1);
     const hpFront = this.add.rectangle(x - (width + 8) / 2, y + height / 2 + 10, width + 8, 6, team === 'player' ? 0x22c55e : 0xfb7185, 1)
       .setOrigin(0, 0.5).setDepth(sDepth + 1);
+    const critStructureIndicator = this.add.ellipse(x, y, width + 12, height + 12, 0xef4444, 0)
+      .setStrokeStyle(2, 0xf87171, 0.9).setDepth(sDepth - 1).setVisible(false);
     const statusText = this.add.text(x, y + height / 2 + 24, construction ? 'Construction' : 'Operational', {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(10px, 1.9vw, 13px)',
@@ -1031,6 +1033,7 @@ export default class BattleScene extends Phaser.Scene {
       labelText,
       hpBack,
       hpFront,
+      critStructureIndicator,
       statusText
     };
 
@@ -1993,6 +1996,12 @@ export default class BattleScene extends Phaser.Scene {
 
       structure.hpFront.width = (structure.hp / structure.maxHp) * (structure.width + 8);
       structure.hpFront.setPosition(structure.x - (structure.width + 8) / 2, structure.y + structure.height / 2 + 10);
+      if (structure.team === 'enemy' && !structure.construction && structure.hp / structure.maxHp < 0.25) {
+        const pulse = 0.78 + Math.sin(this.time.now * 0.012) * 0.18;
+        structure.critStructureIndicator.setPosition(structure.x, structure.y).setDepth(10 + Math.floor(structure.y * 0.03) - 1).setAlpha(pulse).setVisible(true);
+      } else {
+        structure.critStructureIndicator.setVisible(false);
+      }
     });
   }
 
@@ -2868,6 +2877,7 @@ export default class BattleScene extends Phaser.Scene {
     entity.labelText?.destroy();
     entity.hpBack?.destroy();
     entity.hpFront?.destroy();
+    entity.critStructureIndicator?.destroy();
     entity.critIndicator?.destroy();
     entity.statusText?.destroy();
     entity.glow?.destroy();
