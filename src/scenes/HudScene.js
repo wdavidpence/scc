@@ -917,6 +917,7 @@ export default class HudScene extends Phaser.Scene {
 
     const statusMsg = message || battle.status || 'Ready.';
     const commandDisplay = battle.commandMode === 'select' ? 'Ready' : battle.commandMode.toUpperCase();
+    this.statusText.setY(Math.max(this.statusText.y, this.selectionDetails.y + this.selectionDetails.displayHeight + 4));
     this.statusText.setText(`${statusMsg} • Command: ${commandDisplay}`);
     this.logText.setText(log.slice(-4).join('\n'));
 
