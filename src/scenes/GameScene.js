@@ -269,6 +269,12 @@ export default class BattleScene extends Phaser.Scene {
     // Contested-zone boundary markers — subtle faction-colored ground dividers
     this.add.line(370, WORLD_HEIGHT / 2, -5, -40, -5, 40, laneColor, 0.3).setDepth(2);
     this.add.line(WORLD_WIDTH - 370, WORLD_HEIGHT / 2, -5, -40, -5, 40, enemyColor, 0.3).setDepth(2);
+
+    // Contested-lane guide chevrons — directional rhythm without gameplay coupling
+    [560, 840, 1120].forEach((x) => {
+      this.add.line(x, WORLD_HEIGHT / 2, -12, -8, 0, 0, 0x38bdf8, 0.22).setDepth(2);
+      this.add.line(x, WORLD_HEIGHT / 2, 0, 0, -12, 8, 0x38bdf8, 0.22).setDepth(2);
+    });
   }
 
   createBattleTextures() {
