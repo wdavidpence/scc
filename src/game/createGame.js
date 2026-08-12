@@ -24,6 +24,9 @@ export function buildGameConfig() {
       activePointers: 5,
       gamepad: false
     },
+    audio: {
+      disableWebAudio: true
+    },
     physics: {
       default: 'arcade',
       arcade: { debug: false }

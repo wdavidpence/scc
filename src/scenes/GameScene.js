@@ -1078,6 +1078,8 @@ export default class BattleScene extends Phaser.Scene {
     const hpBack = this.add.rectangle(x, y + def.radius + 8, def.radius * 2 + 8, 5, 0x0f172a, 1).setDepth(uDepth + 1);
     const hpFront = this.add.rectangle(x - (def.radius * 2 + 8) / 2, y + def.radius + 8, def.radius * 2 + 8, 5, team === 'player' ? 0x22c55e : 0xfb7185, 1)
       .setOrigin(0, 0.5).setDepth(uDepth + 1);
+    const critIndicator = this.add.circle(x, y, def.radius + 4, 0xef4444, 0)
+      .setStrokeStyle(2, 0xf87171, 0.9).setDepth(uDepth - 1).setVisible(false);
 
     const statusLabels = {
       guard: 'Guard',
@@ -1145,6 +1147,7 @@ export default class BattleScene extends Phaser.Scene {
       labelText,
       hpBack,
       hpFront,
+      critIndicator,
       statusText,
       motionScale: 1,
       motionState: 'idle',
@@ -2097,6 +2100,12 @@ export default class BattleScene extends Phaser.Scene {
       unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.width = (unit.hp / unit.maxHp) * (unit.radius * 2 + 8);
+      if (unit.team === 'enemy' && unit.hp / unit.maxHp < 0.25) {
+        const pulse = 0.78 + Math.sin(this.time.now * 0.012) * 0.18;
+        unit.critIndicator.setPosition(unit.x, unit.y).setDepth(uDepth - 1).setAlpha(pulse).setVisible(true);
+      } else {
+        unit.critIndicator.setVisible(false);
+      }
       unit.statusText.setPosition(unit.x, unit.y + unit.radius + 20).setDepth(uDepth + 1);
 
       if (unit.type === 'worker') {
@@ -2859,6 +2868,7 @@ export default class BattleScene extends Phaser.Scene {
     entity.labelText?.destroy();
     entity.hpBack?.destroy();
     entity.hpFront?.destroy();
+    entity.critIndicator?.destroy();
     entity.statusText?.destroy();
     entity.glow?.destroy();
   }
