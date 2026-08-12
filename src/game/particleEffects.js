@@ -219,6 +219,31 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Target Impact — small bounded hit-ring / impact effect at target position.
+ * ---------------------------------------------------------------------------*/
+
+export function spawnTargetImpact(scene, x, y, race, options = {}) {
+  const palette = PALETTES[race] || PALETTES.terran;
+  const radius = options.radius ?? 12;
+  const col = getColorFromString(palette.spark[0] || '#f59e0b');
+
+  const ring = scene.add.circle(x, y, 4, col, 0.85)
+    .setStrokeStyle(2, 0xffffff, 0.95)
+    .setOrigin(0.5)
+    .setDepth(66);
+
+  scene.tweens.add({
+    targets: ring,
+    scaleX: radius / 4,
+    scaleY: radius / 4,
+    alpha: 0,
+    duration: 160,
+    ease: 'Quad.easeOut',
+    onComplete: () => { ring.destroy(); }
+  });
+}
+
+/* ---------------------------------------------------------------------------
  * Helper: convert a hex string color to Phaser integer tint.
  * ---------------------------------------------------------------------------*/
 

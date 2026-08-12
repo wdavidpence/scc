@@ -80,24 +80,35 @@ export default class PreloadScene extends Phaser.Scene {
       }
     });
 
-    this.scale.on('resize', (gameSize) => {
-      const nextCx = gameSize.width / 2;
-      const nextCy = gameSize.height / 2;
+    this.scale.on('resize', this.handleResize, this);
+  }
+
+  handleResize(gameSize) {
+    const nextCx = gameSize.width / 2;
+    const nextCy = gameSize.height / 2;
+    if (this.backdrop) {
       this.backdrop.setPosition(nextCx, nextCy);
       const nextPanel = panelSize(gameSize.width, gameSize.height);
       this.backdrop.setSize(nextPanel.width, nextPanel.height);
-      this.title.setPosition(nextCx, nextCy - 50);
+    }
+    if (this.title) this.title.setPosition(nextCx, nextCy - 50);
+    if (this.detail) {
       this.detail.setPosition(nextCx, nextCy + 6);
-      this.detail.wordWrap.width = detailWrapWidth(gameSize.width);
-      const nextBw = barWidth(gameSize.width);
+      if (this.detail.wordWrap) this.detail.wordWrap.width = detailWrapWidth(gameSize.width);
+    }
+    const nextBw = barWidth(gameSize.width);
+    if (this.barBack) {
       this.barBack.setPosition(nextCx, nextCy + 82);
       this.barBack.width = nextBw;
+    }
+    if (this.barFill) {
       this.barFill.setPosition(nextCx - nextBw / 2, nextCy + 82);
       this.barFill.width = nextBw;
-    });
+    }
   }
 
   shutdown() {
+    if (this.scale) this.scale.off('resize', this.handleResize, this);
     // Clean up preload UI when scene is destroyed.
     if (this.backdrop) this.backdrop.destroy();
     if (this.title) this.title.destroy();

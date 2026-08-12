@@ -5,7 +5,7 @@ import { getDifficulty, getEnemyWaveInterval } from '../game/data/difficulties.j
 import { createInputController } from '../game/input/createInputController.js';
 import { getUnitDef } from '../game/unitDefs.js';
 import ParticleManager from '../game/particles/ParticleManager.js';
-import { spawnMuzzleFlash, spawnExplosion } from '../game/particleEffects.js';
+import { spawnMuzzleFlash, spawnExplosion, spawnTargetImpact } from '../game/particleEffects.js';
 import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
 
@@ -2806,6 +2806,18 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   destroyEntity(entity) {
+    if (entity._damageFlash) {
+      entity._damageFlash.stop();
+      entity._damageFlash = null;
+    }
+    if (entity._hpEmphasizeTween) {
+      entity._hpEmphasizeTween.stop();
+      entity._hpEmphasizeTween = null;
+    }
+    if (entity._dmgTexts) {
+      entity._dmgTexts.forEach((t) => t?.destroy());
+      entity._dmgTexts = null;
+    }
     entity.shadow?.destroy();
     entity.sprite?.destroy();
     entity.ridge?.destroy();
@@ -3255,46 +3267,87 @@ export default class BattleScene extends Phaser.Scene {
     });
   }
 
-  /** Unit takes damage — brief red flash + audio feedback. */
+  /** Unit takes damage — brief red flash + audio feedback + readability enhancements. */
   showDamageFlash(unit, damageAmount) {
-    if (!unit || !unit.sprite) return;
+    if (!unit || !unit.sprite || !unit.sprite.active) return;
 
-    // Brief red tint on the sprite
-    if (!unit._damageFlash) {
-      unit._damageFlash = this.tweens.add({
-        targets: unit.sprite,
-        tint: 0xff4444,
-        duration: FEEDBACK_TIMINGS.damageFlash,
-        yoyo: true,
-        repeat: 0,
-        ease: 'Linear',
+    const baseTint = unit.team === 'enemy' ? 0xf97316 : null;
+
+    // Brief red tint on sprite while preserving faction tint
+    if (unit._damageFlash) {
+      unit._damageFlash.stop();
+      unit._damageFlash = null;
+    }
+    unit.sprite.setTint(0xff4444);
+    unit._damageFlash = this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: FEEDBACK_TIMINGS.damageFlash * 2,
+      onComplete: () => {
+        unit._damageFlash = null;
+        if (unit.sprite?.active) {
+          if (baseTint != null) unit.sprite.setTint(baseTint);
+          else unit.sprite.clearTint();
+        }
+      }
+    });
+
+    // Short reusable hit-ring / target impact visual overlay
+    spawnTargetImpact(this, unit.x, unit.y, this.race?.id || 'terran');
+
+    // Briefly emphasize target HP bar (both back and front bars)
+    if (unit.hpBack?.active && unit.hpFront?.active) {
+      if (unit._hpEmphasizeTween) {
+        unit._hpEmphasizeTween.stop();
+        unit._hpEmphasizeTween = null;
+      }
+      unit.hpBack.setScale(1, 1.8);
+      unit.hpFront.setScale(1, 1.8);
+      unit._hpEmphasizeTween = this.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration: 160,
         onComplete: () => {
-          unit.sprite.clearTint();
-          if (unit._damageFlash) {
-            unit._damageFlash = null;
-          }
+          unit._hpEmphasizeTween = null;
+          if (unit.hpBack?.active) unit.hpBack.setScale(1, 1);
+          if (unit.hpFront?.active) unit.hpFront.setScale(1, 1);
         }
       });
     }
 
-    // Floating damage number above the unit
+    // Bounded, non-overlapping floating damage number above the unit
     if (damageAmount) {
-      const dmgText = this.add.text(unit.x, unit.y - 28, `-${damageAmount}`, {
+      if (!unit._dmgTexts) unit._dmgTexts = [];
+      unit._dmgTexts = unit._dmgTexts.filter((t) => t && t.active);
+      if (unit._dmgTexts.length >= 3) {
+        const oldest = unit._dmgTexts.shift();
+        oldest?.destroy();
+      }
+      const offsetCount = unit._dmgTexts.length;
+      const startY = unit.y - 28 - offsetCount * 12;
+      const dmgText = this.add.text(unit.x, startY, `-${damageAmount}`, {
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         fontSize: 'clamp(12px, 2vw, 16px)',
         fontStyle: '900',
         color: '#ff4444',
         stroke: '#000000',
         strokeThickness: 3
-      }).setOrigin(0.5).setScrollFactor(1);
+      }).setOrigin(0.5).setScrollFactor(1).setDepth(80);
+
+      unit._dmgTexts.push(dmgText);
 
       this.tweens.add({
         targets: dmgText,
-        y: unit.y - 56,
+        y: startY - 24,
         alpha: 0,
-        duration: 800,
+        duration: 650,
         ease: 'Cubic.easeOut',
-        onComplete: () => { dmgText.destroy(); }
+        onComplete: () => {
+          if (unit._dmgTexts) {
+            unit._dmgTexts = unit._dmgTexts.filter((t) => t !== dmgText);
+          }
+          dmgText.destroy();
+        }
       });
     }
 
