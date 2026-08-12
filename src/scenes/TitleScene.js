@@ -105,7 +105,7 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Version number (top-right corner)
-    this.versionText = this.add.text(width - 16, 16, 'v1.1.2', {
+    this.versionText = this.add.text(width - 16, 16, 'v1.5.0', {
       ...MENU_TEXT_STYLE,
       fontSize: '12px',
       fontStyle: '600',
@@ -162,6 +162,18 @@ export default class MenuScene extends Phaser.Scene {
     this.startButton.on('click', () => this.startBattle());
     this.refreshCards();
     this.scale.on('resize', this.handleResize, this);
+    this.handlePointerUp = this.onPointerUp.bind(this);
+    this.input.on('pointerup', this.handlePointerUp);
+    this.handleDomPointerUp = (event) => {
+      const rect = this.game.canvas.getBoundingClientRect();
+      const scaleX = this.scale.width / rect.width;
+      const scaleY = this.scale.height / rect.height;
+      this.onPointerUp({
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
+      });
+    };
+    this.game.canvas.addEventListener('pointerup', this.handleDomPointerUp);
   }
 
   getCardLayout(width, height) {
@@ -403,10 +415,37 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   startBattle() {
-    const race = getRace(this.selectedRaceId);
-    session.setDifficulty(this.selectedDifficultyId);
-    session.setRace(race.id, race.name);
-    this.scene.start('BattleScene');
+    if (this.isStarting) return;
+    this.isStarting = true;
+    try {
+      const race = getRace(this.selectedRaceId);
+      session.setDifficulty(this.selectedDifficultyId);
+      session.setRace(race.id, race.name);
+      this.scene.start('BattleScene');
+    } catch (err) {
+      console.error('[MenuScene] scene.start(BattleScene) failed:', err);
+      this.isStarting = false;
+    }
+  }
+
+  onPointerUp(pointer) {
+    if (!pointer) return;
+    if (this.startButton?.getBounds().contains(pointer.x, pointer.y)) {
+      this.startBattle();
+      return;
+    }
+    this.cardEntries?.forEach((e) => {
+      if (e.card?.getBounds().contains(pointer.x, pointer.y)) {
+        this.selectedRaceId = e.race.id;
+        session.setRace(e.race.id, e.race.name);
+        this.refreshCards();
+      }
+    });
+    this.difficultyEntries?.forEach((e) => {
+      if (e.button?.getBounds().contains(pointer.x, pointer.y)) {
+        this.selectDifficulty(e.difficulty.id);
+      }
+    });
   }
 
 
@@ -476,6 +515,12 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   shutdown() {
+    if (this.handlePointerUp) {
+      this.input?.off('pointerup', this.handlePointerUp);
+    }
+    if (this.handleDomPointerUp && this.game?.canvas) {
+      this.game.canvas.removeEventListener('pointerup', this.handleDomPointerUp);
+    }
     // Clean up race cards and buttons when scene is destroyed.
     if (this.background) this.background.destroy();
     if (this.shell) this.shell.destroy();

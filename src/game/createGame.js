@@ -24,6 +24,10 @@ export function buildGameConfig() {
       activePointers: 5,
       gamepad: false
     },
+    physics: {
+      default: 'arcade',
+      arcade: { debug: false }
+    },
     render: {
       antialiasGL: true,
       powerPreference: 'high-performance'

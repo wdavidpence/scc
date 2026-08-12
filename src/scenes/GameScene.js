@@ -2059,6 +2059,7 @@ export default class BattleScene extends Phaser.Scene {
 
     if (target) {
       structure._attackCooldown = def.attackCooldown;
+      structure._recoilTimer = 0.14;
       target.hp -= def.attackDamage;
       structure._motionState = 'attack';
       structure.statusText.setText('Firing');
@@ -2257,8 +2258,9 @@ export default class BattleScene extends Phaser.Scene {
 
     unit.statusText.setText('Engage');
     if (unit.cooldown <= 0) {
-    unit._motionState = 'attack';
-    if (this.audioManager) this.audioManager.attack(unit);
+      unit._motionState = 'attack';
+      unit._recoilTimer = 0.14;
+      if (this.audioManager) this.audioManager.attack(unit);
     // High-signal attack moment: muzzle flash at attacker
     const attackRace = this.race?.id || 'terran';
     spawnMuzzleFlash(this, unit.x, unit.y, attackRace);
@@ -2708,7 +2710,32 @@ export default class BattleScene extends Phaser.Scene {
     entity.motionScale = entity.motionScale ?? 1;
     const blend = Math.min(1, dt * 10);
     entity.motionScale = Phaser.Math.Linear(entity.motionScale, target, blend);
-    entity.sprite.setScale(entity.motionScale);
+
+    // Phase-based idle breathing/hover motion (reusable, no allocations)
+    entity._idlePhase = entity._idlePhase ?? (((entity.id || 0) * 0.77) % (Math.PI * 2));
+    const timeSec = (this.time?.now ?? 0) * 0.003;
+    const hoverAmp = entity.type === 'structure' || entity.type === 'construction' ? 0.4 : (entity.type === 'worker' ? 1.0 : 1.4);
+    const idleOffsetY = Math.sin(timeSec + entity._idlePhase) * hoverAmp;
+
+    // Brief attack anticipation / recoil impulse
+    if (entity._recoilTimer > 0) {
+      entity._recoilTimer = Math.max(0, entity._recoilTimer - dt);
+    }
+    const recoilProgress = (entity._recoilTimer ?? 0) / 0.14;
+    const recoilPulse = Math.sin(recoilProgress * Math.PI);
+    const recoilScale = 1 + 0.07 * recoilPulse;
+    const recoilOffsetY = -2.5 * recoilPulse;
+
+    // Apply bounded visual adjustments to sprite while preserving ground anchor (entity.x, entity.y)
+    entity.sprite.setScale(entity.motionScale * recoilScale);
+    entity.sprite.setPosition(entity.x, entity.y + idleOffsetY + recoilOffsetY);
+
+    // Dynamic shadow responsiveness to hover offset
+    if (entity.shadow) {
+      const shadowY = entity.y + (entity.radius ? entity.radius * 0.4 : (entity.height ? entity.height * 0.35 : 0));
+      entity.shadow.setPosition(entity.x, shadowY);
+      entity.shadow.setAlpha(0.42 * Math.max(0.7, 1 - idleOffsetY * 0.04));
+    }
   }
 
   // --- Unit separation (prevents overlap/clumping) ---
@@ -3134,6 +3161,30 @@ export default class BattleScene extends Phaser.Scene {
     this.selectionHighlight.add(glowRing);
     this.selectionHighlight.add(innerRing);
 
+    // Faction-readable accent selection edge
+    const raceId = this.race?.id;
+    if (raceId === 'terran') {
+      const bOffset = radius + 8;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+        const offX = sx * bOffset, offY = sy * bOffset;
+        const tick = this.add.rectangle(entity.x + offX, entity.y + offY, 5, 5, 0x38bdf8, 0.85).setDepth(5);
+        tick._offX = offX; tick._offY = offY;
+        this.selectionHighlight.add(tick);
+      });
+    } else if (raceId === 'zerg') {
+      const bioRing = this.add.circle(entity.x, entity.y, radius + 9, 0xfbbf24, 0.08)
+        .setStrokeStyle(1, 0xfbbf24, 0.6).setDepth(5);
+      this.selectionHighlight.add(bioRing);
+    } else if (raceId === 'protoss') {
+      const nOffset = radius + 8;
+      [[0, -nOffset], [nOffset, 0], [0, nOffset], [-nOffset, 0]].forEach(([dx, dy]) => {
+        const notch = this.add.rectangle(entity.x + dx, entity.y + dy, 4, 4, 0xc4b5fd, 0.9)
+          .setRotation(Math.PI / 4).setDepth(5);
+        notch._offX = dx; notch._offY = dy;
+        this.selectionHighlight.add(notch);
+      });
+    }
+
     // Pulsing animation - gentle breathing effect
     this.selectionHighlightTween = this.tweens.add({
       targets: [glowRing, innerRing],
@@ -3171,7 +3222,9 @@ export default class BattleScene extends Phaser.Scene {
     const x = this.selectedEntity.x;
     const y = this.selectedEntity.y;
     if (typeof this.selectionHighlight.getChildren === 'function') {
-      this.selectionHighlight.getChildren().forEach((child) => child.setPosition(x, y));
+      this.selectionHighlight.getChildren().forEach((child) => {
+        child.setPosition(x + (child._offX || 0), y + (child._offY || 0));
+      });
     }
     if (this.rangeRing) {
       this.rangeRing.setPosition(x, y);

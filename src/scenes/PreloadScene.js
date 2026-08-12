@@ -86,22 +86,22 @@ export default class PreloadScene extends Phaser.Scene {
   handleResize(gameSize) {
     const nextCx = gameSize.width / 2;
     const nextCy = gameSize.height / 2;
-    if (this.backdrop) {
+    if (this.backdrop?.active && this.backdrop.geom) {
       this.backdrop.setPosition(nextCx, nextCy);
       const nextPanel = panelSize(gameSize.width, gameSize.height);
       this.backdrop.setSize(nextPanel.width, nextPanel.height);
     }
-    if (this.title) this.title.setPosition(nextCx, nextCy - 50);
-    if (this.detail) {
+    if (this.title?.active) this.title.setPosition(nextCx, nextCy - 50);
+    if (this.detail?.active) {
       this.detail.setPosition(nextCx, nextCy + 6);
       if (this.detail.wordWrap) this.detail.wordWrap.width = detailWrapWidth(gameSize.width);
     }
     const nextBw = barWidth(gameSize.width);
-    if (this.barBack) {
+    if (this.barBack?.active) {
       this.barBack.setPosition(nextCx, nextCy + 82);
       this.barBack.width = nextBw;
     }
-    if (this.barFill) {
+    if (this.barFill?.active) {
       this.barFill.setPosition(nextCx - nextBw / 2, nextCy + 82);
       this.barFill.width = nextBw;
     }
