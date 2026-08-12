@@ -378,6 +378,9 @@ export default class HudScene extends Phaser.Scene {
     this.selectionPanel = this.add.rectangle(panelX, panelY, panelW, panelH, 0x0b1220, 0.96)
       .setOrigin(0, 0)
       .setStrokeStyle(1, 0x334155, 1);
+    this.selectionPanelFrame = this.add.rectangle(panelX + 4, panelY + 4, panelW - 8, panelH - 8, 0x000000, 0)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, 0x1e293b, 0.8);
 
     // HP bar in selection panel (for units/structures)
     this.hpBarBack = this.add.rectangle(panelX + HP_BAR_X_OFFSET, panelY + HP_BAR_Y_OFFSET, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x0f172a, 1).setOrigin(0, 0).setVisible(false);
@@ -387,6 +390,14 @@ export default class HudScene extends Phaser.Scene {
       fontSize: 'clamp(10px, 1.8vw, 12px)',
       color: COLOR_SLAKE_400
     }).setVisible(false);
+
+    // Tactical console header labels
+    this.selectionHeader = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionTitleY - 14, 'CONSOLE // TACTICAL READOUT', {
+      fontFamily: FONT_FAMILY,
+      fontSize: '9px',
+      fontStyle: '800',
+      color: '#475569'
+    });
 
     // Selection title
     this.selectionTitle = this.add.text(STATUS_TEXT_OFFSET, textPos.selectionTitleY, '', {
@@ -411,6 +422,14 @@ export default class HudScene extends Phaser.Scene {
       fontSize: 'clamp(12px, 2.2vw, 15px)',
       color: COLOR_BLUE_300
     });
+
+    this.logHeader = this.add.text(width - LOG_X_OFFSET, textPos.logTextY - 14, 'COMMS LOG', {
+      fontFamily: FONT_FAMILY,
+      fontSize: '9px',
+      fontStyle: '800',
+      color: '#475569',
+      align: 'right'
+    }).setOrigin(1, 0);
 
     // Log text (right side of selection panel)
     this.logText = this.add.text(width - LOG_X_OFFSET, textPos.logTextY, '', {
@@ -561,6 +580,7 @@ export default class HudScene extends Phaser.Scene {
       button.bg?.destroy();
       button.label?.destroy();
       button.pulse?.destroy();
+      button.topBevel?.destroy();
     });
     this.buttons = [];
 
@@ -578,10 +598,11 @@ export default class HudScene extends Phaser.Scene {
         let x = (width - rowWidth) / 2 + this.layout.buttonWidth / 2;
         row.keys.forEach((defIndex) => {
           const def = this.buttonDefs[defIndex];
-          const button = { key: def.key, bg: null, label: null, row: rowIndex, pulse: null, hoverGlow: null };
+          const button = { key: def.key, bg: null, label: null, row: rowIndex, pulse: null, hoverGlow: null, topBevel: null };
           const bg = this.add.rectangle(x, row.y, this.layout.buttonWidth, this.layout.buttonHeight, 0x12304a, 1)
             .setStrokeStyle(1, 0x2d4f72, 1)
             .setInteractive({ useHandCursor: true });
+          const topBevel = this.add.rectangle(x, row.y - this.layout.buttonHeight / 2 + 2, this.layout.buttonWidth - 4, 2, 0xffffff, 0.15);
 
           // Button press animation (scale down)
           bg.on('pointerdown', () => {
@@ -664,6 +685,7 @@ export default class HudScene extends Phaser.Scene {
           bg.on('pointerdown', () => this.battleScene?.handleHudAction(def.key));
           button.bg = bg;
           button.label = label;
+          button.topBevel = topBevel;
           this.buttons.push(button);
           x += this.layout.buttonWidth + this.layout.buttonGap;
         });
@@ -677,10 +699,11 @@ export default class HudScene extends Phaser.Scene {
     let x = (width - total) / 2 + buttonWidth / 2;
 
     this.buttonDefs.forEach((def) => {
-      const button = { key: def.key, bg: null, label: null, row: 0, pulse: null, hoverGlow: null };
+      const button = { key: def.key, bg: null, label: null, row: 0, pulse: null, hoverGlow: null, topBevel: null };
       const bg = this.add.rectangle(x, this.layout.buttonTopY, buttonWidth, this.layout.buttonHeight, 0x12304a, 1)
         .setStrokeStyle(1, 0x2d4f72, 1)
         .setInteractive({ useHandCursor: true });
+      const topBevel = this.add.rectangle(x, this.layout.buttonTopY - this.layout.buttonHeight / 2 + 2, buttonWidth - 4, 2, 0xffffff, 0.15);
 
       // Button press animation (scale down)
       bg.on('pointerdown', () => {
@@ -758,6 +781,7 @@ export default class HudScene extends Phaser.Scene {
       bg.on('pointerdown', () => this.battleScene?.handleHudAction(def.key));
       button.bg = bg;
       button.label = label;
+      button.topBevel = topBevel;
       this.buttons.push(button);
       x += buttonWidth + buttonGap;
     });
@@ -889,6 +913,7 @@ export default class HudScene extends Phaser.Scene {
           button.label.setColor('#ffffff');
           button.bg.setAlpha(1);
           button.label.setAlpha(1);
+          button.topBevel?.setAlpha(0.35);
         } else {
           // Enabled but not active — reset hover state to default
           button.bg.setFillStyle(0x1d4ed8, 1);
@@ -896,6 +921,7 @@ export default class HudScene extends Phaser.Scene {
           button.label.setColor('#ffffff');
           button.bg.setAlpha(1);
           button.label.setAlpha(1);
+          button.topBevel?.setAlpha(0.18);
         }
       } else {
         // Disabled: dim
@@ -904,6 +930,7 @@ export default class HudScene extends Phaser.Scene {
         button.label.setColor('#64748b');
         button.bg.setAlpha(0.5);
         button.label.setAlpha(0.5);
+        button.topBevel?.setAlpha(0.05);
       }
 
       // Reset hover glow for non-hovered buttons during refresh
@@ -1001,6 +1028,16 @@ export default class HudScene extends Phaser.Scene {
     this.logText.setPosition(width - LOG_X_OFFSET, textPos.logTextY);
     this.selectionPanel.setPosition(panelX, panelY);
     this.selectionPanel.setSize(panelWidth(width), this.layout.selectionPanelHeight);
+    if (this.selectionPanelFrame) {
+      this.selectionPanelFrame.setPosition(panelX + 4, panelY + 4);
+      this.selectionPanelFrame.setSize(panelWidth(width) - 8, this.layout.selectionPanelHeight - 8);
+    }
+    if (this.selectionHeader) {
+      this.selectionHeader.setPosition(STATUS_TEXT_OFFSET, textPos.selectionTitleY - 14);
+    }
+    if (this.logHeader) {
+      this.logHeader.setPosition(width - LOG_X_OFFSET, textPos.logTextY - 14);
+    }
     this.selectionTitle.setPosition(STATUS_TEXT_OFFSET, textPos.selectionTitleY);
     this.selectionDetails.setPosition(STATUS_TEXT_OFFSET, textPos.selectionDetailsY);
     this.selectionDetails.setWordWrapWidth(selectionWrapWidth(width));
@@ -1028,6 +1065,9 @@ export default class HudScene extends Phaser.Scene {
 
   shutdown() {
     session.events.off('change', this.sessionHandler, this);
+    if (this.selectionPanelFrame) this.selectionPanelFrame.destroy();
+    if (this.selectionHeader) this.selectionHeader.destroy();
+    if (this.logHeader) this.logHeader.destroy();
     // Clean up any active tweens
     if (this._resourceTween) {
       this._resourceTween.stop();

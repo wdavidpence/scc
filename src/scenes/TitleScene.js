@@ -102,6 +102,8 @@ export default class MenuScene extends Phaser.Scene {
     const shell = getShellSize(width, height, this.layout.compact);
     this.shell = this.add.rectangle(shell.x, shell.y, shell.width, shell.height, 0x0a1524, 0.92)
       .setStrokeStyle(2, 0x1f3b61, 1);
+    this.shellInner = this.add.rectangle(shell.x, shell.y, shell.width - 12, shell.height - 12, 0x000000, 0)
+      .setStrokeStyle(1, 0x1e3a5f, 0.6);
 
     this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
       ...MENU_TEXT_STYLE,
@@ -147,6 +149,7 @@ export default class MenuScene extends Phaser.Scene {
     this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, START_BUTTON.height, 0x2563eb, 1)
       .setStrokeStyle(2, 0x60a5fa, 1)
       .setInteractive({ useHandCursor: true });
+    this.startHighlight = this.add.rectangle(width / 2, this.layout.startY - START_BUTTON.height / 2 + 2, this.layout.startWidth - 4, 2, 0xffffff, 0.35);
 
     this.startLabel = this.add.text(width / 2, this.layout.startY, 'Deploy into Mission', {
       ...MENU_TEXT_STYLE,
@@ -248,6 +251,9 @@ export default class MenuScene extends Phaser.Scene {
       .setStrokeStyle(2, race.accent, 1)
       .setInteractive({ useHandCursor: true });
 
+    const cardInner = this.add.rectangle(position.x, position.y, layout.cardWidth - 8, cardHeight - 8, 0x000000, 0)
+      .setStrokeStyle(1, 0x1e293b, 0.8);
+
     const topLine = this.add.rectangle(position.x, position.y - cardHeight / 2 + 16, layout.cardWidth - 20, 4, race.accent, 1);
     const accentLeft = race.id === 'terran'
       ? this.add.image(position.x - layout.cardWidth / 2 + 24, position.y - cardHeight / 2 + 24, 'terran-scv').setDisplaySize(20, 20)
@@ -316,7 +322,7 @@ export default class MenuScene extends Phaser.Scene {
 
     card.on('pointerdown', select);
 
-    return { race, card, topLine, accentLeft, accentRight, title, subtitle, facts, chip, chipIcon, chipLabel, cardHeight };
+    return { race, card, cardInner, topLine, accentLeft, accentRight, title, subtitle, facts, chip, chipIcon, chipLabel, cardHeight };
   }
 
   refreshCards() {
@@ -324,6 +330,7 @@ export default class MenuScene extends Phaser.Scene {
       const selected = entry.race.id === this.selectedRaceId;
       entry.card.setAlpha(selected ? 1 : 0.72);
       entry.card.setStrokeStyle(selected ? 3 : 2, selected ? entry.race.glow : entry.race.accent, 1);
+      entry.cardInner?.setStrokeStyle(1, selected ? entry.race.accent : 0x1e293b, selected ? 0.9 : 0.4);
       entry.facts.setColor(selected ? '#dbeafe' : '#94a3b8');
       entry.chip.setFillStyle(entry.race.accent, selected ? 0.35 : 0.18);
       entry.chipLabel.setText(selected ? 'Selected' : 'Tap to select');
@@ -422,6 +429,10 @@ export default class MenuScene extends Phaser.Scene {
     const shell = getShellSize(width, height, this.layout.compact);
     this.shell.setPosition(shell.x, shell.y);
     this.shell.setSize(shell.width, shell.height);
+    if (this.shellInner) {
+      this.shellInner.setPosition(shell.x, shell.y);
+      this.shellInner.setSize(shell.width - 12, shell.height - 12);
+    }
 
     this.titleText.setPosition(width / 2, this.layout.titleY);
     this.versionText.setPosition(width - 16, 16);
@@ -433,6 +444,9 @@ export default class MenuScene extends Phaser.Scene {
       const pos = this.layout.cardPositions[index];
       const cardHeight = entry.cardHeight;
       entry.card.setPosition(pos.x, pos.y).setSize(this.layout.cardWidth, cardHeight);
+      if (entry.cardInner) {
+        entry.cardInner.setPosition(pos.x, pos.y).setSize(this.layout.cardWidth - 8, cardHeight - 8);
+      }
       entry.topLine.setPosition(pos.x, pos.y - cardHeight / 2 + 16).setSize(this.layout.cardWidth - 20, 4);
       entry.title.setPosition(pos.x, pos.y - (this.layout.compact ? 48 : 74));
       entry.subtitle.setPosition(pos.x, pos.y - (this.layout.compact ? 18 : 34));
@@ -455,6 +469,9 @@ export default class MenuScene extends Phaser.Scene {
     this.refreshDifficultyControls();
 
     this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, START_BUTTON.height);
+    if (this.startHighlight) {
+      this.startHighlight.setPosition(width / 2, this.layout.startY - START_BUTTON.height / 2 + 2).setSize(this.layout.startWidth - 4, 2);
+    }
     this.startLabel.setPosition(width / 2, this.layout.startY);
     this.footerText.setPosition(width / 2, this.layout.footerY);
     this.refreshCards();
@@ -468,25 +485,31 @@ export default class MenuScene extends Phaser.Scene {
     // Clean up race cards and buttons when scene is destroyed.
     if (this.background) this.background.destroy();
     if (this.shell) this.shell.destroy();
+    if (this.shellInner) this.shellInner.destroy();
     if (this.titleText) this.titleText.destroy();
     if (this.footerText) this.footerText.destroy();
     if (this.difficultyLabelText) this.difficultyLabelText.destroy();
     if (this.startButton) this.startButton.destroy();
+    if (this.startHighlight) this.startHighlight.destroy();
     if (this.difficultyEntries) {
       for (const entry of this.difficultyEntries) {
         if (entry.button) entry.button.destroy();
         if (entry.label) entry.label.destroy();
       }
     }
-    if (this.raceCards) {
-      for (const card of this.raceCards) {
-        if (card.icon) card.icon.destroy();
-        if (card.title) card.title.destroy();
-        if (card.subtitle) card.subtitle.destroy();
-        if (card.facts) card.facts.destroy();
-        if (card.chip) card.chip.destroy();
-        if (card.accentLeft) card.accentLeft.destroy();
-        if (card.accentRight) card.accentRight.destroy();
+    if (this.cardEntries) {
+      for (const entry of this.cardEntries) {
+        if (entry.card) entry.card.destroy();
+        if (entry.cardInner) entry.cardInner.destroy();
+        if (entry.topLine) entry.topLine.destroy();
+        if (entry.accentLeft) entry.accentLeft.destroy();
+        if (entry.accentRight) entry.accentRight.destroy();
+        if (entry.title) entry.title.destroy();
+        if (entry.subtitle) entry.subtitle.destroy();
+        if (entry.facts) entry.facts.destroy();
+        if (entry.chip) entry.chip.destroy();
+        if (entry.chipIcon) entry.chipIcon.destroy();
+        if (entry.chipLabel) entry.chipLabel.destroy();
       }
     }
   }
