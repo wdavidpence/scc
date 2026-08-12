@@ -701,16 +701,16 @@ export default class BattleScene extends Phaser.Scene {
     const mw = MINIMAP_WIDTH, mh = MINIMAP_HEIGHT;
     // Background panel
     this.minimapBg = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw, mh, 0x020617, 0.8)
-      .setStrokeStyle(1, 0x334155, 0.6);
+      .setStrokeStyle(1, 0x334155, 0.6).setScrollFactor(0).setDepth(30);
     // Camera viewport rectangle (updated each frame)
     this.minimapViewport = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw * 0.3, mh * 0.4, 0x60a5fa, 0.12)
-      .setStrokeStyle(1, 0x60a5fa, 0.5);
+      .setStrokeStyle(1, 0x60a5fa, 0.5).setScrollFactor(0).setDepth(32);
     // Unit dots container (canvas texture for performance)
-    this.minimapCanvas = this.add.graphics();
+    this.minimapCanvas = this.add.graphics().setScrollFactor(0).setDepth(31);
 
     // Clickable overlay — tap to pan camera
     const minimapHit = this.add.rectangle(MINIMAP_X, MINIMAP_Y, mw, mh, 0x000000, 0)
-      .setInteractive({ useHandCursor: true });
+      .setScrollFactor(0).setDepth(33).setInteractive({ useHandCursor: true });
 
     minimapHit.on('pointerdown', (pointer) => {
       const localX = pointer.x - MINIMAP_X;
@@ -744,6 +744,14 @@ export default class BattleScene extends Phaser.Scene {
 
     this.minimapCanvas.clear();
     const ox = MINIMAP_X, oy = MINIMAP_Y;
+
+    // Tactical anchors: base beacons and contested-lane spine
+    this.minimapCanvas.lineStyle(1, 0x38bdf8, 0.35);
+    this.minimapCanvas.lineBetween(ox + WORLD_WIDTH / 2 * sx, oy + 3, ox + WORLD_WIDTH / 2 * sx, oy + mh - 3);
+    this.minimapCanvas.fillStyle(0x2563eb, 0.9);
+    this.minimapCanvas.fillCircle(ox + 200 * sx, oy + WORLD_HEIGHT / 2 * sy, 4);
+    this.minimapCanvas.fillStyle(0xf97316, 0.9);
+    this.minimapCanvas.fillCircle(ox + (WORLD_WIDTH - 200) * sx, oy + WORLD_HEIGHT / 2 * sy, 4);
 
     // Resource nodes (small cyan dots)
     this.minimapCanvas.fillStyle(0x67e8f9, 0.5);
