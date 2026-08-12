@@ -964,7 +964,13 @@ export default class HudScene extends Phaser.Scene {
 
       // Update pulse animation for active command
       this.updateCommandPulse(button, isActive);
+      if (isActive) {
+        this.commandIndicator.setPosition(button.bg.x, button.bg.y - button.bg.height / 2 - 5).setVisible(true);
+      }
     });
+    if (!this.buttons.some((button) => activeCommand === button.key)) {
+      this.commandIndicator.setVisible(false);
+    }
 
     // Position HP bar (reuse file-scoped selectionPanelY helper)
     const panelX = PANEL_X;
