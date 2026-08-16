@@ -1055,6 +1055,9 @@ export default class BattleScene extends Phaser.Scene {
       sprite.setTint(0xc2410c);
     }
     const ridge = this.add.rectangle(x, y - height / 2 + 8, width - 18, 4, 0xffffff, construction ? 0.16 : 0.22).setDepth(sDepth + 1);
+    const coreColor = team === 'enemy' ? 0xff6b35 : this.race.accent;
+    const core = this.add.rectangle(x, y + height * 0.32, width * 0.35, 5, coreColor, construction ? 0.12 : 0.45)
+      .setDepth(sDepth + 2);
     const labelText = this.add.text(x, y - 5, roleName, {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(10px, 2vw, 14px)',
@@ -1097,6 +1100,7 @@ export default class BattleScene extends Phaser.Scene {
       shadow,
       sprite,
       ridge,
+      core,
       labelText,
       hpBack,
       hpFront,
@@ -2023,6 +2027,17 @@ export default class BattleScene extends Phaser.Scene {
     const allStructures = this.structures.filter((structure) => structure.type === 'structure');
 
     allStructures.forEach((structure) => {
+      if (structure.core) {
+        if (structure.type === 'construction') {
+          structure.core.setAlpha(0.12);
+        } else {
+          const phase = this.time.now * 0.0015 + structure.x * 0.05;
+          structure.core
+            .setAlpha(0.45 + Math.sin(phase) * 0.2)
+            .setScale(1 + Math.sin(phase * 1.3) * 0.04);
+        }
+      }
+
       if (structure.queue.length > 0) {
         const item = structure.queue[0];
         item.progress -= dt;
@@ -2949,6 +2964,7 @@ export default class BattleScene extends Phaser.Scene {
     entity.roleRing?.destroy();
     entity.sprite?.destroy();
     entity.ridge?.destroy();
+    entity.core?.destroy();
     entity.labelText?.destroy();
     entity.hpBack?.destroy();
     entity.hpFront?.destroy();
