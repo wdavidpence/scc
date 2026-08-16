@@ -5,7 +5,7 @@ import { getDifficulty, getEnemyWaveInterval } from '../game/data/difficulties.j
 import { createInputController } from '../game/input/createInputController.js';
 import { getUnitDef } from '../game/unitDefs.js';
 import ParticleManager from '../game/particles/ParticleManager.js';
-import { spawnMuzzleFlash, spawnExplosion, spawnTargetImpact } from '../game/particleEffects.js';
+import { spawnMuzzleFlash, spawnExplosion, spawnTargetImpact, spawnTracer } from '../game/particleEffects.js';
 import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
 
@@ -2173,6 +2173,8 @@ export default class BattleScene extends Phaser.Scene {
       structure.statusText.setText('Firing');
       // Visual feedback: muzzle flash + damage number
       spawnMuzzleFlash(this, structure.x, structure.y, this.race?.id || 'terran');
+      spawnTracer(this, structure.x, structure.y, target.x, target.y, this.race?.id || 'terran');
+      spawnTargetImpact(this, target.x, target.y, this.race?.id || 'terran');
       this.showDamageFlash(target, def.attackDamage);
       if (this.audioManager) this.audioManager.attack(structure);
     } else {
@@ -2653,6 +2655,9 @@ export default class BattleScene extends Phaser.Scene {
             this.moveEntityTowards(unit, unit.targetEntity.x, unit.targetEntity.y, dt);
           } else if (unit.cooldown <= 0) {
             if (this.audioManager) this.audioManager.attack(unit);
+            spawnMuzzleFlash(this, unit.x, unit.y, this.race?.id || 'terran', { count: 3, life: 0.16 });
+            spawnTracer(this, unit.x, unit.y, unit.targetEntity.x, unit.targetEntity.y, this.race?.id || 'terran');
+            spawnTargetImpact(this, unit.targetEntity.x, unit.targetEntity.y, this.race?.id || 'terran');
             unit.targetEntity.hp -= unit.attack;
             unit.cooldown = unit.cooldownTime;
           }
@@ -2665,6 +2670,9 @@ export default class BattleScene extends Phaser.Scene {
               this.moveEntityTowards(unit, target.x, target.y, dt);
             } else if (unit.cooldown <= 0) {
               if (this.audioManager) this.audioManager.attack(unit);
+              spawnMuzzleFlash(this, unit.x, unit.y, this.race?.id || 'terran', { count: 3, life: 0.16 });
+              spawnTracer(this, unit.x, unit.y, target.x, target.y, this.race?.id || 'terran');
+              spawnTargetImpact(this, target.x, target.y, this.race?.id || 'terran');
               target.hp -= unit.attack;
               unit.cooldown = unit.cooldownTime;
             }

@@ -59,7 +59,7 @@ export function spawnMuzzleFlash(scene, x, y, race, options = {}) {
     const size  = Phaser.Math.Between(3, 6);
 
     const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1).setOrigin(0.5).setAlpha(1).setDepth(65);
-    p.setTint(getColorFromString(col));
+    p.setFillStyle(getColorFromString(col), 1);
     group.add(p);
 
     scene.tweens.add({
@@ -136,7 +136,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
       .setAlpha(1)
       .setDepth(68);
 
-    p.setTint(getColorFromString(col));
+    p.setFillStyle(getColorFromString(col), 1);
     coreGroup.add(p);
 
     const tx = x + Math.cos(angle) * dist;
@@ -170,7 +170,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
       .setAlpha(1)
       .setDepth(75);
 
-    s.setTint(getColorFromString(col));
+    s.setFillStyle(getColorFromString(col), 1);
 
     scene.tweens.add({
       targets: s,
@@ -197,7 +197,7 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
       .setAlpha(0.8)
       .setDepth(67);
 
-    d.setTint(getColorFromString(col));
+    d.setFillStyle(getColorFromString(col), 1);
 
     scene.tweens.add({
       targets: d,
@@ -240,6 +240,27 @@ export function spawnTargetImpact(scene, x, y, race, options = {}) {
     duration: 160,
     ease: 'Quad.easeOut',
     onComplete: () => { ring.destroy(); }
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Tracer — a short faction-colored beam from attacker to target.
+ * ---------------------------------------------------------------------------*/
+
+export function spawnTracer(scene, x1, y1, x2, y2, race, options = {}) {
+  const color = race === 'zerg' ? 0xf97316 : race === 'protoss' ? 0xa78bfa : 0x60a5fa;
+  const tracer = scene.add.graphics().setDepth(64);
+  tracer.lineStyle(8, color, 0.18);
+  tracer.lineBetween(x1, y1, x2, y2);
+  tracer.lineStyle(2, 0xffffff, 0.82);
+  tracer.lineBetween(x1, y1, x2, y2);
+
+  scene.tweens.add({
+    targets: tracer,
+    alpha: 0,
+    duration: options.duration ?? 130,
+    ease: 'Quad.easeOut',
+    onComplete: () => tracer.destroy()
   });
 }
 
