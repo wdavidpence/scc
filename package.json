@@ -1,6 +1,6 @@
 {
   "name": "scc",
-  "version": "0.1.0",
+  "version": "2.9.1",
   "description": "SCC: a mobile-first StarCraft-inspired RTS built with Phaser 3.x",
   "type": "module",
   "scripts": {

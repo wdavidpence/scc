@@ -151,25 +151,29 @@ export default class BattleScene extends Phaser.Scene {
       });
     });
 
-    this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-
     this.createBattleTextures();
 
-    this.background = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, this.race.backdrop, 1);
+    this.background = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, this.race.backdrop, 1)
+      .setDepth(-20);
     this.terrainTile = this.add.tileSprite(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, `${this.race.id}-terrain`)
       .setAlpha(0.24)
-      .setDepth(0);
+      .setDepth(-19);
     this.grid = this.add.grid(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, 48, 48, 0x0c1826, 0, 0x223548, 0.35)
       .setOrigin(0.5)
-      .setAlpha(0.22);
+      .setAlpha(0.22)
+      .setDepth(-18);
 
     this.middleLane = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 220, WORLD_HEIGHT - 90, 0x0f172a, 0.18)
       .setStrokeStyle(1, 0x1f3b61, 0.35);
 
     this.playerZone = this.add.rectangle(0, WORLD_HEIGHT / 2, 360, WORLD_HEIGHT, this.race.accent, 0.08)
-      .setOrigin(0, 0.5);
+      .setOrigin(0, 0.5)
+      .setDepth(-16);
     this.enemyZone = this.add.rectangle(WORLD_WIDTH, WORLD_HEIGHT / 2, 360, WORLD_HEIGHT, 0xf97316, 0.08)
-      .setOrigin(1, 0.5);
+      .setOrigin(1, 0.5)
+      .setDepth(-16);
+
+    this.createAtmosphere();
 
     this.drawDecor();
     this.createMap();
@@ -275,6 +279,45 @@ export default class BattleScene extends Phaser.Scene {
       this.add.line(x, WORLD_HEIGHT / 2, -12, -8, 0, 0, 0x38bdf8, 0.22).setDepth(2);
       this.add.line(x, WORLD_HEIGHT / 2, 0, 0, -12, 8, 0x38bdf8, 0.22).setDepth(2);
     });
+  }
+
+  createAtmosphere() {
+    const atmosphere = this.add.graphics().setDepth(-12);
+
+    // A restrained sci-fi skybox: deterministic dust, distant beacons, and
+    // lane lighting give the battlefield depth without obscuring gameplay.
+    atmosphere.fillStyle(0x071526, 0.34);
+    atmosphere.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+    for (let i = 0; i < 54; i += 1) {
+      const x = 36 + ((i * 277) % (WORLD_WIDTH - 72));
+      const y = 92 + ((i * 149) % (WORLD_HEIGHT - 184));
+      const radius = 1 + (i % 3);
+      const color = i % 4 === 0 ? this.race.accent : (i % 3 === 0 ? 0x38bdf8 : 0x94a3b8);
+      atmosphere.fillStyle(color, i % 4 === 0 ? 0.22 : 0.12);
+      atmosphere.fillCircle(x, y, radius);
+    }
+
+    // Central command corridor: layered rings and directional chevrons.
+    atmosphere.lineStyle(2, this.race.accent, 0.18);
+    atmosphere.strokeCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 270);
+    atmosphere.lineStyle(1, 0x7dd3fc, 0.13);
+    atmosphere.strokeCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 292);
+    atmosphere.lineStyle(2, 0xf97316, 0.15);
+    atmosphere.lineBetween(430, WORLD_HEIGHT / 2, WORLD_WIDTH - 430, WORLD_HEIGHT / 2);
+
+    for (let i = 0; i < 8; i += 1) {
+      const x = 520 + i * 92;
+      atmosphere.fillStyle(i % 2 === 0 ? this.race.accent : 0xf97316, 0.22);
+      atmosphere.fillTriangle(x, WORLD_HEIGHT / 2 - 5, x + 16, WORLD_HEIGHT / 2, x, WORLD_HEIGHT / 2 + 5);
+    }
+
+    // Dark edge treatment keeps the playable center visually dominant.
+    atmosphere.fillStyle(0x020617, 0.24);
+    atmosphere.fillRect(0, 0, WORLD_WIDTH, 42);
+    atmosphere.fillRect(0, WORLD_HEIGHT - 42, WORLD_WIDTH, 42);
+    atmosphere.fillRect(0, 0, 42, WORLD_HEIGHT);
+    atmosphere.fillRect(WORLD_WIDTH - 42, 0, 42, WORLD_HEIGHT);
   }
 
   createBattleTextures() {
