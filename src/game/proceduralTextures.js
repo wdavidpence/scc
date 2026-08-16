@@ -35,65 +35,89 @@ function createTex(scene, key, w, h, draw) {
 
 // ── TERRAN (industrial/mech aesthetic) ─────────────────────────────────
 function terranScv(ctx, w, h) {
-  // Heavy mech suit — boxy body + drill arm + backpack thruster
   const cx = w / 2;
-  // Legs / treads
-  ctx.fillStyle = '#2d4a6f'; rrect(ctx, 8, h - 10, w - 16, 8, 2); ctx.fill();
-  // Body armor plate
-  ctx.fillStyle = '#4a7ab5'; rrect(ctx, cx - 12, h - 36, 24, 20, 3); ctx.fill();
-  // Shoulder pads
-  ctx.fillStyle = '#5a8ac5'; rrect(ctx, cx - 16, h - 38, 8, 8, 2); ctx.fill();
-  rrect(ctx, cx + 8, h - 38, 8, 8, 2); ctx.fill();
-  // Helmet dome
-  ctx.fillStyle = '#6ba3d9'; ctx.beginPath(); ctx.arc(cx, h - 42, 10, Math.PI, 0); ctx.fill();
-  // Visor (glowing cyan)
-  ctx.fillStyle = '#00e5ff'; rrect(ctx, cx - 7, h - 46, 14, 5, 2); ctx.fill();
-  // Drill arm (right)
-  ctx.fillStyle = '#8d6e3f'; rrect(ctx, cx + 14, h - 32, 10, 5, 2); ctx.fill();
-  // Drill tip (spiral)
-  ctx.fillStyle = '#d4a017'; rrect(ctx, cx + 22, h - 36, 4, 10, 1); ctx.fill();
-  // Backpack thruster (left)
-  ctx.fillStyle = '#3d5a7f'; rrect(ctx, cx - 18, h - 34, 6, 12, 2); ctx.fill();
+  ctx.save();
+  // Grounded tread shadow and heavy lower chassis.
+  ctx.fillStyle = '#07111c'; ellipse(ctx, cx, h - 6, w / 2 - 5, 5);
+  ctx.fillStyle = '#172a43'; rrect(ctx, 7, h - 12, w - 14, 9, 2); ctx.fill();
+  ctx.fillStyle = '#405c7d'; rrect(ctx, 10, h - 10, w - 20, 4, 1); ctx.fill();
+  for (let i = 0; i < 5; i += 1) {
+    ctx.fillStyle = i % 2 ? '#172a43' : '#90a4ae';
+    rrect(ctx, 12 + i * 5, h - 9, 2, 3, 0); ctx.fill();
+  }
+  // Reinforced body shell with a cool metal gradient.
+  const armor = ctx.createLinearGradient(0, h - 39, 0, h - 17);
+  armor.addColorStop(0, '#8db9df'); armor.addColorStop(0.28, '#4a7ab5'); armor.addColorStop(1, '#203a5c');
+  ctx.fillStyle = armor; rrect(ctx, cx - 12, h - 37, 24, 21, 4); ctx.fill();
+  ctx.strokeStyle = '#0b1728'; ctx.lineWidth = 2; rrect(ctx, cx - 12, h - 37, 24, 21, 4); ctx.stroke();
+  ctx.fillStyle = '#6d9ac2'; rrect(ctx, cx - 16, h - 39, 8, 9, 2); ctx.fill(); rrect(ctx, cx + 8, h - 39, 8, 9, 2); ctx.fill();
+  ctx.fillStyle = '#172a43'; rrect(ctx, cx - 6, h - 29, 12, 7, 1); ctx.fill();
+  ctx.fillStyle = '#9cc8e8'; rrect(ctx, cx - 4, h - 28, 8, 2, 0); ctx.fill();
+  // Helmet, luminous visor, and side comms light.
+  ctx.fillStyle = '#6ba3d9'; ctx.beginPath(); ctx.arc(cx, h - 42, 11, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#12243b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, h - 42, 11, Math.PI, 0); ctx.stroke();
+  ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 7; ctx.fillStyle = '#b8f7ff'; rrect(ctx, cx - 8, h - 46, 16, 5, 2); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(cx - 12, h - 33, 2, 0, Math.PI * 2); ctx.fill();
+  // Drill arm with a striped industrial bit.
+  ctx.fillStyle = '#8d6e3f'; rrect(ctx, cx + 13, h - 32, 12, 6, 2); ctx.fill();
+  ctx.fillStyle = '#d4a017'; rrect(ctx, cx + 23, h - 37, 5, 12, 1); ctx.fill();
+  ctx.fillStyle = '#fff1a8'; rrect(ctx, cx + 24, h - 35, 2, 8, 0); ctx.fill();
+  ctx.fillStyle = '#294665'; rrect(ctx, cx - 19, h - 35, 6, 14, 2); ctx.fill();
+  ctx.restore();
 }
 
 function terranMarine(ctx, w, h) {
   const cx = w / 2;
-  // Boots
-  ctx.fillStyle = '#3d5a7f'; rrect(ctx, cx - 10, h - 8, 8, 6, 2); ctx.fill();
-  rrect(ctx, cx + 2, h - 8, 8, 6, 2); ctx.fill();
-  // Body armor (marine green)
-  ctx.fillStyle = '#4a7ab5'; rrect(ctx, cx - 10, h - 32, 20, 22, 4); ctx.fill();
-  // Chest plate detail
-  ctx.fillStyle = '#5a8ac5'; rrect(ctx, cx - 6, h - 28, 12, 6, 2); ctx.fill();
-  // Helmet with visor
-  ctx.fillStyle = '#4a7ab5'; ctx.beginPath(); ctx.arc(cx, h - 38, 10, Math.PI, 0); ctx.fill();
-  ctx.fillStyle = '#00ff88'; rrect(ctx, cx - 7, h - 42, 14, 5, 2); ctx.fill();
-  // Rifle (right side)
-  ctx.fillStyle = '#607d8b'; rrect(ctx, cx + 10, h - 26, 14, 5, 2); ctx.fill();
-  // Rifle barrel
-  ctx.fillStyle = '#90a4ae'; rrect(ctx, cx + 22, h - 28, 5, 9, 1); ctx.fill();
+  ctx.save();
+  ctx.fillStyle = '#07111c'; ellipse(ctx, cx, h - 5, 14, 4);
+  // Boots and segmented powered armor.
+  ctx.fillStyle = '#172a43'; rrect(ctx, cx - 11, h - 10, 9, 7, 2); ctx.fill(); rrect(ctx, cx + 2, h - 10, 9, 7, 2); ctx.fill();
+  const armor = ctx.createLinearGradient(0, h - 35, 0, h - 10);
+  armor.addColorStop(0, '#8db9df'); armor.addColorStop(0.35, '#4a7ab5'); armor.addColorStop(1, '#203a5c');
+  ctx.fillStyle = armor; rrect(ctx, cx - 11, h - 33, 22, 24, 4); ctx.fill();
+  ctx.strokeStyle = '#0b1728'; ctx.lineWidth = 2; rrect(ctx, cx - 11, h - 33, 22, 24, 4); ctx.stroke();
+  ctx.fillStyle = '#6d9ac2'; rrect(ctx, cx - 6, h - 29, 12, 7, 1); ctx.fill();
+  ctx.fillStyle = '#172a43'; rrect(ctx, cx - 7, h - 20, 14, 5, 1); ctx.fill();
+  ctx.fillStyle = '#9cc8e8'; rrect(ctx, cx - 4, h - 19, 8, 2, 0); ctx.fill();
+  // Helmet rim and bright green tactical visor.
+  ctx.fillStyle = '#4a7ab5'; ctx.beginPath(); ctx.arc(cx, h - 39, 11, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#12243b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, h - 39, 11, Math.PI, 0); ctx.stroke();
+  ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 7; ctx.fillStyle = '#c5ffe6'; rrect(ctx, cx - 8, h - 43, 16, 5, 2); ctx.fill(); ctx.shadowBlur = 0;
+  // Gauss rifle with heat vent and muzzle glow.
+  ctx.fillStyle = '#263b52'; rrect(ctx, cx + 9, h - 27, 16, 6, 2); ctx.fill();
+  ctx.fillStyle = '#90a4ae'; rrect(ctx, cx + 22, h - 29, 6, 10, 1); ctx.fill();
+  ctx.fillStyle = '#fbbf24'; ctx.fillRect(cx + 27, h - 27, 2, 5);
+  ctx.fillStyle = '#294665'; rrect(ctx, cx - 16, h - 29, 5, 13, 1); ctx.fill();
+  ctx.restore();
 }
 
 function terranMarauder(ctx, w, h) {
   const cx = w / 2;
-  // Heavy boots
-  ctx.fillStyle = '#2d4a6f'; rrect(ctx, cx - 14, h - 8, 12, 6, 2); ctx.fill();
-  rrect(ctx, cx + 2, h - 8, 12, 6, 2); ctx.fill();
-  // Heavy body armor (dark blue)
-  ctx.fillStyle = '#3a5d8e'; rrect(ctx, cx - 14, h - 40, 28, 30, 5); ctx.fill();
-  // Chest armor plate (large)
-  ctx.fillStyle = '#4a7ab5'; rrect(ctx, cx - 10, h - 36, 20, 14, 3); ctx.fill();
-  // Shoulder pads (bulky)
-  ctx.fillStyle = '#5a8ac5'; rrect(ctx, cx - 18, h - 42, 10, 8, 3); ctx.fill();
-  rrect(ctx, cx + 8, h - 42, 10, 8, 3); ctx.fill();
-  // Helmet (large, angular)
-  ctx.fillStyle = '#3a5d8e'; ctx.beginPath(); ctx.arc(cx, h - 48, 13, Math.PI, 0); ctx.fill();
-  // Red visor (aggressive)
-  ctx.fillStyle = '#ff4444'; rrect(ctx, cx - 9, h - 52, 18, 6, 3); ctx.fill();
-  // Dual cannons (large)
-  ctx.fillStyle = '#8d6e3f'; rrect(ctx, cx + 14, h - 32, 16, 8, 3); ctx.fill();
-  // Cannon barrel (heavy)
-  ctx.fillStyle = '#b8860b'; rrect(ctx, cx + 28, h - 34, 6, 12, 2); ctx.fill();
+  ctx.save();
+  ctx.fillStyle = '#07111c'; ellipse(ctx, cx, h - 5, 18, 5);
+  // Massive powered boots and layered exosuit silhouette.
+  ctx.fillStyle = '#172a43'; rrect(ctx, cx - 15, h - 11, 13, 8, 2); ctx.fill(); rrect(ctx, cx + 2, h - 11, 13, 8, 2); ctx.fill();
+  const armor = ctx.createLinearGradient(0, h - 45, 0, h - 10);
+  armor.addColorStop(0, '#769ac1'); armor.addColorStop(0.35, '#3a5d8e'); armor.addColorStop(1, '#172a43');
+  ctx.fillStyle = armor; rrect(ctx, cx - 15, h - 42, 30, 33, 5); ctx.fill();
+  ctx.strokeStyle = '#080f1b'; ctx.lineWidth = 2; rrect(ctx, cx - 15, h - 42, 30, 33, 5); ctx.stroke();
+  // Heavy chest plate, vents, and blue-white status strip.
+  ctx.fillStyle = '#5d87b6'; rrect(ctx, cx - 11, h - 37, 22, 15, 3); ctx.fill();
+  ctx.fillStyle = '#1b304d'; rrect(ctx, cx - 8, h - 32, 16, 7, 1); ctx.fill();
+  ctx.fillStyle = '#b9d7f0'; rrect(ctx, cx - 5, h - 30, 10, 2, 0); ctx.fill();
+  ctx.fillStyle = '#111d30'; rrect(ctx, cx - 11, h - 19, 22, 5, 1); ctx.fill();
+  for (let i = 0; i < 4; i += 1) { ctx.fillStyle = i % 2 ? '#334f72' : '#9bb9d4'; ctx.fillRect(cx - 8 + i * 5, h - 18, 2, 3); }
+  // Armored shoulders and helmet.
+  ctx.fillStyle = '#6d96c1'; rrect(ctx, cx - 20, h - 44, 11, 10, 3); ctx.fill(); rrect(ctx, cx + 9, h - 44, 11, 10, 3); ctx.fill();
+  ctx.fillStyle = '#3a5d8e'; ctx.beginPath(); ctx.arc(cx, h - 50, 14, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#0b1728'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, h - 50, 14, Math.PI, 0); ctx.stroke();
+  ctx.shadowColor = '#ff4444'; ctx.shadowBlur = 8; ctx.fillStyle = '#ffd0c8'; rrect(ctx, cx - 10, h - 54, 20, 6, 3); ctx.fill(); ctx.shadowBlur = 0;
+  // Twin grenade cannons with hot muzzle tips.
+  ctx.fillStyle = '#8d6e3f'; rrect(ctx, cx + 14, h - 33, 18, 9, 3); ctx.fill();
+  ctx.fillStyle = '#b8860b'; rrect(ctx, cx + 28, h - 36, 7, 14, 2); ctx.fill();
+  ctx.fillStyle = '#fff1a8'; rrect(ctx, cx + 30, h - 34, 3, 9, 1); ctx.fill();
+  ctx.fillStyle = '#294665'; rrect(ctx, cx - 22, h - 35, 6, 16, 2); ctx.fill();
+  ctx.restore();
 }
 
 function terranCommandCenter(ctx, w, h) {
