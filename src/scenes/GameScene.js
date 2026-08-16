@@ -1243,6 +1243,12 @@ export default class BattleScene extends Phaser.Scene {
       stimpackGlow: null
     };
 
+    if (kind !== 'worker') {
+      entity.energyHalo = this.add.circle(x, y, def.radius * 1.3, team === 'player' ? this.race.accent : 0xf97316, 0)
+        .setStrokeStyle(2, team === 'player' ? this.race.accent : 0xf97316, 0)
+        .setDepth(uDepth - 1);
+    }
+
     if (team === 'player') {
       this.playerUnits.push(entity);
     } else {
@@ -2195,6 +2201,14 @@ export default class BattleScene extends Phaser.Scene {
       if (unit.roleRing) {
         unit.roleRing.setPosition(unit.x, unit.y).setDepth(uDepth - 1);
       }
+      if (unit.energyHalo) {
+        unit.energyHalo.setPosition(unit.x, unit.y).setDepth(uDepth - 1);
+        const activeCombat = unit._motionState === 'attack' || unit.isCharging;
+        const pulse = 0.15 + Math.sin(this.time.now * 0.006) * 0.08;
+        unit.energyHalo
+          .setAlpha(pulse + (activeCombat ? 0.45 : 0))
+          .setScale(activeCombat ? 1.2 : 1);
+      }
       unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.width = (unit.hp / unit.maxHp) * (unit.radius * 2 + 8);
@@ -2962,6 +2976,7 @@ export default class BattleScene extends Phaser.Scene {
     entity.shadow?.destroy();
     entity.teamMarker?.destroy();
     entity.roleRing?.destroy();
+    entity.energyHalo?.destroy();
     entity.sprite?.destroy();
     entity.ridge?.destroy();
     entity.core?.destroy();
