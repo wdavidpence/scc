@@ -11,6 +11,7 @@ import { createAudioManager } from '../game/audioManager.js';
 import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
 import { getAnimationState } from '../game/animationState.js';
 import { MARINE_ANIMATION_PROFILE, BASIC_UNIT_ANIMATION_PROFILES } from '../game/animationProfiles.js';
+import { getDamageTier } from '../game/damageState.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -2221,8 +2222,12 @@ export default class BattleScene extends Phaser.Scene {
       unit.hpBack.setPosition(unit.x, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.setPosition(unit.x - (unit.radius * 2 + 8) / 2, unit.y + unit.radius + 8).setDepth(uDepth + 1);
       unit.hpFront.width = (unit.hp / unit.maxHp) * (unit.radius * 2 + 8);
-      if (unit.team === 'enemy' && unit.hp / unit.maxHp < 0.25) {
-        const pulse = 0.78 + Math.sin(this.time.now * 0.012) * 0.18;
+      const damageTier = getDamageTier(unit.hp, unit.maxHp);
+      unit.damageTier = damageTier;
+      if (damageTier !== 'healthy') {
+        const pulse = damageTier === 'critical'
+          ? 0.78 + Math.sin(this.time.now * 0.012) * 0.18
+          : 0.3 + Math.sin(this.time.now * 0.006) * 0.08;
         unit.critIndicator.setPosition(unit.x, unit.y).setDepth(uDepth - 1).setAlpha(pulse).setVisible(true);
       } else {
         unit.critIndicator.setVisible(false);
