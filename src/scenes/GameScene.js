@@ -8,6 +8,7 @@ import ParticleManager from '../game/particles/ParticleManager.js';
 import { spawnMuzzleFlash, spawnExplosion, spawnTargetImpact, spawnTracer } from '../game/particleEffects.js';
 import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
+import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -181,6 +182,8 @@ export default class BattleScene extends Phaser.Scene {
     this.spawnStartingForces();
     this.createBattleFieldTitle();
     this.createMinimap();
+    // Twenty-pass battle visual layer: attached after all initial entities exist.
+    this.visualPolish = installBattleVisualPolish(this);
 
     session.startBattle(this.race.id, this.race.name, {
       minerals: this.playerMinerals,
@@ -1511,6 +1514,7 @@ export default class BattleScene extends Phaser.Scene {
   selectEntity(entity) {
     this.selectedEntity = entity;
     this.commandMode = 'select';
+    this.visualPolish?.onSelect(entity);
     this.showSelectionHighlight(entity);
     this.syncSession(`Selected ${entity.label}.`);
     // Audio feedback: selection chirp.
@@ -1910,6 +1914,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     const dt = delta / 1000;
+    this.visualPolish?.update(time, delta, dt);
 
     const keyboardVector = this.inputController.getKeyboardVector();
     if (keyboardVector.lengthSq() > 0) {
@@ -3740,6 +3745,8 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   shutdown() {
+    this.visualPolish?.destroy();
+    this.visualPolish = null;
     this.inputController?.destroy();
     this.scene.stop('HudScene');
     this.scale.off('resize', this.handleResize, this);

@@ -47,6 +47,17 @@ function raceCardSubtitleWrapWidth(cardWidth) {
   return cardWidth - RACE_CARD_SUBTITLE_WRAP_PAD;
 }
 
+const FACTION_PALETTES = {
+  terran: { deep: 0x07111c, mid: 0x12345a, hot: 0x60a5fa, light: 0xdbeafe },
+  zerg: { deep: 0x140b08, mid: 0x4a1d18, hot: 0xf97316, light: 0xffedd5 },
+  protoss: { deep: 0x0c0918, mid: 0x2f2160, hot: 0xa78bfa, light: 0xede9fe },
+};
+
+function reducedMotion() {
+  return typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
 export default class MenuScene extends Phaser.Scene {
   constructor() {
     super('MenuScene');
@@ -62,12 +73,23 @@ export default class MenuScene extends Phaser.Scene {
     this.selectedRaceId = session.raceId ?? 'terran';
     this.selectedDifficultyId = session.difficultyId ?? 'normal';
 
-    this.cameras.main.setBackgroundColor('#07111c');
+    this.reducedMotion = reducedMotion();
+    this.isTransitioning = false;
+    this.lastInteractionAt = this.time.now;
+    this.attractIndex = 0;
+    this.cameras.main.setBackgroundColor('#050a12');
 
-    this.background = this.add.rectangle(width / 2, height / 2, width, height, 0x07111c, 1);
+    // PASS 1/2/3/4/5/6/7/8/9/10: layered command-deck atmosphere.
+    this.background = this.add.rectangle(width / 2, height / 2, width, height, 0x050a12, 1);
+    this.backdropGlow = this.add.graphics().setDepth(-8);
+    this.backdropGrid = this.add.graphics().setDepth(-7).setAlpha(0.24);
+    this.backdropVignette = this.add.graphics().setDepth(-6).setAlpha(0.72);
+    this.starfield = this.add.group();
+    this.createBackdropArt(width, height);
 
-    // Subtle floating particles in the background
+    // PASS 11: directional, recycled ambient particles.
     const particleGroup = this.add.group();
+    this.particleGroup = particleGroup;
     for (let i = 0; i < 40; i += 1) {
       const px = Phaser.Math.Between(0, width);
       const py = Phaser.Math.Between(0, height);
@@ -78,7 +100,7 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     // Gently drift particles upward
-    this.tweens.addCounter({
+    this.particleTween = this.reducedMotion ? null : this.tweens.addCounter({
       from: 0, to: 1, duration: Infinity, ease: 'Linear',
       onUpdate: (tween) => {
         particleGroup.getChildren().forEach((p, idx) => {
@@ -91,18 +113,29 @@ export default class MenuScene extends Phaser.Scene {
     });
 
     const shell = getShellSize(width, height, this.layout.compact);
+    this.shellGlow = this.add.rectangle(shell.x, shell.y, shell.width + 18, shell.height + 18, 0x1d4ed8, 0.06)
+      .setStrokeStyle(1, 0x60a5fa, 0.2).setDepth(-4);
     this.shell = this.add.rectangle(shell.x, shell.y, shell.width, shell.height, 0x0a1524, 0.92)
       .setStrokeStyle(2, 0x1f3b61, 1);
     this.shellInner = this.add.rectangle(shell.x, shell.y, shell.width - 12, shell.height - 12, 0x000000, 0)
       .setStrokeStyle(1, 0x1e3a5f, 0.6);
 
+    this.titleHalo = this.add.text(width / 2, this.layout.titleY + 2, 'SCC', {
+      ...MENU_TEXT_STYLE,
+      fontSize: 'clamp(48px, 10vw, 92px)',
+      fontStyle: '900', color: '#1d4ed8', align: 'center', alpha: 0.32,
+    }).setOrigin(0.5).setBlendMode(Phaser.BlendModes.ADD);
     this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
       ...MENU_TEXT_STYLE,
-      fontSize: 'clamp(36px, 8vw, 64px)',
-      fontStyle: '800',
+      fontSize: 'clamp(48px, 10vw, 92px)',
+      fontStyle: '900',
       color: '#ffffff',
-      align: 'center'
+      align: 'center', letterSpacing: 8,
+      shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 8, stroke: true, fill: true }
     }).setOrigin(0.5);
+    this.titleRule = this.add.graphics();
+    this.titleRule.lineStyle(1, 0x60a5fa, 0.65);
+    this.titleRule.lineBetween(width / 2 - 150, this.layout.titleY + 52, width / 2 + 150, this.layout.titleY + 52);
 
     // Version number (top-right corner)
     this.versionText = this.add.text(width - 16, 16, 'v2.9.1', {
@@ -135,19 +168,26 @@ export default class MenuScene extends Phaser.Scene {
 
     this.difficultyEntries = [];
     this.createDifficultyControls();
+    this.createDifficultyTrack();
 
-    // Start button - simple rectangle with reliable input
+    // PASS 7/15/18: layered deploy control, pulse, and transition lock.
+    this.startAura = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth + 22, START_BUTTON.height + 18, 0x2563eb, 0.1)
+      .setStrokeStyle(1, 0x60a5fa, 0.35);
     this.startButton = this.add.rectangle(width / 2, this.layout.startY, this.layout.startWidth, START_BUTTON.height, 0x2563eb, 1)
       .setStrokeStyle(2, 0x60a5fa, 1)
       .setInteractive({ useHandCursor: true });
     this.startHighlight = this.add.rectangle(width / 2, this.layout.startY - START_BUTTON.height / 2 + 2, this.layout.startWidth - 4, 2, 0xffffff, 0.35);
 
-    this.startLabel = this.add.text(width / 2, this.layout.startY, 'Deploy into Mission', {
+    this.startLabel = this.add.text(width / 2, this.layout.startY - 4, 'Deploy into Mission', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(16px, 3vw, 22px)',
       fontStyle: '700',
       color: '#ffffff',
       align: 'center'
+    }).setOrigin(0.5);
+    this.startSubLabel = this.add.text(width / 2, this.layout.startY + 20, 'CLICK TO INITIALIZE DEPLOYMENT', {
+      ...MENU_TEXT_STYLE, fontSize: '10px', fontStyle: '700', color: '#dbeafe',
+      letterSpacing: 2, align: 'center'
     }).setOrigin(0.5);
 
     this.footerText = this.add.text(width / 2, this.layout.footerY, 'Tip: tap and drag the battlefield to pan once you are in the match.', {
@@ -160,7 +200,13 @@ export default class MenuScene extends Phaser.Scene {
     // Multiple input handlers for maximum compatibility
     this.startButton.on('pointerdown', () => this.startBattle());
     this.startButton.on('click', () => this.startBattle());
+    this.input.on('pointerdown', () => this.noteInteraction());
+    this.keyboardInteractionHandler = () => this.noteInteraction();
+    this.input.keyboard?.on('keydown', this.keyboardInteractionHandler, this);
     this.refreshCards();
+    this.startIdleAnimations();
+    // PASS 12/13/16: responsive attract mode, motion preference, and input polish.
+    this.attractTimer = this.time.addEvent({ delay: 4200, loop: true, callback: () => this.updateAttractMode() });
     this.scale.on('resize', this.handleResize, this);
     this.handlePointerUp = this.onPointerUp.bind(this);
     this.input.on('pointerup', this.handlePointerUp);
@@ -174,6 +220,85 @@ export default class MenuScene extends Phaser.Scene {
       });
     };
     this.game.canvas.addEventListener('pointerup', this.handleDomPointerUp);
+  }
+
+  createBackdropArt(width, height) {
+    const palette = FACTION_PALETTES[this.selectedRaceId] || FACTION_PALETTES.terran;
+    this.backdropGlow.clear();
+    [
+      { radius: Math.max(width, height) * 0.72, alpha: 0.05, color: palette.mid },
+      { radius: Math.max(width, height) * 0.48, alpha: 0.08, color: palette.hot },
+      { radius: Math.max(width, height) * 0.24, alpha: 0.1, color: palette.hot },
+    ].forEach((layer) => this.backdropGlow.fillStyle(layer.color, layer.alpha)
+      .fillCircle(width / 2, height * 0.34, layer.radius));
+
+    this.backdropGrid.clear();
+    this.backdropGrid.lineStyle(1, palette.hot, 0.35);
+    const horizon = height * 0.54;
+    for (let i = -12; i <= 12; i += 1) {
+      const x = width / 2 + i * Math.max(20, width / 18);
+      this.backdropGrid.lineBetween(width / 2 + (x - width / 2) * 0.18, horizon, x, height + 20);
+    }
+    for (let i = 0; i < 10; i += 1) {
+      const y = horizon + (i * i + 1) * height * 0.018;
+      this.backdropGrid.lineBetween(0, y, width, y);
+    }
+
+    this.backdropVignette.clear();
+    this.backdropVignette.fillStyle(0x000000, 0.42);
+    this.backdropVignette.fillRect(0, 0, width, 28);
+    this.backdropVignette.fillRect(0, height - 42, width, 42);
+    this.backdropVignette.fillStyle(0x000000, 0.28);
+    this.backdropVignette.fillRect(0, 0, 34, height);
+    this.backdropVignette.fillRect(width - 34, 0, 34, height);
+
+    if (this.starfield?.getChildren().length) {
+      this.tweens.killTweensOf(this.starfield.getChildren());
+    }
+    this.starfield.clear(true, true);
+    const starCount = Math.min(90, Math.max(36, Math.floor(width * height / 11000)));
+    for (let i = 0; i < starCount; i += 1) {
+      const star = this.add.circle(Phaser.Math.Between(20, width - 20), Phaser.Math.Between(20, height - 20), Phaser.Math.FloatBetween(0.35, 1.5), palette.light, Phaser.Math.FloatBetween(0.18, 0.65));
+      star.setDepth(-7);
+      this.starfield.add(star);
+      if (!this.reducedMotion) {
+        this.tweens.add({ targets: star, alpha: star.alpha * 0.35, duration: Phaser.Math.Between(1100, 2600), yoyo: true, repeat: -1, delay: Phaser.Math.Between(0, 900), ease: 'Sine.easeInOut' });
+      }
+    }
+  }
+
+  createDifficultyTrack() {
+    // PASS 8: unified difficulty rail with a sliding selection marker.
+    const y = this.layout.difficultyY;
+    const width = this.layout.difficultyButtonWidth * 3 + 24;
+    this.difficultyTrack = this.add.rectangle(this.scale.width / 2, y, width + 12, this.layout.difficultyButtonHeight + 10, 0x020617, 0.55)
+      .setStrokeStyle(1, 0x334155, 0.9);
+    this.difficultyMarker = this.add.rectangle(this.layout.difficultyPositions[1].x, y, this.layout.difficultyButtonWidth - 6, this.layout.difficultyButtonHeight - 6, 0x1d4ed8, 0.22)
+      .setStrokeStyle(1, 0x60a5fa, 0.65);
+    this.difficultyTrack.setDepth(-1);
+    this.difficultyMarker.setDepth(-1);
+  }
+
+  startIdleAnimations() {
+    // PASS 7/10: restrained breathing glow; reduced-motion users get a static UI.
+    if (this.reducedMotion) return;
+    this.tweens.add({ targets: [this.startAura, this.titleHalo], alpha: 0.18, duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: this.shellGlow, alpha: 0.12, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
+  noteInteraction() {
+    this.lastInteractionAt = this.time.now;
+    this.attractIndex = -1;
+  }
+
+  updateAttractMode() {
+    // PASS 11: attract mode previews each faction only after a quiet period.
+    if (this.isTransitioning || this.time.now - this.lastInteractionAt < 3600) return;
+    this.attractIndex = (this.attractIndex + 1) % RACE_ORDER.length;
+    const raceId = RACE_ORDER[this.attractIndex];
+    this.selectedRaceId = raceId;
+    session.setRace(raceId, getRace(raceId).name);
+    this.refreshCards();
   }
 
   getCardLayout(width, height) {
@@ -318,17 +443,28 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const select = () => {
+      this.noteInteraction();
       this.selectedRaceId = race.id;
       session.setRace(race.id, race.name);
       this.refreshCards();
     };
 
+    card.on('pointerover', () => {
+      if (!this.reducedMotion) this.tweens.add({ targets: [card, cardInner], scaleX: 1.025, scaleY: 1.025, duration: 140, ease: 'Quad.easeOut', overwrite: true });
+    });
+    card.on('pointerout', () => {
+      this.tweens.add({ targets: [card, cardInner], scaleX: 1, scaleY: 1, duration: 160, ease: 'Quad.easeOut', overwrite: true });
+    });
     card.on('pointerdown', select);
 
     return { race, card, cardInner, topLine, accentLeft, accentRight, title, subtitle, facts, chip, chipIcon, chipLabel, cardHeight };
   }
 
   refreshCards() {
+    const palette = FACTION_PALETTES[this.selectedRaceId] || FACTION_PALETTES.terran;
+    this.createBackdropArt(this.scale.width, this.scale.height);
+    this.titleHalo?.setColor(`#${palette.hot.toString(16).padStart(6, '0')}`);
+    this.titleRule?.clear().lineStyle(1, palette.hot, 0.65).lineBetween(this.scale.width / 2 - 150, this.layout.titleY + 52, this.scale.width / 2 + 150, this.layout.titleY + 52);
     this.cardEntries.forEach((entry) => {
       const selected = entry.race.id === this.selectedRaceId;
       entry.card.setAlpha(selected ? 1 : 0.72);
@@ -336,16 +472,21 @@ export default class MenuScene extends Phaser.Scene {
       entry.cardInner?.setStrokeStyle(1, selected ? entry.race.accent : 0x1e293b, selected ? 0.9 : 0.4);
       entry.facts.setColor(selected ? '#dbeafe' : '#94a3b8');
       entry.chip.setFillStyle(entry.race.accent, selected ? 0.35 : 0.18);
-      entry.chipLabel.setText(selected ? 'Selected' : 'Tap to select');
+      entry.chipLabel.setText(selected ? 'SELECTED // READY' : 'TAP TO SELECT');
       entry.chipIcon?.setAlpha(selected ? 1 : 0.7);
       entry.accentLeft?.setAlpha(selected ? 1 : 0.7);
       entry.accentRight?.setAlpha(selected ? 1 : 0.7);
+      if (selected && !this.reducedMotion) {
+        this.tweens.add({ targets: entry.cardInner, alpha: 0.45, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', overwrite: true });
+      }
     });
 
     const activeRace = getRace(this.selectedRaceId);
     this.startButton.setFillStyle(activeRace.accent, 1);
     this.startButton.setStrokeStyle(2, activeRace.glow, 1);
+    this.startAura?.setFillStyle(activeRace.accent, 0.12).setStrokeStyle(1, activeRace.glow, 0.4);
     this.startLabel.setText(`Deploy as ${activeRace.name}`);
+    this.startSubLabel?.setColor(`#${(FACTION_PALETTES[this.selectedRaceId] || FACTION_PALETTES.terran).light.toString(16).padStart(6, '0')}`);
     this.refreshDifficultyControls();
   }
 
@@ -405,6 +546,10 @@ export default class MenuScene extends Phaser.Scene {
       entry.label.setColor(selected ? '#ffffff' : '#cbd5e1');
       entry.label.setAlpha(selected ? 1 : 0.78);
       entry.button.setAlpha(selected ? 1 : 0.84);
+      if (selected && this.difficultyMarker) {
+        this.tweens.add({ targets: this.difficultyMarker, x: entry.button.x, duration: this.reducedMotion ? 0 : 220, ease: 'Cubic.easeOut', overwrite: true });
+        this.difficultyMarker.setStrokeStyle(1, accent, 0.85).setFillStyle(accent, 0.18);
+      }
     });
   }
 
@@ -415,16 +560,33 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   startBattle() {
-    if (this.isStarting) return;
+    // PASS 15/18: debounce every launch and fade through a tactical lock screen.
+    if (this.isStarting || this.isTransitioning) return;
     this.isStarting = true;
+    this.isTransitioning = true;
+    this.noteInteraction();
+    this.startButton.disableInteractive();
+    const width = this.scale.width;
+    const height = this.scale.height;
+    this.transitionOverlay = this.add.rectangle(width / 2, height / 2, width, height, 0x020617, 0)
+      .setDepth(100);
+    this.transitionLabel = this.add.text(width / 2, height / 2 - 18, 'INITIALIZING DEPLOYMENT', {
+      ...MENU_TEXT_STYLE, fontSize: '14px', fontStyle: '800', color: '#dbeafe', letterSpacing: 3,
+    }).setOrigin(0.5).setDepth(101).setAlpha(0);
+    this.transitionBar = this.add.rectangle(width / 2, height / 2 + 22, 6, 3, 0x60a5fa, 1)
+      .setOrigin(0.5).setDepth(101).setAlpha(0);
     try {
       const race = getRace(this.selectedRaceId);
       session.setDifficulty(this.selectedDifficultyId);
       session.setRace(race.id, race.name);
-      this.scene.start('BattleScene');
+      this.tweens.add({ targets: [this.transitionOverlay, this.transitionLabel, this.transitionBar], alpha: 1, duration: this.reducedMotion ? 0 : 180, ease: 'Sine.easeIn', onComplete: () => {
+        this.tweens.add({ targets: this.transitionBar, width: width * 0.34, duration: this.reducedMotion ? 0 : 420, ease: 'Cubic.easeInOut', onComplete: () => this.scene.start('BattleScene') });
+      }});
     } catch (err) {
       console.error('[MenuScene] scene.start(BattleScene) failed:', err);
       this.isStarting = false;
+      this.isTransitioning = false;
+      this.startButton.setInteractive({ useHandCursor: true });
     }
   }
 
@@ -455,16 +617,21 @@ export default class MenuScene extends Phaser.Scene {
 
     this.background.setPosition(width / 2, height / 2);
     this.background.setSize(width, height);
+    this.createBackdropArt(width, height);
 
     const shell = getShellSize(width, height, this.layout.compact);
     this.shell.setPosition(shell.x, shell.y);
     this.shell.setSize(shell.width, shell.height);
+    this.shellGlow?.setPosition(shell.x, shell.y).setSize(shell.width + 18, shell.height + 18);
     if (this.shellInner) {
       this.shellInner.setPosition(shell.x, shell.y);
       this.shellInner.setSize(shell.width - 12, shell.height - 12);
     }
 
     this.titleText.setPosition(width / 2, this.layout.titleY);
+    this.titleHalo?.setPosition(width / 2, this.layout.titleY + 2);
+    this.titleRule?.clear().lineStyle(1, FACTION_PALETTES[this.selectedRaceId]?.hot || 0x60a5fa, 0.65)
+      .lineBetween(width / 2 - 150, this.layout.titleY + 52, width / 2 + 150, this.layout.titleY + 52);
     this.versionText.setPosition(width - 16, 16);
     this.subtitleText.setPosition(width / 2, this.layout.subtitleY);
     this.descriptionText.setPosition(width / 2, this.layout.descriptionY);
@@ -491,6 +658,7 @@ export default class MenuScene extends Phaser.Scene {
     });
 
     this.difficultyLabelText?.setPosition(width / 2, this.layout.difficultyY - 24);
+    this.difficultyTrack?.setPosition(width / 2, this.layout.difficultyY).setSize(this.layout.difficultyButtonWidth * 3 + 36, this.layout.difficultyButtonHeight + 10);
     this.difficultyEntries.forEach((entry, index) => {
       const pos = this.layout.difficultyPositions[index];
       entry.button.setPosition(pos.x, pos.y).setSize(this.layout.difficultyButtonWidth, this.layout.difficultyButtonHeight);
@@ -502,10 +670,12 @@ export default class MenuScene extends Phaser.Scene {
     this.refreshDifficultyControls();
 
     this.startButton.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth, START_BUTTON.height);
+    this.startAura?.setPosition(width / 2, this.layout.startY).setSize(this.layout.startWidth + 22, START_BUTTON.height + 18);
     if (this.startHighlight) {
       this.startHighlight.setPosition(width / 2, this.layout.startY - START_BUTTON.height / 2 + 2).setSize(this.layout.startWidth - 4, 2);
     }
-    this.startLabel.setPosition(width / 2, this.layout.startY);
+    this.startLabel.setPosition(width / 2, this.layout.startY - 4);
+    this.startSubLabel?.setPosition(width / 2, this.layout.startY + 20);
     this.footerText.setPosition(width / 2, this.layout.footerY);
     this.refreshCards();
   }
@@ -521,14 +691,33 @@ export default class MenuScene extends Phaser.Scene {
     if (this.handleDomPointerUp && this.game?.canvas) {
       this.game.canvas.removeEventListener('pointerup', this.handleDomPointerUp);
     }
+    this.attractTimer?.remove(false);
+    this.particleTween?.remove();
+    if (this.keyboardInteractionHandler) {
+      this.input?.keyboard?.off('keydown', this.keyboardInteractionHandler, this);
+    }
     // Clean up race cards and buttons when scene is destroyed.
     if (this.background) this.background.destroy();
+    if (this.backdropGlow) this.backdropGlow.destroy();
+    if (this.backdropGrid) this.backdropGrid.destroy();
+    if (this.backdropVignette) this.backdropVignette.destroy();
+    if (this.starfield) this.starfield.destroy(true);
+    if (this.shellGlow) this.shellGlow.destroy();
+    if (this.titleHalo) this.titleHalo.destroy();
+    if (this.titleRule) this.titleRule.destroy();
+    if (this.difficultyTrack) this.difficultyTrack.destroy();
+    if (this.difficultyMarker) this.difficultyMarker.destroy();
     if (this.shell) this.shell.destroy();
     if (this.shellInner) this.shellInner.destroy();
     if (this.titleText) this.titleText.destroy();
     if (this.footerText) this.footerText.destroy();
     if (this.difficultyLabelText) this.difficultyLabelText.destroy();
     if (this.startButton) this.startButton.destroy();
+    if (this.startAura) this.startAura.destroy();
+    if (this.startSubLabel) this.startSubLabel.destroy();
+    if (this.transitionOverlay) this.transitionOverlay.destroy();
+    if (this.transitionLabel) this.transitionLabel.destroy();
+    if (this.transitionBar) this.transitionBar.destroy();
     if (this.startHighlight) this.startHighlight.destroy();
     if (this.difficultyEntries) {
       for (const entry of this.difficultyEntries) {
