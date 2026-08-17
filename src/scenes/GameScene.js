@@ -10,7 +10,7 @@ import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
 import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
 import { getAnimationState } from '../game/animationState.js';
-import { MARINE_ANIMATION_PROFILE } from '../game/animationProfiles.js';
+import { MARINE_ANIMATION_PROFILE, BASIC_UNIT_ANIMATION_PROFILES } from '../game/animationProfiles.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -2854,7 +2854,9 @@ export default class BattleScene extends Phaser.Scene {
       : getAnimationState({ motionState: entity._motionState, cooldown: entity.cooldown ?? 1, hp: entity.hp });
     const animationProfile = entity.type === 'worker' || entity.type === 'structure' || entity.type === 'construction'
       ? null
-      : (MARINE_ANIMATION_PROFILE[visualState] || MARINE_ANIMATION_PROFILE.idle);
+      : (visualState === 'idle'
+        ? (BASIC_UNIT_ANIMATION_PROFILES[this.race?.id]?.idle || MARINE_ANIMATION_PROFILE.idle)
+        : (MARINE_ANIMATION_PROFILE[visualState] || MARINE_ANIMATION_PROFILE.idle));
     const target = (MOTION_SCALE_TARGETS[visualState] ?? MOTION_SCALE_TARGETS.idle) * (animationProfile?.scale ?? 1);
     entity.motionScale = entity.motionScale ?? 1;
     const blend = Math.min(1, dt * 10);

@@ -4,3 +4,9 @@ export const MARINE_ANIMATION_PROFILE = Object.freeze({
   attack: { duration: 180, loop: false, scale: 1.08, yAmplitude: -1, angleAmplitude: 4 },
   death: { duration: 520, loop: false, scale: 0.82, yAmplitude: -4, angleAmplitude: 12 }
 });
+
+export const BASIC_UNIT_ANIMATION_PROFILES = Object.freeze({
+  terran: { idle: { scale: 1, yAmplitude: 0.5, angleAmplitude: 1 } },
+  zerg: { idle: { scale: 1, yAmplitude: 1.5, angleAmplitude: 3 } },
+  protoss: { idle: { scale: 1, yAmplitude: 2, angleAmplitude: 0.5 } }
+});
