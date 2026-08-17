@@ -10,6 +10,7 @@ import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
 import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
 import { getAnimationState } from '../game/animationState.js';
+import { MARINE_ANIMATION_PROFILE } from '../game/animationProfiles.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -2851,7 +2852,10 @@ export default class BattleScene extends Phaser.Scene {
     const visualState = entity.type === 'structure' || entity.type === 'construction'
       ? entity._motionState
       : getAnimationState({ motionState: entity._motionState, cooldown: entity.cooldown ?? 1, hp: entity.hp });
-    const target = MOTION_SCALE_TARGETS[visualState] ?? MOTION_SCALE_TARGETS.idle;
+    const animationProfile = entity.type === 'worker' || entity.type === 'structure' || entity.type === 'construction'
+      ? null
+      : (MARINE_ANIMATION_PROFILE[visualState] || MARINE_ANIMATION_PROFILE.idle);
+    const target = (MOTION_SCALE_TARGETS[visualState] ?? MOTION_SCALE_TARGETS.idle) * (animationProfile?.scale ?? 1);
     entity.motionScale = entity.motionScale ?? 1;
     const blend = Math.min(1, dt * 10);
     entity.motionScale = Phaser.Math.Linear(entity.motionScale, target, blend);
@@ -2859,7 +2863,8 @@ export default class BattleScene extends Phaser.Scene {
     // Phase-based idle breathing/hover motion (reusable, no allocations)
     entity._idlePhase = entity._idlePhase ?? (((entity.id || 0) * 0.77) % (Math.PI * 2));
     const timeSec = (this.time?.now ?? 0) * 0.003;
-    const hoverAmp = entity.type === 'structure' || entity.type === 'construction' ? 0.4 : (entity.type === 'worker' ? 1.0 : 1.4);
+    const hoverAmp = animationProfile?.yAmplitude
+      ?? (entity.type === 'structure' || entity.type === 'construction' ? 0.4 : (entity.type === 'worker' ? 1.0 : 1.4));
     const idleOffsetY = Math.sin(timeSec + entity._idlePhase) * hoverAmp;
 
     // Brief attack anticipation / recoil impulse
@@ -2873,6 +2878,8 @@ export default class BattleScene extends Phaser.Scene {
 
     // Apply bounded visual adjustments to sprite while preserving ground anchor (entity.x, entity.y)
     entity.sprite.setScale(entity.motionScale * recoilScale);
+    const angleAmplitude = animationProfile?.angleAmplitude ?? 0;
+    entity.sprite.setRotation(Math.sin(timeSec * 2.2 + entity._idlePhase) * angleAmplitude * Math.PI / 180);
     entity.sprite.setPosition(entity.x, entity.y + idleOffsetY + recoilOffsetY);
 
     // Dynamic shadow responsiveness to hover offset
