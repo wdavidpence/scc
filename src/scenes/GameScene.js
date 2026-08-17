@@ -833,6 +833,25 @@ export default class BattleScene extends Phaser.Scene {
       if (u.hp > 0 && u.type !== 'worker') this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.5);
     });
 
+    // Living workers (smaller economy dots)
+    let workerDots = 0;
+    this.minimapCanvas.fillStyle(0x86efac, 0.85);
+    this.playerUnits.forEach((u) => {
+      if (u.hp > 0 && u.type === 'worker') {
+        this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.0);
+        workerDots++;
+      }
+    });
+
+    this.minimapCanvas.fillStyle(0xfdba74, 0.7);
+    this.enemyUnits.forEach((u) => {
+      if (u.hp > 0 && u.type === 'worker') {
+        this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.0);
+        workerDots++;
+      }
+    });
+    this.minimapWorkerDots = workerDots;
+
     // Camera viewport rectangle
     const cam = this.cameras.main;
     const vw = (cam.width / cam.zoom) * sx, vh = (cam.height / cam.zoom) * sy;
