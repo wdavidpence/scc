@@ -2433,7 +2433,7 @@ export default class BattleScene extends Phaser.Scene {
     this.showDamageFlash(enemy, unit.attack);
       // Track damage for shield regen delay (Protoss units)
       if (unit.shield > 0 && unit.team === 'player') {
-        unit.lastDamageTime = time / 1000;
+        unit.lastDamageTime = this.time.now / 1000;
       }
       // Apply charge bonus damage if this was a charge hit
       if (unit.isCharging && unit.chargeDamage > 0) {
