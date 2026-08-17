@@ -46,5 +46,7 @@ export function buildGameConfig() {
 }
 
 export function createGame() {
-  return new Phaser.Game(buildGameConfig());
+  const game = new Phaser.Game(buildGameConfig());
+  if (typeof window !== 'undefined') window.__SCC_GAME__ = game;
+  return game;
 }

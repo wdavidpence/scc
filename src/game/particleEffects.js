@@ -58,8 +58,7 @@ export function spawnMuzzleFlash(scene, x, y, race, options = {}) {
     const col   = palette.muzzle[Phaser.Math.Between(0, palette.muzzle.length - 1)];
     const size  = Phaser.Math.Between(3, 6);
 
-    const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1).setOrigin(0.5).setAlpha(1).setDepth(65);
-    p.setFillStyle(getColorFromString(col), 1);
+    const p = scene.add.rectangle(x, y, size, size, getColorFromString(col), 1).setOrigin(0.5).setAlpha(1).setDepth(65);
     group.add(p);
 
     scene.tweens.add({
@@ -131,12 +130,11 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const col   = palette.death[Phaser.Math.Between(0, palette.death.length - 1)];
     const size  = Phaser.Math.Between(3, isStructure ? 8 : 5);
 
-    const p = scene.add.rectangle(x, y, size, size, 0xffffff, 1)
+    const p = scene.add.rectangle(x, y, size, size, getColorFromString(col), 1)
       .setOrigin(0.5)
       .setAlpha(1)
       .setDepth(68);
 
-    p.setFillStyle(getColorFromString(col), 1);
     coreGroup.add(p);
 
     const tx = x + Math.cos(angle) * dist;
@@ -165,12 +163,10 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const col   = palette.spark[Phaser.Math.Between(0, palette.spark.length - 1)];
     const size  = Phaser.Math.Between(2, 3);
 
-    const s = scene.add.rectangle(x, y, size, size, 0xffffff, 1)
+    const s = scene.add.rectangle(x, y, size, size, getColorFromString(col), 1)
       .setOrigin(0.5)
       .setAlpha(1)
       .setDepth(75);
-
-    s.setFillStyle(getColorFromString(col), 1);
 
     scene.tweens.add({
       targets: s,
@@ -192,12 +188,10 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     const col   = palette.debris[Phaser.Math.Between(0, palette.debris.length - 1)];
     const size  = Phaser.Math.Between(4, isStructure ? 8 : 5);
 
-    const d = scene.add.rectangle(x, y, size, size, 0xffffff, 0.8)
+    const d = scene.add.rectangle(x, y, size, size, getColorFromString(col), 0.8)
       .setOrigin(0.5)
       .setAlpha(0.8)
       .setDepth(67);
-
-    d.setFillStyle(getColorFromString(col), 1);
 
     scene.tweens.add({
       targets: d,

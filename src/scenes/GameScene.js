@@ -1260,6 +1260,7 @@ export default class BattleScene extends Phaser.Scene {
     } else {
       this.enemyUnits.push(entity);
     }
+    this.units.push(entity);
 
     if (kind === 'worker') {
       entity.order = options.harvestType === 'gas' ? 'gasHarvest' : 'harvest';
@@ -1473,44 +1474,47 @@ export default class BattleScene extends Phaser.Scene {
 
   handleTap(worldX, worldY) {
     const hit = this.hitTest(worldX, worldY);
+    const selected = this.selectedEntity;
+
     if (hit) {
+      if (this.canDirectCommand(selected) && hit.team === 'enemy') {
+        this.issueAttackTarget(selected, hit);
+        this.showTapIndicator(hit.x, hit.y, 'attack');
+        this.syncSession('Attack order issued.');
+        return;
+      }
       this.selectEntity(hit);
       return;
     }
 
-    // Visual feedback for empty battlefield tap (deselection ripple)
-    if (!this.selectedEntity || this.commandMode === 'select') {
-      this.showDeselectRipple(worldX, worldY);
-    }
-
-    if (this.selectedEntity && this.selectedEntity.team === 'player') {
-      // If tapping near a gas geyser with a selected worker, assign to gas
-      if (this.selectedEntity.type === 'worker' && !this.selectedEntity.autoHarvest) {
+    if (this.canDirectCommand(selected)) {
+      if (selected.type === 'worker' && !selected.autoHarvest) {
         const geyser = this.gasGeysers.find((g) => Phaser.Math.Distance.Between(g.x, g.y, worldX, worldY) <= g.radius + 16 && g.assignedWorkers < g.maxWorkers);
         if (geyser) {
-          this.assignWorkerToGas(this.selectedEntity, geyser);
+          this.assignWorkerToGas(selected, geyser);
           this.syncSession('Worker assigned to gas geyser.');
           return;
         }
       }
 
-      if (this.commandMode === 'move') {
-        this.issueMove(this.selectedEntity, worldX, worldY);
-        this.commandMode = 'select';
-        this.showTapIndicator(worldX, worldY, 'move');
-        this.syncSession('Move order issued.');
-        return;
-      }
-
       if (this.commandMode === 'attack') {
-        this.issueAttackMove(this.selectedEntity, worldX, worldY);
+        this.issueAttackMove(selected, worldX, worldY);
         this.commandMode = 'select';
         this.showTapIndicator(worldX, worldY, 'attack');
         this.syncSession('Attack move issued.');
         return;
       }
+
+      this.issueMove(selected, worldX, worldY);
+      this.commandMode = 'select';
+      this.showTapIndicator(worldX, worldY, 'move');
+      this.syncSession('Move order issued.');
+      return;
     }
 
+    if (!selected || this.commandMode === 'select') {
+      this.showDeselectRipple(worldX, worldY);
+    }
     this.clearSelection();
   }
 
@@ -1826,6 +1830,24 @@ export default class BattleScene extends Phaser.Scene {
     entity.targetEntity = null;
     entity.statusText.setText('Attack move');
     // Audio: sharp whoosh for attack-move on battlefield.
+    if (this.audioManager) this.audioManager.attackCommand();
+  }
+
+  canDirectCommand(entity) {
+    return !!(entity && entity.team === 'player' && entity.type !== 'structure' && entity.type !== 'construction');
+  }
+
+  issueAttackTarget(entity, target) {
+    if (!this.canDirectCommand(entity) || !target) {
+      if (this.audioManager) this.audioManager.error();
+      return;
+    }
+    entity.targetX = target.x;
+    entity.targetY = target.y;
+    entity.order = 'attack';
+    entity.manual = true;
+    entity.targetEntity = target;
+    if (entity.statusText) entity.statusText.setText('Attacking');
     if (this.audioManager) this.audioManager.attackCommand();
   }
 
