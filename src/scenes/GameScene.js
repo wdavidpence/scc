@@ -9,6 +9,7 @@ import { spawnMuzzleFlash, spawnExplosion, spawnTargetImpact, spawnTracer } from
 import { audioSystem } from '../game/audio/audioSystem.js';
 import { createAudioManager } from '../game/audioManager.js';
 import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
+import { getAnimationState } from '../game/animationState.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -2847,7 +2848,10 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    const target = MOTION_SCALE_TARGETS[entity._motionState] ?? MOTION_SCALE_TARGETS.idle;
+    const visualState = entity.type === 'structure' || entity.type === 'construction'
+      ? entity._motionState
+      : getAnimationState({ motionState: entity._motionState, cooldown: entity.cooldown ?? 1, hp: entity.hp });
+    const target = MOTION_SCALE_TARGETS[visualState] ?? MOTION_SCALE_TARGETS.idle;
     entity.motionScale = entity.motionScale ?? 1;
     const blend = Math.min(1, dt * 10);
     entity.motionScale = Phaser.Math.Linear(entity.motionScale, target, blend);
