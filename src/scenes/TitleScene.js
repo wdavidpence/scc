@@ -32,6 +32,12 @@ const START_BUTTON = {
 // ── Shared menu text style (title, subtitle, description, labels, footer) ────
 const MENU_TEXT_STYLE = { fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' };
 
+const FACTION_PRESENTATION = {
+  terran: { callsign: 'IRON LEGION', descriptor: 'MECHANIZED FRONTIER', icon: 'terran-marine', tint: 0x60a5fa },
+  zerg: { callsign: 'BROOD SWARM', descriptor: 'ADAPTIVE HIVE MIND', icon: 'zerg-zergling', tint: 0xf97316 },
+  protoss: { callsign: 'AEON CONCLAVE', descriptor: 'PSIONIC ASCENDANCY', icon: 'protoss-zealot', tint: 0xa78bfa }
+};
+
 // ── Description word-wrap width helpers ───────────────────────────────────────
 const DESC_WRAP_PAD = 50;
 const DESC_WRAP_MAX = 680;
@@ -397,7 +403,8 @@ export default class MenuScene extends Phaser.Scene {
         : race.id === 'protoss'
           ? this.add.image(position.x + layout.cardWidth / 2 - 24, position.y - cardHeight / 2 + 24, 'protoss-zealot').setDisplaySize(20, 20)
         : null;
-    const title = this.add.text(position.x, position.y - (layout.compact ? 42 : 74), race.name, {
+    const presentation = FACTION_PRESENTATION[race.id];
+    const title = this.add.text(position.x, position.y - (layout.compact ? 42 : 74), presentation.callsign, {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(18px, 4vw, 30px)',
       fontStyle: '800',
@@ -405,7 +412,7 @@ export default class MenuScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
-    const subtitle = this.add.text(position.x, position.y - (layout.compact ? 18 : 45), race.subtitle, {
+    const subtitle = this.add.text(position.x, position.y - (layout.compact ? 18 : 45), presentation.descriptor, {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(12px, 2.4vw, 16px)',
       color: '#cbd5e1',
@@ -413,11 +420,10 @@ export default class MenuScene extends Phaser.Scene {
       wordWrap: { width: raceCardSubtitleWrapWidth(layout.cardWidth) }
     }).setOrigin(0.5);
 
-    const facts = this.add.text(position.x, position.y + (layout.compact ? 14 : 19), [
-      `Worker: ${race.workerName}`,
-      `Troop: ${race.soldierName}`,
-      `Base: ${race.commandCenterName}`,
-      `Production: ${race.productionName}`
+    const emblem = this.createFactionEmblem(race, position.x, position.y + (layout.compact ? 2 : 4), layout.compact ? 0.42 : 0.62);
+    const facts = this.add.text(position.x, position.y + (layout.compact ? 32 : 48), [
+      `${race.workerName.toUpperCase()}  •  ${race.soldierName.toUpperCase()}`,
+      `${race.commandCenterName.toUpperCase()}  //  ${race.productionName.toUpperCase()}`
     ], {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(11px, 2vw, 14px)',
@@ -457,7 +463,21 @@ export default class MenuScene extends Phaser.Scene {
     });
     card.on('pointerdown', select);
 
-    return { race, card, cardInner, topLine, accentLeft, accentRight, title, subtitle, facts, chip, chipIcon, chipLabel, cardHeight };
+    return { race, card, cardInner, topLine, accentLeft, accentRight, title, subtitle, emblem, facts, chip, chipIcon, chipLabel, cardHeight };
+  }
+
+  createFactionEmblem(race, x, y, scale = 1) {
+    const p = FACTION_PRESENTATION[race.id];
+    const g = this.add.graphics().setPosition(x, y).setDepth(2);
+    g.lineStyle(2 * scale, p.tint, 0.72);
+    g.strokeCircle(0, 0, 26 * scale);
+    g.lineStyle(1 * scale, 0xffffff, 0.18);
+    g.strokeCircle(0, 0, 34 * scale);
+    g.fillStyle(p.tint, 0.12);
+    g.fillCircle(0, 0, 23 * scale);
+    const icon = this.add.image(x, y, p.icon).setDisplaySize(40 * scale, 50 * scale).setDepth(3).setTint(p.tint);
+    if (!this.reducedMotion) this.tweens.add({ targets: [g, icon], angle: { from: -2, to: 2 }, alpha: { from: 0.82, to: 1 }, duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    return { g, icon };
   }
 
   refreshCards() {
@@ -648,7 +668,9 @@ export default class MenuScene extends Phaser.Scene {
       entry.title.setPosition(pos.x, pos.y - (this.layout.compact ? 42 : 74));
       entry.subtitle.setPosition(pos.x, pos.y - (this.layout.compact ? 18 : 45));
       entry.subtitle.setWordWrapWidth(raceCardSubtitleWrapWidth(this.layout.cardWidth));
-      entry.facts.setPosition(pos.x, pos.y + (this.layout.compact ? 14 : 19));
+      entry.facts.setPosition(pos.x, pos.y + (this.layout.compact ? 32 : 48));
+      entry.emblem?.g.setPosition(pos.x, pos.y + (this.layout.compact ? 2 : 4));
+      entry.emblem?.icon.setPosition(pos.x, pos.y + (this.layout.compact ? 2 : 4));
       const chipY = this.layout.compact ? pos.y + cardHeight / 2 - 20 : pos.y + 78;
       entry.chip.setPosition(pos.x, chipY).setSize(128, 28);
       entry.chipLabel.setPosition(pos.x, chipY);
@@ -734,6 +756,8 @@ export default class MenuScene extends Phaser.Scene {
         if (entry.accentRight) entry.accentRight.destroy();
         if (entry.title) entry.title.destroy();
         if (entry.subtitle) entry.subtitle.destroy();
+        if (entry.emblem?.g) entry.emblem.g.destroy();
+        if (entry.emblem?.icon) entry.emblem.icon.destroy();
         if (entry.facts) entry.facts.destroy();
         if (entry.chip) entry.chip.destroy();
         if (entry.chipIcon) entry.chipIcon.destroy();

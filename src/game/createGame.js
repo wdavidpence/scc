@@ -35,6 +35,12 @@ export function buildGameConfig() {
       antialiasGL: true,
       powerPreference: 'high-performance'
     },
+    physics: {
+      default: 'arcade',
+      arcade: {
+        debug: false
+      }
+    },
     scene: SCENE_LIST
   };
 }

@@ -286,7 +286,17 @@ export default class HudScene extends Phaser.Scene {
     // Race accent accent line on top bar
     const raceColors = { terran: 0x1d4ed8, zerg: 0xf97316, protoss: 0x7c3aed };
     const initialRaceId = this.battleScene?.race?.id ?? session.raceId ?? 'terran';
-    this.accentLine = this.add.rectangle(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET, width, ACCENT_LINE_HEIGHT, raceColors[initialRaceId] ?? 0x1d4ed8, 0.7).setOrigin(0.5);
+    const raceAccentColor = raceColors[initialRaceId] ?? 0x1d4ed8;
+    this.accentLine = this.add.rectangle(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET, width, ACCENT_LINE_HEIGHT, raceAccentColor, 0.7).setOrigin(0.5);
+
+    // qwen27 HUD treatment: glass-metal layers, separators, and emissive trim.
+    this.add.rectangle(width / 2, this.layout.topBarY - 1, width - 6, this.layout.topBarHeight - 2, 0x9bb5d6, 0.04).setOrigin(0.5);
+    this.add.rectangle(width / 2, this.layout.topBarY + this.layout.topBarHeight + 2, width, 4, 0x000000, 0.5).setOrigin(0.5);
+    this.add.rectangle(width / 2, this.layout.topBarY + 1, width - 4, 1, 0xffffff, 0.15).setOrigin(0.5);
+    [0.25, 0.5, 0.75].forEach((p) => this.add.rectangle(width * p, this.layout.topBarY, 2, this.layout.topBarHeight, 0x4a6b8c, 0.25).setOrigin(0.5));
+    this.add.rectangle(width / 2, this.layout.topBarY - ACCENT_LINE_Y_OFFSET, width, ACCENT_LINE_HEIGHT + 6, raceAccentColor, 0.15).setOrigin(0.5);
+    this.tweens.add({ targets: this.accentLine, alpha: 1.0, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: this.topBarBorder, alpha: 0.85, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.raceIcon = initialRaceId === 'terran'
       ? this.add.image(RACE_ICON_X, this.layout.topBarY + RACE_ICON_Y_OFFSET, 'terran-scv').setDisplaySize(RACE_ICON_SIZE, RACE_ICON_SIZE)
       : initialRaceId === 'zerg'
