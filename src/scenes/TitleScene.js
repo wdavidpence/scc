@@ -144,7 +144,7 @@ export default class MenuScene extends Phaser.Scene {
     this.titleRule.lineBetween(width / 2 - 150, this.layout.titleY + 52, width / 2 + 150, this.layout.titleY + 52);
 
     // Version number (top-right corner)
-    this.versionText = this.add.text(width - 16, 16, 'v2.12.0', {
+    this.versionText = this.add.text(width - 16, 16, 'v2.13.0', {
       ...MENU_TEXT_STYLE,
       fontSize: '12px',
       fontStyle: '600',

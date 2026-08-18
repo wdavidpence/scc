@@ -78,6 +78,9 @@ export default class BattleScene extends Phaser.Scene {
     this.race = getRace(session.raceId);
     this.aiDifficulty = getDifficulty(session.difficultyId);
     this.selectedEntity = null;
+    this.selectedEntities = [];
+    this.secondaryHighlights = [];
+    this.selectionBoxGraphics = null;
     this.commandMode = 'select';
     this.paused = false;
     this.ended = false;
@@ -1293,7 +1296,7 @@ export default class BattleScene extends Phaser.Scene {
     return getUnitDef(this.race, team, kind, enemyKind);
   }
 
-  // --- Touch/mouse input for panning and tapping ---
+  // --- Touch/mouse input for panning, box-select, and tapping ---
   installPointerControls() {
     this.dragState = null;
 
@@ -1308,6 +1311,8 @@ export default class BattleScene extends Phaser.Scene {
         camX: this.cameras.main.scrollX,
         camY: this.cameras.main.scrollY,
         moved: false,
+        isTouch: Boolean(pointer.wasTouch || pointer.pointerType === 'touch'),
+        isBoxSelect: false,
         startedOnEntity: Boolean(this.hitTest(pointer.worldX, pointer.worldY))
       };
     });
@@ -1322,12 +1327,32 @@ export default class BattleScene extends Phaser.Scene {
 
       if (!this.dragState.moved && Math.hypot(dx, dy) > TAP_DRAG_THRESHOLD && !this.dragState.startedOnEntity) {
         this.dragState.moved = true;
+        if (!this.dragState.isTouch) {
+          this.dragState.isBoxSelect = true;
+        }
       }
 
       if (this.dragState.moved) {
-        this.cameras.main.scrollX = this.dragState.camX - dx / this.cameras.main.zoom;
-        this.cameras.main.scrollY = this.dragState.camY - dy / this.cameras.main.zoom;
-        clampCamera(this.cameras.main);
+        if (this.dragState.isBoxSelect) {
+          if (!this.selectionBoxGraphics) {
+            this.selectionBoxGraphics = this.add.graphics().setScrollFactor(0).setDepth(999);
+          }
+          this.selectionBoxGraphics.clear();
+          const minX = Math.min(this.dragState.startX, pointer.x);
+          const maxX = Math.max(this.dragState.startX, pointer.x);
+          const minY = Math.min(this.dragState.startY, pointer.y);
+          const maxY = Math.max(this.dragState.startY, pointer.y);
+          const w = maxX - minX;
+          const h = maxY - minY;
+          this.selectionBoxGraphics.fillStyle(0x38bdf8, 0.15);
+          this.selectionBoxGraphics.fillRect(minX, minY, w, h);
+          this.selectionBoxGraphics.lineStyle(1.5, 0x38bdf8, 0.9);
+          this.selectionBoxGraphics.strokeRect(minX, minY, w, h);
+        } else {
+          this.cameras.main.scrollX = this.dragState.camX - dx / this.cameras.main.zoom;
+          this.cameras.main.scrollY = this.dragState.camY - dy / this.cameras.main.zoom;
+          clampCamera(this.cameras.main);
+        }
       }
     });
 
@@ -1337,7 +1362,41 @@ export default class BattleScene extends Phaser.Scene {
       }
 
       const wasDrag = this.dragState.moved;
+      const wasBoxSelect = this.dragState.isBoxSelect;
+      const startX = this.dragState.startX;
+      const startY = this.dragState.startY;
       this.dragState = null;
+
+      if (this.selectionBoxGraphics) {
+        this.selectionBoxGraphics.destroy();
+        this.selectionBoxGraphics = null;
+      }
+
+      if (wasBoxSelect) {
+const pStart = { x: (startX / this.cameras.main.zoom) + this.cameras.main.scrollX, y: (startY / this.cameras.main.zoom) + this.cameras.main.scrollY };
+const pEnd = { x: (pointer.x / this.cameras.main.zoom) + this.cameras.main.scrollX, y: (pointer.y / this.cameras.main.zoom) + this.cameras.main.scrollY };
+const boxLeft = Math.min(pStart.x, pEnd.x);
+const boxRight = Math.max(pStart.x, pEnd.x);
+const boxTop = Math.min(pStart.y, pEnd.y);
+const boxBottom = Math.max(pStart.y, pEnd.y);
+
+        const selected = this.units.filter((unit) =>
+          unit.team === 'player' &&
+          unit.hp > 0 &&
+          unit.type !== 'worker' &&
+          unit.type !== 'structure' &&
+          unit.type !== 'construction' &&
+          unit.x >= boxLeft && unit.x <= boxRight &&
+          unit.y >= boxTop && unit.y <= boxBottom
+        );
+
+        if (selected.length > 0) {
+          this.selectEntities(selected);
+        } else {
+          this.clearSelection();
+        }
+        return;
+      }
 
       if (!wasDrag) {
         if (this.ended) {
@@ -1363,6 +1422,13 @@ export default class BattleScene extends Phaser.Scene {
       const activePointers = this.input.activePointers.filter((p) => !this.isUiPointer(p));
 
       if (activePointers.length === 2 && !this.touchZoomState) {
+        if (this.selectionBoxGraphics) {
+          this.selectionBoxGraphics.destroy();
+          this.selectionBoxGraphics = null;
+        }
+        if (this.dragState) {
+          this.dragState = null;
+        }
         // Start pinch zoom
         const p1 = activePointers[0];
         const p2 = activePointers[1];
@@ -1494,10 +1560,11 @@ export default class BattleScene extends Phaser.Scene {
   handleTap(worldX, worldY) {
     const hit = this.hitTest(worldX, worldY);
     const selected = this.selectedEntity;
+    const commandableUnits = (this.selectedEntities?.length > 0 ? this.selectedEntities : (selected ? [selected] : [])).filter((u) => this.canDirectCommand(u));
 
     if (hit) {
-      if (this.canDirectCommand(selected) && hit.team === 'enemy') {
-        this.issueAttackTarget(selected, hit);
+      if (commandableUnits.length > 0 && hit.team === 'enemy') {
+        commandableUnits.forEach((u) => this.issueAttackTarget(u, hit));
         this.showTapIndicator(hit.x, hit.y, 'attack');
         this.syncSession('Attack order issued.');
         return;
@@ -1506,8 +1573,8 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (this.canDirectCommand(selected)) {
-      if (selected.type === 'worker' && !selected.autoHarvest) {
+    if (commandableUnits.length > 0) {
+      if (commandableUnits.length === 1 && selected?.type === 'worker' && !selected.autoHarvest) {
         const geyser = this.gasGeysers.find((g) => Phaser.Math.Distance.Between(g.x, g.y, worldX, worldY) <= g.radius + 16 && g.assignedWorkers < g.maxWorkers);
         if (geyser) {
           this.assignWorkerToGas(selected, geyser);
@@ -1517,14 +1584,14 @@ export default class BattleScene extends Phaser.Scene {
       }
 
       if (this.commandMode === 'attack') {
-        this.issueAttackMove(selected, worldX, worldY);
+        commandableUnits.forEach((u) => this.issueAttackMove(u, worldX, worldY));
         this.commandMode = 'select';
         this.showTapIndicator(worldX, worldY, 'attack');
         this.syncSession('Attack move issued.');
         return;
       }
 
-      this.issueMove(selected, worldX, worldY);
+      commandableUnits.forEach((u) => this.issueMove(u, worldX, worldY));
       this.commandMode = 'select';
       this.showTapIndicator(worldX, worldY, 'move');
       this.syncSession('Move order issued.');
@@ -1538,18 +1605,42 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   selectEntity(entity) {
-    this.selectedEntity = entity;
+    this.selectedEntities = entity ? [entity] : [];
+    this.selectedEntity = entity || null;
     this.commandMode = 'select';
-    this.visualPolish?.onSelect(entity);
-    this.showSelectionHighlight(entity);
-    this.syncSession(`Selected ${entity.label}.`);
-    // Audio feedback: selection chirp.
-    if (this.audioManager) this.audioManager.select(entity);
+    if (entity) {
+      this.visualPolish?.onSelect(entity);
+      this.showSelectionHighlight(entity);
+      this.syncSession(`Selected ${entity.label}.`);
+      if (this.audioManager) this.audioManager.select(entity);
+    } else {
+      this.clearSelectionHighlight();
+      this.syncSession('Selection cleared.');
+    }
+  }
+
+  selectEntities(entities) {
+    if (!entities || entities.length === 0) {
+      this.clearSelection();
+      return;
+    }
+    if (entities.length === 1) {
+      this.selectEntity(entities[0]);
+      return;
+    }
+    this.selectedEntities = [...entities];
+    this.selectedEntity = entities[0];
+    this.commandMode = 'select';
+    this.visualPolish?.onSelect(this.selectedEntity);
+    this.showMultiSelectionHighlights(this.selectedEntities);
+    this.syncSession(`Selected squad of ${entities.length} units.`);
+    if (this.audioManager) this.audioManager.select(this.selectedEntity);
   }
 
   clearSelection() {
     const previousSelection = this.selectedEntity;
     this.selectedEntity = null;
+    this.selectedEntities = [];
     this.commandMode = 'select';
     this.clearSelectionHighlight();
     this.syncSession('Selection cleared.');
@@ -3030,6 +3121,26 @@ export default class BattleScene extends Phaser.Scene {
 
     // Refresh tech building cache when structures change.
     this._updateTechCache();
+
+    if (this.selectedEntities && this.selectedEntities.length > 0) {
+      const livingSelected = this.selectedEntities.filter((u) => u.hp > 0);
+      if (livingSelected.length === 0) {
+        this.clearSelection();
+      } else if (livingSelected.length !== this.selectedEntities.length || (this.selectedEntity && this.selectedEntity.hp <= 0)) {
+        this.selectedEntities = livingSelected;
+        if (!this.selectedEntity || this.selectedEntity.hp <= 0) {
+          this.selectedEntity = livingSelected[0];
+        }
+        if (this.selectedEntities.length === 1) {
+          this.selectEntity(this.selectedEntity);
+        } else {
+          this.showMultiSelectionHighlights(this.selectedEntities);
+          this.syncSession();
+        }
+      }
+    } else if (this.selectedEntity && this.selectedEntity.hp <= 0) {
+      this.clearSelection();
+    }
   }
 
   destroyEntity(entity) {
@@ -3067,7 +3178,6 @@ export default class BattleScene extends Phaser.Scene {
     let enemyStructCount = 0;
     let playerCombatCount = 0;
     let enemyCombatCount = 0;
-
     for (let i = 0; i < this.structures.length; i++) {
       const s = this.structures[i];
       if (s.hp > 0) {
@@ -3126,6 +3236,17 @@ export default class BattleScene extends Phaser.Scene {
         hp: 0,
         maxHp: 0,
         details: 'Tap a unit or structure to inspect it.'
+      };
+    }
+
+    if (this.selectedEntities && this.selectedEntities.length > 1) {
+      return {
+        label: `Squad (${this.selectedEntities.length})`,
+        kind: 'combat',
+        owner: 'player',
+        hp: entity.hp,
+        maxHp: entity.maxHp,
+        details: `${this.selectedEntities.length} combat units selected. Tap empty ground to move squad, or tap enemy to attack.`
       };
     }
 
@@ -3327,6 +3448,21 @@ export default class BattleScene extends Phaser.Scene {
     this.inputController?.destroy();
     this.scene.stop('HudScene');
     this.scale.off('resize', this.handleResize, this);
+    if (this.audioManager) {
+      this.audioManager.destroy();
+    }
+    if (this._audioSystem) {
+      this._audioSystem.destroy();
+    }
+    this.clearSelectionHighlight();
+    if (this.selectionBoxGraphics) {
+      this.selectionBoxGraphics.destroy();
+      this.selectionBoxGraphics = null;
+    }
+    if (this.tapFeedback) {
+      this.tapFeedback.destroy();
+      this.tapFeedback = null;
+    }
   }
 
   handleResize() {
@@ -3423,17 +3559,46 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
-  updateSelectionHighlightPosition() {
-    if (!this.selectedEntity || !this.selectionHighlight) return;
-    const x = this.selectedEntity.x;
-    const y = this.selectedEntity.y;
-    if (typeof this.selectionHighlight.getChildren === 'function') {
-      this.selectionHighlight.getChildren().forEach((child) => {
-        child.setPosition(x + (child._offX || 0), y + (child._offY || 0));
-      });
+  showMultiSelectionHighlights(entities) {
+    this.clearSelectionHighlight();
+    if (!entities || entities.length === 0) return;
+
+    this.showSelectionHighlight(entities[0]);
+    this.secondaryHighlights = [];
+
+    const teamColor = 0x22c55e;
+    for (let i = 1; i < entities.length; i++) {
+      const u = entities[i];
+      if (!u || !u.sprite) continue;
+      const radius = u.radius || 20;
+      const ring = this.add.circle(u.x, u.y, radius + 6, teamColor, 0.05)
+        .setStrokeStyle(1.5, teamColor, 0.85)
+        .setDepth(5);
+      this.secondaryHighlights.push({ unit: u, ring });
     }
-    if (this.rangeRing) {
-      this.rangeRing.setPosition(x, y);
+  }
+
+  updateSelectionHighlightPosition() {
+    if (this.selectedEntity && this.selectionHighlight) {
+      const x = this.selectedEntity.x;
+      const y = this.selectedEntity.y;
+      if (typeof this.selectionHighlight.getChildren === 'function') {
+        this.selectionHighlight.getChildren().forEach((child) => {
+          child.setPosition(x + (child._offX || 0), y + (child._offY || 0));
+        });
+      }
+      if (this.rangeRing) {
+        this.rangeRing.setPosition(x, y);
+      }
+    }
+
+    if (this.secondaryHighlights && this.secondaryHighlights.length > 0) {
+      for (let i = 0; i < this.secondaryHighlights.length; i++) {
+        const sh = this.secondaryHighlights[i];
+        if (sh.ring && sh.unit) {
+          sh.ring.setPosition(sh.unit.x, sh.unit.y);
+        }
+      }
     }
   }
 
@@ -3453,6 +3618,10 @@ export default class BattleScene extends Phaser.Scene {
     if (this.rangeRingTween) {
       this.rangeRingTween.stop();
       this.rangeRingTween = null;
+    }
+    if (this.secondaryHighlights) {
+      this.secondaryHighlights.forEach((sh) => sh.ring?.destroy());
+      this.secondaryHighlights = [];
     }
   }
 
@@ -3803,11 +3972,20 @@ export default class BattleScene extends Phaser.Scene {
     if (this.audioManager) this.audioManager.chargeHit();
   }
 
-  shutdown() {
+shutdown() {
     this.visualPolish?.destroy();
     this.visualPolish = null;
     this.inputController?.destroy();
     this.scene.stop('HudScene');
     this.scale.off('resize', this.handleResize, this);
+    this.clearSelectionHighlight();
+    this.selectionBoxGraphics?.destroy();
+    this.selectionBoxGraphics = null;
+    if (this.secondaryHighlights) {
+      for (const sh of this.secondaryHighlights) {
+        sh.ring?.destroy();
+      }
+      this.secondaryHighlights = [];
+    }
   }
 }

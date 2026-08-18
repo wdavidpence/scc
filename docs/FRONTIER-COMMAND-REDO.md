@@ -259,9 +259,9 @@ Publish:
 
 ## Progress
 
-- Implemented: A1 command contract + unit registration + muzzle `setTint` crash fix (v2.10.0).
-- Locally verified: 1 (title → Deploy → 8 units → move keeps selection → attack target; soldier translated 664→879; zero pageerrors).
+- Implemented: A1 command contract (v2.10.0/v2.11.0) + A2 multi-select/drag box (v2.13.0).
+- Locally verified: A2 mouse box selected 2 soldiers, Squad (2), shared move 665→809 / 690→808, shared attack target kept 2; start path 0 pageerrors.
 - Remotely verified: pending Pages after this commit.
-- Next slice: A2 multi-select + drag box.
+- Next slice: A4 rally point (A3 control groups after if input allows).
 
 Do not mark a phase complete because this file exists.
