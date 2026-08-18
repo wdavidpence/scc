@@ -16,21 +16,21 @@ export const RACES = {
     workerName: 'SCV',
     soldierName: 'Marine',
     signatureName: 'Marauder',
-    startMinerals: 500,
-    startGas: 150,
+    startMinerals: 50,
+    startGas: 0,
     startSupplyCap: 10,
     startSupplyUsed: 4,
     startWorkers: 4,
-    startSoldiers: 1,
-    enemyIncomePerSecond: 5,
+    startSoldiers: 0,
+    enemyIncomePerSecond: 0,
     workerHarvest: 8,
     workerGasHarvest: 3,
     gasGeysers: [
-      { x: 0.30, y: 0.30, amount: 1500 },
-      { x: 0.70, y: 0.70, amount: 1500 }
+      { x: 0.16, y: 0.36, amount: 1500 },
+      { x: 0.84, y: 0.64, amount: 1500 }
     ],
     structures: {
-      commandCenter: { cost: 0, buildTime: 0, maxHp: 1600, width: 110, height: 72, supplyBonus: 0, color: 0x1d4ed8 },
+      commandCenter: { cost: 0, buildTime: 0, maxHp: 1600, width: 110, height: 72, supplyBonus: 10, color: 0x1d4ed8 },
       production: { cost: 150, buildTime: 10, maxHp: 900, width: 88, height: 56, supplyBonus: 8, color: 0x2563eb },
       techBuilding: { cost: 200, buildTime: 12, maxHp: 750, width: 76, height: 52, supplyBonus: 0, color: 0x7c3aed, requiredStructure: 'production' },
       supplyStructure: { cost: 100, buildTime: 8, maxHp: 500, width: 64, height: 48, supplyBonus: 8, color: 0x3b82f6 },
@@ -38,7 +38,7 @@ export const RACES = {
     },
     units: {
       worker: { label: 'SCV', cost: 50, gasCost: 0, buildTime: 7, hp: 45, maxHp: 45, speed: 128, attack: 4, range: 24, cooldown: 0.8, supply: 1, radius: 14, color: 0x93c5fd },
-      soldier: { label: 'Marine', cost: 50, gasCost: 25, buildTime: 9, hp: 55, maxHp: 55, speed: 146, attack: 8, range: 32, cooldown: 0.65, supply: 1, radius: 15, color: 0x60a5fa,
+      soldier: { label: 'Marine', cost: 50, gasCost: 0, buildTime: 9, hp: 55, maxHp: 55, speed: 146, attack: 8, range: 32, cooldown: 0.65, supply: 1, radius: 15, color: 0x60a5fa,
         stimpack: {
           damageMultiplier: 2,
           speedMultiplier: 0.5,
@@ -67,21 +67,21 @@ export const RACES = {
     workerName: 'Drone',
     soldierName: 'Zergling',
     signatureName: 'Hydralisk',
-    startMinerals: 500,
-    startGas: 150,
-    startSupplyCap: 11,
+    startMinerals: 50,
+    startGas: 0,
+    startSupplyCap: 10,
     startSupplyUsed: 4,
     startWorkers: 4,
-    startSoldiers: 2,
-    enemyIncomePerSecond: 5,
+    startSoldiers: 0,
+    enemyIncomePerSecond: 0,
     workerHarvest: 10,
     workerGasHarvest: 4,
     gasGeysers: [
-      { x: 0.25, y: 0.65, amount: 1500 },
-      { x: 0.75, y: 0.35, amount: 1500 }
+      { x: 0.16, y: 0.36, amount: 1500 },
+      { x: 0.84, y: 0.64, amount: 1500 }
     ],
     structures: {
-      commandCenter: { cost: 0, buildTime: 0, maxHp: 1450, width: 112, height: 76, supplyBonus: 0, color: 0x7c2d12 },
+      commandCenter: { cost: 0, buildTime: 0, maxHp: 1450, width: 112, height: 76, supplyBonus: 10, color: 0x7c2d12 },
       production: { cost: 125, buildTime: 8, maxHp: 820, width: 84, height: 58, supplyBonus: 10, color: 0xea580c },
       techBuilding: { cost: 175, buildTime: 10, maxHp: 680, width: 72, height: 50, supplyBonus: 0, color: 0xa855f7, requiredStructure: 'production' },
       supplyStructure: { cost: 75, buildTime: 6, maxHp: 400, width: 56, height: 42, supplyBonus: 6, color: 0xf97316 },
@@ -111,21 +111,21 @@ export const RACES = {
     workerName: 'Probe',
     soldierName: 'Zealot',
     signatureName: 'Dragoon',
-    startMinerals: 500,
-    startGas: 150,
-    startSupplyCap: 9,
+    startMinerals: 50,
+    startGas: 0,
+    startSupplyCap: 10,
     startSupplyUsed: 4,
     startWorkers: 4,
-    startSoldiers: 1,
-    enemyIncomePerSecond: 5,
+    startSoldiers: 0,
+    enemyIncomePerSecond: 0,
     workerHarvest: 9,
     workerGasHarvest: 3,
     gasGeysers: [
-      { x: 0.35, y: 0.35, amount: 1500 },
-      { x: 0.65, y: 0.65, amount: 1500 }
+      { x: 0.16, y: 0.36, amount: 1500 },
+      { x: 0.84, y: 0.64, amount: 1500 }
     ],
     structures: {
-      commandCenter: { cost: 0, buildTime: 0, maxHp: 1700, width: 112, height: 74, supplyBonus: 0, color: 0x7c3aed },
+      commandCenter: { cost: 0, buildTime: 0, maxHp: 1700, width: 112, height: 74, supplyBonus: 10, color: 0x7c3aed },
       production: { cost: 175, buildTime: 11, maxHp: 980, width: 90, height: 60, supplyBonus: 9, color: 0x8b5cf6 },
       techBuilding: { cost: 225, buildTime: 13, maxHp: 800, width: 78, height: 54, supplyBonus: 0, color: 0xc084fc, requiredStructure: 'production' },
       supplyStructure: { cost: 125, buildTime: 9, maxHp: 600, width: 60, height: 46, supplyBonus: 8, color: 0xa78bfa },
@@ -133,7 +133,7 @@ export const RACES = {
     },
     units: {
       worker: { label: 'Probe', cost: 50, gasCost: 0, buildTime: 7, hp: 40, maxHp: 40, speed: 132, attack: 3, range: 22, cooldown: 0.76, supply: 1, radius: 14, color: 0xc4b5fd },
-      soldier: { label: 'Zealot', cost: 75, gasCost: 25, buildTime: 10, hp: 85, maxHp: 85, shield: 85, maxShield: 85, speed: 124, attack: 12, range: 26, cooldown: 0.72, supply: 2, radius: 16, color: 0xa78bfa, chargeCooldown: 10, chargeDamage: 6, chargeDashDist: 120 },
+      soldier: { label: 'Zealot', cost: 75, gasCost: 0, buildTime: 10, hp: 85, maxHp: 85, shield: 85, maxShield: 85, speed: 124, attack: 12, range: 26, cooldown: 0.72, supply: 2, radius: 16, color: 0xa78bfa, chargeCooldown: 10, chargeDamage: 6, chargeDashDist: 120 },
       signature: { label: 'Dragoon', cost: 150, gasCost: 125, buildTime: 18, hp: 140, maxHp: 140, shield: 50, maxShield: 50, speed: 114, attack: 16, range: 56, cooldown: 1.2, supply: 2, radius: 17, color: 0x7c3aed, requiresTech: true },
       enemySoldier: { label: 'Raider', cost: 75, buildTime: 10, hp: 85, maxHp: 85, speed: 118, attack: 12, range: 26, cooldown: 0.76, supply: 2, radius: 16, color: 0xfcd34d },
       enemySignature: { label: 'Elite Raider', cost: 150, buildTime: 18, hp: 140, maxHp: 140, speed: 110, attack: 16, range: 56, cooldown: 1.25, supply: 2, radius: 17, color: 0xdc2626 }

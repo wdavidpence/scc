@@ -4,44 +4,38 @@ export const DIFFICULTIES = {
   easy: {
     id: 'easy',
     label: 'Easy',
-    description: 'Slower income, later waves, and fewer elite raids.',
-    enemyStartingMinerals: 260,
-    enemyStartingSupplyCap: 8,
-    enemyIncomeMultiplier: 0.82,
-    enemyWaveStart: 8.5,
-    enemyWaveFloor: 5.5,
-    enemyWaveDecay: 0.22,
-    enemyTechWave: 4,
-    enemySignatureWave: 5,
-    enemySignatureCadence: 3
+    description: 'Slower enemy build-up. Good for learning the loop.',
+    enemyStartingMinerals: 50,
+    enemyStartingSupplyCap: 10,
+    enemyIncomeMultiplier: 0,
+    enemyTargetWorkers: 6,
+    enemyAttackArmy: 8,
+    enemyRetreatArmy: 2,
+    enemyAttackCooldown: 28
   },
   normal: {
     id: 'normal',
     label: 'Normal',
-    description: 'Baseline pressure with steady income and balanced waves.',
-    enemyStartingMinerals: 320,
+    description: 'Even 1v1. Both sides grow from a command center and four workers.',
+    enemyStartingMinerals: 50,
     enemyStartingSupplyCap: 10,
-    enemyIncomeMultiplier: 1,
-    enemyWaveStart: 7.5,
-    enemyWaveFloor: 4,
-    enemyWaveDecay: 0.3,
-    enemyTechWave: 3,
-    enemySignatureWave: 3,
-    enemySignatureCadence: 2
+    enemyIncomeMultiplier: 0,
+    enemyTargetWorkers: 8,
+    enemyAttackArmy: 6,
+    enemyRetreatArmy: 2,
+    enemyAttackCooldown: 22
   },
   hard: {
     id: 'hard',
     label: 'Hard',
-    description: 'Faster income, earlier tech, and more frequent elite pressure.',
-    enemyStartingMinerals: 380,
-    enemyStartingSupplyCap: 12,
-    enemyIncomeMultiplier: 1.25,
-    enemyWaveStart: 6.5,
-    enemyWaveFloor: 3.5,
-    enemyWaveDecay: 0.36,
-    enemyTechWave: 2,
-    enemySignatureWave: 2,
-    enemySignatureCadence: 2
+    description: 'Faster enemy production and earlier attacks.',
+    enemyStartingMinerals: 80,
+    enemyStartingSupplyCap: 10,
+    enemyIncomeMultiplier: 0,
+    enemyTargetWorkers: 10,
+    enemyAttackArmy: 5,
+    enemyRetreatArmy: 1,
+    enemyAttackCooldown: 16
   }
 };
 
@@ -49,6 +43,6 @@ export function getDifficulty(difficultyId = 'normal') {
   return DIFFICULTIES[difficultyId] ?? DIFFICULTIES.normal;
 }
 
-export function getEnemyWaveInterval(difficulty, enemyWave) {
-  return Math.max(difficulty.enemyWaveFloor, difficulty.enemyWaveStart - enemyWave * difficulty.enemyWaveDecay);
+export function getEnemyWaveInterval() {
+  return 9999;
 }

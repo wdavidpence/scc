@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { session, GameStates } from '../game/state/gameSession.js';
 import { getRace } from '../game/data/races.js';
-import { getDifficulty, getEnemyWaveInterval } from '../game/data/difficulties.js';
+import { getDifficulty } from '../game/data/difficulties.js';
 import { createInputController } from '../game/input/createInputController.js';
 import { getUnitDef } from '../game/unitDefs.js';
 import ParticleManager from '../game/particles/ParticleManager.js';
@@ -99,7 +99,7 @@ export default class BattleScene extends Phaser.Scene {
     this.playerSupplyUsed = this.race.startSupplyUsed;
     this.playerSupplyCap = this.race.startSupplyCap;
     this.enemyMinerals = this.aiDifficulty.enemyStartingMinerals;
-    this.enemyGas = this.race.startGas;
+    this.enemyGas = 0;
     this.enemySupplyUsed = 4;
     this.enemySupplyCap = this.aiDifficulty.enemyStartingSupplyCap;
     this.enemyIncomeTimer = 0;
@@ -133,60 +133,24 @@ export default class BattleScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(this.race.backdrop);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-    // Start zoomed in on player side, then smoothly pan to center
-    this.cameras.main.setZoom(0.7);
-    this.cameras.main.scrollX = 200;
-    this.cameras.main.scrollY = WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2;
-
-    // Smooth zoom out + pan to center after short delay
-    this.time.delayedCall(800, () => {
-      const cam = this.cameras.main;
-      this.tweens.add({
-        targets: { zoom: 0.7, scrollX: 200, scrollY: WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2 },
-        duration: 1800,
-        ease: 'Sine.easeInOut',
-        onUpdate: (tween) => {
-          const p = tween.progress;
-          cam.zoom = Phaser.Math.Linear(0.7, 0.95, p);
-          cam.scrollX = Phaser.Math.Linear(200, WORLD_WIDTH / 2 - (this.scale.width * 0.95) / 2, p);
-          cam.scrollY = Phaser.Math.Linear(
-            WORLD_HEIGHT / 2 - (this.scale.height * 0.7) / 2,
-            WORLD_HEIGHT / 2 - (this.scale.height * 0.95) / 2,
-            p
-          );
-        }
-      });
-    });
+    this.cameras.main.setZoom(0.85);
+    this.cameras.main.scrollX = 40;
+    this.cameras.main.scrollY = WORLD_HEIGHT / 2 - (this.scale.height * 0.85) / 2;
+    this.input.mouse?.disableContextMenu();
+    this.input.keyboard?.on('keydown-SPACE', () => this.togglePause());
+    this.input.keyboard?.on('keydown-ESC', () => this.clearSelection());
 
     this.createBattleTextures();
 
     this.background = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, this.race.backdrop, 1)
       .setDepth(-20);
     this.terrainTile = this.add.tileSprite(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, `${this.race.id}-terrain`)
-      .setAlpha(0.24)
+      .setAlpha(0.62)
       .setDepth(-19);
-    this.grid = this.add.grid(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, 48, 48, 0x0c1826, 0, 0x223548, 0.35)
-      .setOrigin(0.5)
-      .setAlpha(0.22)
-      .setDepth(-18);
-
-    this.middleLane = this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 220, WORLD_HEIGHT - 90, 0x0f172a, 0.18)
-      .setStrokeStyle(1, 0x1f3b61, 0.35);
-
-    this.playerZone = this.add.rectangle(0, WORLD_HEIGHT / 2, 360, WORLD_HEIGHT, this.race.accent, 0.08)
-      .setOrigin(0, 0.5)
-      .setDepth(-16);
-    this.enemyZone = this.add.rectangle(WORLD_WIDTH, WORLD_HEIGHT / 2, 360, WORLD_HEIGHT, 0xf97316, 0.08)
-      .setOrigin(1, 0.5)
-      .setDepth(-16);
-
-    this.createAtmosphere();
-
-    this.drawDecor();
+    this.drawDirtMap();
     this.createMap();
     this.createGasGeysers();
     this.spawnStartingForces();
-    this.createBattleFieldTitle();
     this.createMinimap();
     // Twenty-pass battle visual layer: attached after all initial entities exist.
     this.visualPolish = installBattleVisualPolish(this);
@@ -199,18 +163,14 @@ export default class BattleScene extends Phaser.Scene {
       enemyMinerals: this.enemyMinerals,
       difficultyId: this.aiDifficulty.id,
       difficultyLabel: this.aiDifficulty.label,
-      objective: `Secure the frontier, build ${this.race.productionName}, and destroy the enemy ${this.race.commandCenterName}.`,
-      message: `${this.race.name} command uplink online. ${this.aiDifficulty.label} AI active. Tap a unit, structure, or the battlefield to command the army.`,
-      log: [`${this.race.name} deployed.`]
+      objective: `Destroy the enemy ${this.race.commandCenterName}.`,
+      message: 'Left-drag select • Right-click move/attack • WASD pan • Space pause',
+      log: []
     });
 
     this.defaultWorker = this.units.find((unit) => unit.team === 'player' && unit.type === 'worker' && unit.hp > 0) ?? null;
-    if (this.defaultWorker) {
-      this.selectEntity(this.defaultWorker);
-      session.setMessage(`Worker selected by default. Tap Move or Attack to command it, or use the HUD to train more ${this.race.workerName}s.`);
-    } else if (this.playerCommandCenter) {
+    if (this.playerCommandCenter) {
       this.selectEntity(this.playerCommandCenter);
-      session.setMessage('Command Center selected by default. Use the HUD to grow your army.');
     }
 
     // Show a brief "how to play" hint banner that fades after 5 seconds
@@ -244,50 +204,24 @@ export default class BattleScene extends Phaser.Scene {
     if (this.tapFeedback) this.tapFeedback.destroy();
   }
 
+  drawDirtMap() {
+    const dirt = this.add.graphics().setDepth(-17);
+    dirt.fillStyle(0x3d2a16, 0.55);
+    dirt.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    dirt.fillStyle(0x5a4224, 0.28);
+    dirt.fillRect(40, 80, 420, WORLD_HEIGHT - 160);
+    dirt.fillRect(WORLD_WIDTH - 460, 80, 420, WORLD_HEIGHT - 160);
+    dirt.fillStyle(0x1c140c, 0.55);
+    dirt.fillRect(620, 0, 110, 280);
+    dirt.fillRect(620, WORLD_HEIGHT - 280, 110, 280);
+    dirt.fillRect(950, 0, 110, 280);
+    dirt.fillRect(950, WORLD_HEIGHT - 280, 110, 280);
+    dirt.fillStyle(0x2a1c10, 0.35);
+    dirt.fillRect(730, 300, 220, WORLD_HEIGHT - 600);
+  }
+
   drawDecor() {
-    const laneColor = this.race.accent;
-    const enemyColor = 0xf97316;
-
-    // Perimeter ridge plateaus (top and bottom two-tone elevation ridges)
-    this.add.rectangle(WORLD_WIDTH / 2, 95, WORLD_WIDTH - 120, 10, 0x020617, 0.6).setDepth(1);
-    this.add.rectangle(WORLD_WIDTH / 2, 100, WORLD_WIDTH - 120, 2, 0x38bdf8, 0.5).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 95, WORLD_WIDTH - 120, 10, 0x020617, 0.6).setDepth(1);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 100, WORLD_WIDTH - 120, 2, enemyColor, 0.5).setDepth(2);
-
-    // Tactical boundary rails
-    this.add.rectangle(WORLD_WIDTH / 2, 110, WORLD_WIDTH - 200, 4, 0x1d4ed8, 0.45).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT - 110, WORLD_WIDTH - 200, 4, enemyColor, 0.45).setDepth(2);
-
-    // Contested Lane two-tone ridge framing
-    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 140, laneColor, 0.05).setDepth(2);
-    this.add.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, 0x38bdf8, 0.03).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 246, WORLD_HEIGHT - 174, 0x020617, 0.4).setDepth(1);
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 240, WORLD_HEIGHT - 180, 0x0f172a, 0.2)
-      .setStrokeStyle(2, 0x38bdf8, 0.5).setDepth(2);
-
-    // Sector Alpha (Player Zone) two-tone framing & brackets
-    this.add.rectangle(220, WORLD_HEIGHT / 2, 304, WORLD_HEIGHT - 136, 0x020617, 0.35).setDepth(1);
-    this.add.rectangle(220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, laneColor, 0.07)
-      .setStrokeStyle(1, laneColor, 0.35).setDepth(2);
-    this.add.rectangle(70, WORLD_HEIGHT / 2 - 200, 30, 3, laneColor, 0.7).setDepth(2);
-    this.add.rectangle(70, WORLD_HEIGHT / 2 + 200, 30, 3, laneColor, 0.7).setDepth(2);
-
-    // Sector Omega (Enemy Zone) two-tone framing & brackets
-    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 304, WORLD_HEIGHT - 136, 0x020617, 0.35).setDepth(1);
-    this.add.rectangle(WORLD_WIDTH - 220, WORLD_HEIGHT / 2, 300, WORLD_HEIGHT - 140, enemyColor, 0.07)
-      .setStrokeStyle(1, enemyColor, 0.35).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 - 200, 30, 3, enemyColor, 0.7).setDepth(2);
-    this.add.rectangle(WORLD_WIDTH - 70, WORLD_HEIGHT / 2 + 200, 30, 3, enemyColor, 0.7).setDepth(2);
-
-    // Contested-zone boundary markers — subtle faction-colored ground dividers
-    this.add.line(370, WORLD_HEIGHT / 2, -5, -40, -5, 40, laneColor, 0.3).setDepth(2);
-    this.add.line(WORLD_WIDTH - 370, WORLD_HEIGHT / 2, -5, -40, -5, 40, enemyColor, 0.3).setDepth(2);
-
-    // Contested-lane guide chevrons — directional rhythm without gameplay coupling
-    [560, 840, 1120].forEach((x) => {
-      this.add.line(x, WORLD_HEIGHT / 2, -12, -8, 0, 0, 0x38bdf8, 0.22).setDepth(2);
-      this.add.line(x, WORLD_HEIGHT / 2, 0, 0, -12, 8, 0x38bdf8, 0.22).setDepth(2);
-    });
+    return this.drawDirtMap();
   }
 
   createAtmosphere() {
@@ -872,7 +806,7 @@ export default class BattleScene extends Phaser.Scene {
       .setStrokeStyle(1, 0x60a5fa, 0.5).setOrigin(0.5);
 
     // Hint text
-    const hintText = this.add.text(cx, height - 140, 'Tap Move/Attack to command • HUD buttons build units & structures', {
+    const hintText = this.add.text(cx, height - 140, 'Left-drag select  •  Right-click move/attack  •  WASD pan  •  Space pause', {
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 'clamp(12px, 2.5vw, 16px)',
       fontStyle: '700',
@@ -898,12 +832,14 @@ export default class BattleScene extends Phaser.Scene {
 
   createMap() {
     const mineralSpots = [
-      { x: WORLD_WIDTH / 2 - 130, y: WORLD_HEIGHT / 2 - 140 },
-      { x: WORLD_WIDTH / 2 - 70, y: WORLD_HEIGHT / 2 - 40 },
-      { x: WORLD_WIDTH / 2 - 135, y: WORLD_HEIGHT / 2 + 90 },
-      { x: WORLD_WIDTH / 2 + 80, y: WORLD_HEIGHT / 2 - 120 },
-      { x: WORLD_WIDTH / 2 + 150, y: WORLD_HEIGHT / 2 - 10 },
-      { x: WORLD_WIDTH / 2 + 110, y: WORLD_HEIGHT / 2 + 110 }
+      { x: 168, y: WORLD_HEIGHT / 2 - 90 },
+      { x: 214, y: WORLD_HEIGHT / 2 - 46 },
+      { x: 156, y: WORLD_HEIGHT / 2 + 18 },
+      { x: 228, y: WORLD_HEIGHT / 2 + 72 },
+      { x: WORLD_WIDTH - 168, y: WORLD_HEIGHT / 2 - 90 },
+      { x: WORLD_WIDTH - 214, y: WORLD_HEIGHT / 2 - 46 },
+      { x: WORLD_WIDTH - 156, y: WORLD_HEIGHT / 2 + 18 },
+      { x: WORLD_WIDTH - 228, y: WORLD_HEIGHT / 2 + 72 }
     ];
 
     mineralSpots.forEach((spot, index) => {
@@ -939,7 +875,7 @@ export default class BattleScene extends Phaser.Scene {
         fontSize: '10px',
         fontStyle: '800',
         color: '#f3e8ff'
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setVisible(false);
 
       const entity = {
         id: this.nextId += 1,
@@ -981,34 +917,29 @@ export default class BattleScene extends Phaser.Scene {
       { x: 36, y: 22 }
     ];
 
-    // Assign first 2 workers to minerals, next 2 to gas
-    playerWorkerOffsets.slice(0, Math.min(2, this.race.startWorkers)).forEach((offset, index) => {
-      this.createUnit('player', 'worker', 250 + offset.x, WORLD_HEIGHT / 2 + offset.y, { autoHarvest: true, homeStructure: this.playerCommandCenter, initialDelay: index * 0.15, harvestType: 'minerals' });
+    playerWorkerOffsets.slice(0, this.race.startWorkers).forEach((offset, index) => {
+      this.createUnit('player', 'worker', 250 + offset.x, WORLD_HEIGHT / 2 + offset.y, {
+        autoHarvest: true,
+        homeStructure: this.playerCommandCenter,
+        initialDelay: index * 0.15,
+        harvestType: 'minerals'
+      });
     });
 
-    // Assign remaining workers to gas if available
-    const gasGeysers = this.gasGeysers;
-    if (gasGeysers.length > 0) {
-      const gasWorkers = playerWorkerOffsets.slice(2, this.race.startWorkers);
-      gasWorkers.forEach((offset, index) => {
-        const geyser = gasGeysers[index % gasGeysers.length];
-        this.createUnit('player', 'worker', 250 + offset.x, WORLD_HEIGHT / 2 + offset.y, { autoHarvest: true, homeStructure: this.playerCommandCenter, initialDelay: index * 0.15, harvestType: 'gas', geyserId: geyser.id });
+    const enemyWorkerOffsets = [
+      { x: 35, y: -30 },
+      { x: 10, y: 28 },
+      { x: -26, y: -12 },
+      { x: -36, y: 22 }
+    ];
+    enemyWorkerOffsets.slice(0, this.race.startWorkers).forEach((offset, index) => {
+      this.createUnit('enemy', 'worker', WORLD_WIDTH - 250 + offset.x, WORLD_HEIGHT / 2 + offset.y, {
+        autoHarvest: true,
+        homeStructure: this.enemyCommandCenter,
+        initialDelay: index * 0.15,
+        harvestType: 'minerals'
       });
-    }
-
-    for (let index = 0; index < this.race.startSoldiers; index += 1) {
-      this.createUnit('player', 'soldier', 285 + index * 24, WORLD_HEIGHT / 2 + 56 + index * 16, { mode: 'guard' });
-    }
-
-    this.createStructure('player', 'production', 320, WORLD_HEIGHT / 2 - 150, { active: true, construction: false, buildProgress: 1, roleName: this.race.productionName });
-    this.playerSupplyCap += this.race.structures.production.supplyBonus;
-
-    // Enemy workers (2 workers, no gas assignment initially)
-    this.createUnit('enemy', 'worker', WORLD_WIDTH - 250, WORLD_HEIGHT / 2 - 30, { autoHarvest: true, homeStructure: this.enemyCommandCenter, initialDelay: 0.1, harvestType: 'minerals' });
-    this.createUnit('enemy', 'worker', WORLD_WIDTH - 220, WORLD_HEIGHT / 2 + 34, { autoHarvest: true, homeStructure: this.enemyCommandCenter, initialDelay: 0.3, harvestType: 'minerals' });
-
-    // Enemy soldier
-    this.createUnit('enemy', 'soldier', WORLD_WIDTH - 280, WORLD_HEIGHT / 2 + 78, { mode: 'guard', autoAggro: true, enemyKind: 'enemySoldier' });
+    });
   }
 
   createResourceNode(x, y, amount = 1000) {
@@ -1029,7 +960,7 @@ export default class BattleScene extends Phaser.Scene {
       fontSize: '10px',
       fontStyle: '800',
       color: '#eff6ff'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setVisible(false);
 
     const entity = {
       id: this.nextId += 1,
@@ -1105,7 +1036,7 @@ export default class BattleScene extends Phaser.Scene {
       fontSize: 'clamp(10px, 1.9vw, 13px)',
       color: '#cbd5e1',
       align: 'center'
-    }).setOrigin(0.5).setDepth(sDepth + 1);
+    }).setOrigin(0.5).setDepth(sDepth + 1).setVisible(false);
 
     const entity = {
       id: this.nextId += 1,
@@ -1201,7 +1132,7 @@ export default class BattleScene extends Phaser.Scene {
       fontSize: 'clamp(9px, 1.6vw, 11px)',
       color: '#cbd5e1',
       align: 'center'
-    }).setOrigin(0.5).setDepth(uDepth + 1);
+    }).setOrigin(0.5).setDepth(uDepth + 1).setVisible(false);
 
     const entity = {
       id: this.nextId += 1,
@@ -1296,21 +1227,39 @@ export default class BattleScene extends Phaser.Scene {
     return getUnitDef(this.race, team, kind, enemyKind);
   }
 
-  // --- Touch/mouse input for panning, box-select, and tapping ---
+  // --- Mouse/keyboard RTS: left select, drag box, right move/attack ---
   installPointerControls() {
     this.dragState = null;
+    this.input.mouse?.disableContextMenu();
+
+    this.input.on('wheel', (pointer, _gos, _dx, dy) => {
+      if (this.isUiPointer(pointer)) return;
+      const camera = this.cameras.main;
+      const currentZoom = camera.zoom;
+      const newZoom = Phaser.Math.Clamp(currentZoom - Math.sign(dy) * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
+      if (newZoom === currentZoom) return;
+      const zoomRatio = newZoom / currentZoom;
+      camera.zoom = newZoom;
+      camera.scrollX += (pointer.worldX - camera.scrollX) * (1 - zoomRatio);
+      camera.scrollY += (pointer.worldY - camera.scrollY) * (1 - zoomRatio);
+      clampCamera(camera);
+    });
 
     this.input.on('pointerdown', (pointer) => {
       if (this.isUiPointer(pointer)) {
         return;
       }
 
+      const isRight = pointer.rightButtonDown() || pointer.button === 2;
       this.dragState = {
         startX: pointer.x,
         startY: pointer.y,
+        worldX: pointer.worldX,
+        worldY: pointer.worldY,
         camX: this.cameras.main.scrollX,
         camY: this.cameras.main.scrollY,
         moved: false,
+        isRight,
         isTouch: Boolean(pointer.wasTouch || pointer.pointerType === 'touch'),
         isBoxSelect: false,
         startedOnEntity: Boolean(this.hitTest(pointer.worldX, pointer.worldY))
@@ -1325,10 +1274,10 @@ export default class BattleScene extends Phaser.Scene {
       const dx = pointer.x - this.dragState.startX;
       const dy = pointer.y - this.dragState.startY;
 
-      if (!this.dragState.moved && Math.hypot(dx, dy) > TAP_DRAG_THRESHOLD && !this.dragState.startedOnEntity) {
+      if (!this.dragState.moved && Math.hypot(dx, dy) > TAP_DRAG_THRESHOLD) {
         this.dragState.moved = true;
-        if (!this.dragState.isTouch) {
-          this.dragState.isBoxSelect = true;
+        if (!this.dragState.isRight && (!this.dragState.isTouch || !this.dragState.startedOnEntity)) {
+          this.dragState.isBoxSelect = !this.dragState.isTouch;
         }
       }
 
@@ -1348,7 +1297,7 @@ export default class BattleScene extends Phaser.Scene {
           this.selectionBoxGraphics.fillRect(minX, minY, w, h);
           this.selectionBoxGraphics.lineStyle(1.5, 0x38bdf8, 0.9);
           this.selectionBoxGraphics.strokeRect(minX, minY, w, h);
-        } else {
+        } else if (this.dragState.isTouch && !this.dragState.isRight) {
           this.cameras.main.scrollX = this.dragState.camX - dx / this.cameras.main.zoom;
           this.cameras.main.scrollY = this.dragState.camY - dy / this.cameras.main.zoom;
           clampCamera(this.cameras.main);
@@ -1363,6 +1312,7 @@ export default class BattleScene extends Phaser.Scene {
 
       const wasDrag = this.dragState.moved;
       const wasBoxSelect = this.dragState.isBoxSelect;
+      const wasRight = this.dragState.isRight;
       const startX = this.dragState.startX;
       const startY = this.dragState.startY;
       this.dragState = null;
@@ -1373,17 +1323,17 @@ export default class BattleScene extends Phaser.Scene {
       }
 
       if (wasBoxSelect) {
-const pStart = { x: (startX / this.cameras.main.zoom) + this.cameras.main.scrollX, y: (startY / this.cameras.main.zoom) + this.cameras.main.scrollY };
-const pEnd = { x: (pointer.x / this.cameras.main.zoom) + this.cameras.main.scrollX, y: (pointer.y / this.cameras.main.zoom) + this.cameras.main.scrollY };
-const boxLeft = Math.min(pStart.x, pEnd.x);
-const boxRight = Math.max(pStart.x, pEnd.x);
-const boxTop = Math.min(pStart.y, pEnd.y);
-const boxBottom = Math.max(pStart.y, pEnd.y);
+        const cam = this.cameras.main;
+        const pStart = cam.getWorldPoint(startX, startY);
+        const pEnd = cam.getWorldPoint(pointer.x, pointer.y);
+        const boxLeft = Math.min(pStart.x, pEnd.x);
+        const boxRight = Math.max(pStart.x, pEnd.x);
+        const boxTop = Math.min(pStart.y, pEnd.y);
+        const boxBottom = Math.max(pStart.y, pEnd.y);
 
         const selected = this.units.filter((unit) =>
           unit.team === 'player' &&
           unit.hp > 0 &&
-          unit.type !== 'worker' &&
           unit.type !== 'structure' &&
           unit.type !== 'construction' &&
           unit.x >= boxLeft && unit.x <= boxRight &&
@@ -1392,8 +1342,6 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
         if (selected.length > 0) {
           this.selectEntities(selected);
-        } else {
-          this.clearSelection();
         }
         return;
       }
@@ -1407,8 +1355,14 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
         }
 
         if (!this.isUiPointer(pointer)) {
-          this.handleTap(pointer.worldX, pointer.worldY);
+          if (wasRight) {
+            this.handleRightCommand(pointer.worldX, pointer.worldY);
+          } else {
+            this.handleTap(pointer.worldX, pointer.worldY);
+          }
         }
+      } else if (wasRight && !this.isUiPointer(pointer)) {
+        this.handleRightCommand(pointer.worldX, pointer.worldY);
       }
     });
   }
@@ -1559,49 +1513,63 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
   handleTap(worldX, worldY) {
     const hit = this.hitTest(worldX, worldY);
-    const selected = this.selectedEntity;
-    const commandableUnits = (this.selectedEntities?.length > 0 ? this.selectedEntities : (selected ? [selected] : [])).filter((u) => this.canDirectCommand(u));
+    const shiftKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    const shift = Boolean(shiftKey?.isDown);
 
-    if (hit) {
-      if (commandableUnits.length > 0 && hit.team === 'enemy') {
-        commandableUnits.forEach((u) => this.issueAttackTarget(u, hit));
-        this.showTapIndicator(hit.x, hit.y, 'attack');
-        this.syncSession('Attack order issued.');
+    if (hit && hit.team === 'player') {
+      if (shift && this.canDirectCommand(hit) && this.selectedEntities?.length) {
+        const already = this.selectedEntities.some((e) => e.id === hit.id);
+        const next = already
+          ? this.selectedEntities.filter((e) => e.id !== hit.id)
+          : [...this.selectedEntities, hit];
+        this.selectEntities(next);
         return;
       }
       this.selectEntity(hit);
       return;
     }
 
-    if (commandableUnits.length > 0) {
-      if (commandableUnits.length === 1 && selected?.type === 'worker' && !selected.autoHarvest) {
-        const geyser = this.gasGeysers.find((g) => Phaser.Math.Distance.Between(g.x, g.y, worldX, worldY) <= g.radius + 16 && g.assignedWorkers < g.maxWorkers);
-        if (geyser) {
-          this.assignWorkerToGas(selected, geyser);
-          this.syncSession('Worker assigned to gas geyser.');
-          return;
-        }
-      }
+    this.showDeselectRipple(worldX, worldY);
+    this.clearSelection();
+  }
 
-      if (this.commandMode === 'attack') {
-        commandableUnits.forEach((u) => this.issueAttackMove(u, worldX, worldY));
-        this.commandMode = 'select';
-        this.showTapIndicator(worldX, worldY, 'attack');
-        this.syncSession('Attack move issued.');
-        return;
-      }
-
-      commandableUnits.forEach((u) => this.issueMove(u, worldX, worldY));
-      this.commandMode = 'select';
-      this.showTapIndicator(worldX, worldY, 'move');
-      this.syncSession('Move order issued.');
+  handleRightCommand(worldX, worldY) {
+    const selected = this.selectedEntity;
+    const commandableUnits = (this.selectedEntities?.length > 0 ? this.selectedEntities : (selected ? [selected] : [])).filter((u) => this.canDirectCommand(u));
+    if (commandableUnits.length === 0) {
       return;
     }
 
-    if (!selected || this.commandMode === 'select') {
-      this.showDeselectRipple(worldX, worldY);
+    const hit = this.hitTest(worldX, worldY);
+    if (hit && hit.team === 'enemy') {
+      commandableUnits.forEach((u) => this.issueAttackTarget(u, hit));
+      this.showTapIndicator(hit.x, hit.y, 'attack');
+      return;
     }
-    this.clearSelection();
+
+    const resource = this.resourceNodes.find((r) => this.containsPoint(r, worldX, worldY));
+    const geyser = this.gasGeysers.find((g) => this.containsPoint(g, worldX, worldY) && g.assignedWorkers < g.maxWorkers);
+    const workers = commandableUnits.filter((u) => u.type === 'worker');
+    if (geyser && workers.length) {
+      workers.forEach((w) => this.assignWorkerToGas(w, geyser));
+      return;
+    }
+    if (resource && workers.length) {
+      workers.forEach((w) => {
+        w.harvestType = 'minerals';
+        w.autoHarvest = true;
+        w.order = 'harvest';
+        w.manual = false;
+        w.targetEntity = resource;
+        w.targetX = resource.x;
+        w.targetY = resource.y;
+      });
+      this.showTapIndicator(resource.x, resource.y, 'move');
+      return;
+    }
+
+    commandableUnits.forEach((u) => this.issueMove(u, worldX, worldY));
+    this.showTapIndicator(worldX, worldY, 'move');
   }
 
   selectEntity(entity) {
@@ -1784,7 +1752,7 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
     // Enforce supply cap
     if (this.playerSupplyUsed + def.supply > this.playerSupplyCap) {
-      session.setMessage('Supply blocked. Build more production first.');
+      session.setMessage('Supply blocked. Build a supply depot.');
       return;
     }
 
@@ -2059,47 +2027,7 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
     }
 
     this.enemyIncomeTimer += dt;
-    if (this.enemyIncomeTimer >= 1) {
-      const ticks = Math.floor(this.enemyIncomeTimer);
-      this.enemyIncomeTimer -= ticks;
-      // Enemy income now scales with their worker count (not purely passive)
-      // Optimized: count in single pass instead of two filter() calls.
-      let enemyWorkerCount = 0;
-      let enemyGasWorkerCount = 0;
-      for (let i = 0; i < this.enemyUnits.length; i++) {
-        const u = this.enemyUnits[i];
-        if (u.type === 'worker' && u.hp > 0) {
-          enemyWorkerCount++;
-          if (u.harvestType === 'gas') enemyGasWorkerCount++;
-        }
-      }
-      const workerIncome = enemyWorkerCount * this.race.workerHarvest;
-      const passiveIncome = this.race.enemyIncomePerSecond * this.aiDifficulty.enemyIncomeMultiplier;
-      this.enemyMinerals += (workerIncome + passiveIncome) * ticks;
-      // Gas income for enemy workers assigned to gas
-      this.enemyGas += enemyGasWorkerCount * this.race.workerGasHarvest * ticks;
-    }
-
-    this.enemySpawnTimer += dt;
     this.enemyAttackTimer += dt;
-
-    // Enemy wave spawning frequency scales with the selected AI difficulty.
-    const waveInterval = getEnemyWaveInterval(this.aiDifficulty, this.enemyWave);
-
-    // Show edge warning flash 2 seconds before wave arrives
-    if (!this.ended && !this.waveWarnActive) {
-      const timeUntilWave = waveInterval - this.enemySpawnTimer;
-      if (timeUntilWave <= 2 && timeUntilWave > 0) {
-        this.waveWarnActive = true;
-        this.showEdgeWarning();
-        this.time.delayedCall(2000, () => { this.waveWarnActive = false; });
-      }
-    }
-
-    if (this.enemySpawnTimer >= waveInterval) {
-      this.enemySpawnTimer = 0;
-      this.spawnEnemyWave();
-    }
 
     this.updateConstructions(dt);
     this.updateStructures(dt);
@@ -2476,7 +2404,7 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
     // Find nearest mineral node
     if (!worker.harvestNodeId || !this.resourceNodes.some((node) => node.id === worker.harvestNodeId && node.amount > 0)) {
-      const nearestNode = this.findNearestResourceNode(worker.x, worker.y);
+      const nearestNode = this.findNearestResourceNode(worker.x, worker.y, 0, WORLD_WIDTH / 2);
       worker.harvestNodeId = nearestNode?.id ?? null;
     }
 
@@ -2559,7 +2487,6 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
   updateEnemyAI(dt) {
     const enemyProduction = this.structures.find((structure) => structure.team === 'enemy' && structure.role === 'production' && structure.type === 'structure');
-    const enemyTech = this.structures.find((structure) => structure.team === 'enemy' && structure.role === 'techBuilding' && structure.type === 'structure');
     const enemyBase = this.enemyCommandCenter;
 
     // AI state tracking (persist across frames)
@@ -2603,21 +2530,20 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
 
     // --- ECONOMY MANAGEMENT ---
 
-    // Train more workers over time (aim for 8-12 workers)
+    // Train more workers (aim for a small mineral line first)
     ai.trainWorkerTimer += dt;
-    const targetWorkers = Math.min(12, 6 + Math.floor(this.enemyWave / 3));
-    if (enemyWorkerCount < targetWorkers && this.enemyMinerals >= this.race.units.worker.cost && ai.trainWorkerTimer > 5) {
+    const targetWorkers = this.aiDifficulty.enemyTargetWorkers ?? 8;
+    if (enemyWorkerCount < targetWorkers && this.enemyMinerals >= this.race.units.worker.cost && ai.trainWorkerTimer > 4) {
       const cc = this.enemyCommandCenter;
-      if (cc && cc.type === 'structure' && cc.queue.length < 2) {
+      if (cc && cc.type === 'structure' && cc.queue.length < 2 && this.enemySupplyUsed + this.race.units.worker.supply <= this.enemySupplyCap) {
         this.enemyMinerals -= this.race.units.worker.cost;
         cc.queue.push({ kind: 'worker', progress: this.race.units.worker.buildTime, def: this.race.units.worker });
         ai.trainWorkerTimer = 0;
       }
     }
 
-    // Assign workers to gas if geysers available and not enough gas workers
-    const availableGeysers = this.gasGeysers.filter((g) => g.amount > 0 && g.assignedWorkers < g.maxWorkers);
-    if (availableGeysers.length > 0 && gasWorkerCount < availableGeysers.length && mineralWorkerCount > 2) {
+    const enemySideGeysers = this.gasGeysers.filter((g) => g.x > WORLD_WIDTH / 2 && g.amount > 0 && g.assignedWorkers < g.maxWorkers);
+    if (enemySideGeysers.length > 0 && gasWorkerCount < 1 && mineralWorkerCount > 4) {
       let mover = null;
       for (let i = this.enemyUnits.length - 1; i >= 0; i--) {
         const u = this.enemyUnits[i];
@@ -2627,23 +2553,42 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
         }
       }
       if (mover) {
-        const geyser = availableGeysers[0];
+        const geyser = enemySideGeysers[0];
         mover.harvestType = 'gas';
         mover.order = 'gasHarvest';
         mover.geyserId = geyser.id;
-        mover.statusText.setText('Mining Gas');
         geyser.assignedWorkers += 1;
       }
     }
 
-    // --- BUILDING MANAGEMENT ---
+    const buildingProduction = this.constructions.some((c) => c.team === 'enemy' && (c.role === 'production' || c.finalRole === 'production'));
+    if (!enemyProduction && !buildingProduction && this.enemyMinerals >= this.race.structures.production.cost) {
+      const slot = this.findBuildSlot('production', 'enemy');
+      if (slot) {
+        const def = this.race.structures.production;
+        this.enemyMinerals -= def.cost;
+        const construction = this.createStructure('enemy', 'production', slot.x, slot.y, {
+          active: false,
+          construction: true,
+          buildProgress: 0,
+          buildTimeRemaining: def.buildTime,
+          roleName: this.race.productionName
+        });
+        construction.finalRole = 'production';
+        construction.finalLabel = this.race.productionName;
+        construction.hp = def.maxHp * 0.55;
+        construction.maxHp = def.maxHp;
+        construction.sprite.setAlpha(0.3);
+        construction.ridge.setAlpha(0.18);
+      }
+    }
 
-    // Build supply structures when needed (check every 3 seconds)
     ai.buildSupplyTimer += dt;
     if (ai.buildSupplyTimer > 3) {
       ai.buildSupplyTimer = 0;
-      const supplyNeeded = this.enemySupplyUsed + 4 > this.enemySupplyCap;
-      if (supplyNeeded && this.enemyMinerals >= this.race.structures.supplyStructure.cost) {
+      const supplyNeeded = this.enemySupplyUsed + 3 > this.enemySupplyCap;
+      const buildingSupply = this.constructions.some((c) => c.team === 'enemy' && (c.role === 'supplyStructure' || c.finalRole === 'supplyStructure'));
+      if (supplyNeeded && !buildingSupply && this.enemyMinerals >= this.race.structures.supplyStructure.cost) {
         const slot = this.findBuildSlot('supplyStructure', 'enemy');
         if (slot) {
           const def = this.race.structures.supplyStructure;
@@ -2657,102 +2602,44 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
           });
           construction.finalRole = 'supplyStructure';
           construction.finalLabel = this.race.supplyStructureName;
-          construction.buildTimeRemaining = def.buildTime;
           construction.hp = def.maxHp * 0.55;
           construction.maxHp = def.maxHp;
           construction.sprite.setAlpha(0.3);
           construction.ridge.setAlpha(0.18);
-          construction.statusText.setText('Under construction');
-          this.constructions.push(construction);
         }
       }
     }
 
-    // Build tech building if they have minerals and gas, and no tech building yet
-    if (!enemyTech && this.enemyWave >= this.aiDifficulty.enemyTechWave && this.enemyMinerals >= this.race.structures.techBuilding.cost && this.enemyGas >= (this.race.structures.techBuilding.gasCost || 0) && enemyProduction) {
-      const slot = this.findBuildSlot('techBuilding', 'enemy');
-      if (slot) {
-        this.enemyMinerals -= this.race.structures.techBuilding.cost;
-        if (this.race.structures.techBuilding.gasCost) {
-          this.enemyGas -= this.race.structures.techBuilding.gasCost;
-        }
-        const construction = this.createStructure('enemy', 'techBuilding', slot.x, slot.y, {
-          active: false,
-          construction: true,
-          buildProgress: 0,
-          buildTimeRemaining: this.race.structures.techBuilding.buildTime,
-          roleName: this.race.techBuildingName
-        });
-        construction.finalRole = 'techBuilding';
-        construction.finalLabel = this.race.techBuildingName;
-        construction.buildTimeRemaining = this.race.structures.techBuilding.buildTime;
-        construction.hp = this.race.structures.techBuilding.maxHp * 0.55;
-        construction.maxHp = this.race.structures.techBuilding.maxHp;
-        construction.sprite.setAlpha(0.3);
-        construction.ridge.setAlpha(0.18);
-        construction.statusText.setText('Under construction');
-        this.constructions.push(construction);
-        this.enemyTechBuilt = true;
-      }
-    }
-
-    // --- UNIT PRODUCTION (through production queues, not spawning) ---
-
-    // Train soldiers when production is idle and we have resources
     if (enemyProduction && enemyProduction.queue.length === 0 && this.enemyMinerals >= this.race.units.enemySoldier.cost && this.enemySupplyUsed + this.race.units.enemySoldier.supply <= this.enemySupplyCap) {
-      // Train 2 soldiers at a time for economy pressure
       const soldierCost = this.race.units.enemySoldier.cost;
-      if (this.enemyMinerals >= soldierCost * 2) {
-        this.enemyMinerals -= soldierCost * 2;
-        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
-        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
-      } else if (this.enemyMinerals >= soldierCost) {
-        this.enemyMinerals -= soldierCost;
-        enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
-      }
+      this.enemyMinerals -= soldierCost;
+      enemyProduction.queue.push({ kind: 'soldier', progress: this.race.units.enemySoldier.buildTime, def: this.race.units.enemySoldier });
     }
-
-    // Train signature units when tech is available
-    if (enemyTech && enemyProduction && enemyProduction.queue.length < 2 && this.enemyWave >= this.aiDifficulty.enemySignatureWave) {
-      const sigDef = this.race.units.enemySignature;
-      const sigCost = sigDef.cost;
-      const sigGasCost = sigDef.gasCost || 0;
-      if (this.enemyMinerals >= sigCost && this.enemyGas >= sigGasCost && this.enemySupplyUsed + sigDef.supply <= this.enemySupplyCap) {
-        this.enemyMinerals -= sigCost;
-        if (sigGasCost) this.enemyGas -= sigGasCost;
-        enemyProduction.queue.push({ kind: 'signature', progress: sigDef.buildTime, def: sigDef });
-      }
-    }
-
-    // --- COORDINATED ATTACKS ---
 
     ai.attackTimer += dt;
-    const attackThreshold = Math.max(4, 8 - this.enemyWave); // More units needed as waves progress
-    if (ai.attackTimer >= ai.attackCooldown && enemyCombatCount >= attackThreshold && !ai.hasAttackedThisWave) {
+    const attackArmy = this.aiDifficulty.enemyAttackArmy ?? 6;
+    const retreatArmy = this.aiDifficulty.enemyRetreatArmy ?? 2;
+    ai.attackCooldown = this.aiDifficulty.enemyAttackCooldown ?? 22;
+    if (ai.attackTimer >= ai.attackCooldown && enemyCombatCount >= attackArmy && !ai.hasAttackedThisWave) {
       ai.attackTimer = 0;
       ai.hasAttackedThisWave = true;
-      ai.attackCooldown = Math.max(10, 20 - this.enemyWave * 0.5); // Attacks get more frequent
-
-      // Send all combat units to attack player base
       this.enemyUnits.forEach((unit) => {
         if (unit.type === 'worker' || unit.hp <= 0) return;
         unit.order = 'attack';
         unit.targetEntity = this.playerCommandCenter;
         unit.targetX = this.playerCommandCenter.x + Phaser.Math.Between(-80, 80);
         unit.targetY = this.playerCommandCenter.y + Phaser.Math.Between(-60, 60);
-        unit.statusText.setText('Assault');
       });
-
-      // Wave announcement for player awareness
-      this.enemyWave += 1;
-      this.showWaveAnnouncement(this.enemyWave);
-      session.pushLog(`Enemy wave ${this.enemyWave} — coordinated attack with ${enemyCombatCount} units.`);
-      session.setMessage(`Enemy wave ${this.enemyWave} advancing — ${enemyCombatCount} units attacking!`);
     }
 
     // Reset attack flag when units return home or are depleted
-    if (ai.hasAttackedThisWave && enemyCombatCount < 2) {
+    if (ai.hasAttackedThisWave && enemyCombatCount <= retreatArmy) {
       ai.hasAttackedThisWave = false;
+      this.enemyUnits.forEach((unit) => {
+        if (unit.type === 'worker' || unit.hp <= 0) return;
+        unit.order = 'guard';
+        unit.targetEntity = null;
+      });
     }
 
     // --- ENEMY WORKER HARVESTING ---
@@ -2782,7 +2669,7 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
             geyser.labelText.setText(geyser.amount > 0 ? `Gas • ${Math.ceil(geyser.amount)}` : 'Gas • Depleted');
           }
         } else {
-          const node = this.findNearestResourceNode(unit.x, unit.y);
+          const node = this.findNearestResourceNode(unit.x, unit.y, WORLD_WIDTH / 2, WORLD_WIDTH);
           if (node && Phaser.Math.Distance.Between(unit.x, unit.y, node.x, node.y) > 28) {
             this.moveEntityTowards(unit, node.x - 20, node.y - 12, dt);
           } else if (node) {
@@ -2792,7 +2679,6 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
           }
         }
       } else {
-        // Combat unit behavior: attack if ordered, otherwise advance toward player
         if (unit.order === 'attack' && unit.targetEntity && unit.targetEntity.hp > 0) {
           const distance = Phaser.Math.Distance.Between(unit.x, unit.y, unit.targetEntity.x, unit.targetEntity.y);
           if (distance > unit.range) {
@@ -2807,9 +2693,9 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
           }
         } else {
           const target = this.findNearestPlayerTarget(unit);
-          if (target) {
+          const distance = target ? Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y) : Infinity;
+          if (target && (unit.order === 'attack' || distance < 280)) {
             unit.targetEntity = target;
-            const distance = Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y);
             if (distance > unit.range) {
               this.moveEntityTowards(unit, target.x, target.y, dt);
             } else if (unit.cooldown <= 0) {
@@ -2821,8 +2707,11 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
               unit.cooldown = unit.cooldownTime;
             }
           } else {
-            // Idle: advance toward player base
-            this.moveEntityTowards(unit, enemyBase.x - 90, enemyBase.y + Phaser.Math.Between(-44, 44), dt);
+            const guardX = enemyBase.x - 90;
+            const guardY = enemyBase.y + ((unit.id % 5) - 2) * 28;
+            if (Phaser.Math.Distance.Between(unit.x, unit.y, guardX, guardY) > 36) {
+              this.moveEntityTowards(unit, guardX, guardY, dt);
+            }
           }
         }
       }
@@ -2883,14 +2772,14 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
     session.setMessage(`Enemy wave ${this.enemyWave} advancing — ${squadSize} units.`);
   }
 
-  findNearestResourceNode(x, y) {
-    // Optimized: single-pass iteration instead of filter + reduce.
+  findNearestResourceNode(x, y, minX = 0, maxX = WORLD_WIDTH) {
     let best = null;
     let bestDistance = Infinity;
 
     for (let i = 0; i < this.resourceNodes.length; i++) {
       const node = this.resourceNodes[i];
       if (node.amount <= 0) continue;
+      if (node.x < minX || node.x > maxX) continue;
       const d = Phaser.Math.Distance.Between(x, y, node.x, node.y);
       if (d < bestDistance) {
         bestDistance = d;
@@ -3312,40 +3201,11 @@ const boxBottom = Math.max(pStart.y, pEnd.y);
   }
 
   getAvailableCommands(entity) {
-    const commands = ['select', 'pause'];
-
-    if (!entity || entity.team !== 'player') {
-      return commands;
-    }
-
-    if (entity.type === 'worker') {
-      commands.splice(1, 0, 'move', 'build-supply', 'build-defense', 'build-production', 'build-tech');
-      return commands;
-    }
-
-    if (entity.type === 'structure' && entity.role === 'commandCenter') {
-      commands.splice(1, 0, 'train-worker');
-      return commands;
-    }
-
-    if (entity.type === 'structure' && entity.role === 'production') {
-      commands.splice(1, 0, 'train-soldier');
-      // Optimized: cache tech building lookup — only scan if queue has items.
+    const commands = ['train-worker', 'train-soldier', 'build-supply', 'build-production', 'build-defense', 'pause'];
+    if (entity && entity.team === 'player' && entity.type === 'structure' && entity.role === 'production') {
       const hasTech = this._cachedTechBuilding || this.structures.some((s) => s.team === 'player' && s.role === 'techBuilding' && s.type === 'structure');
-      if (hasTech) {
-        commands.splice(2, 0, 'train-signature');
-      }
-      return commands;
+      if (hasTech) commands.splice(2, 0, 'train-signature');
     }
-
-    if (entity.type === 'structure' && entity.role === 'techBuilding') {
-      return commands;
-    }
-
-    if (entity.type !== 'resource') {
-      commands.splice(1, 0, 'move', 'attack');
-    }
-
     return commands;
   }
 

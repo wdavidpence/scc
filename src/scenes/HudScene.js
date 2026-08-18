@@ -261,16 +261,11 @@ export default class HudScene extends Phaser.Scene {
     this.layout = this.getLayout(width, height);
     const textPos = computeTextPositions(width, height);
     this.buttonDefs = [
-      { key: 'select', label: 'Select' },
-      { key: 'move', label: 'Move' },
-      { key: 'attack', label: 'Attack' },
-      { key: 'train-worker', label: 'Train Worker' },
-      { key: 'train-soldier', label: 'Train Soldier' },
-      { key: 'train-signature', label: 'Train Sig.' },
+      { key: 'train-worker', label: 'Worker' },
+      { key: 'train-soldier', label: 'Soldier' },
       { key: 'build-supply', label: 'Supply' },
+      { key: 'build-production', label: 'Barracks' },
       { key: 'build-defense', label: 'Defense' },
-      { key: 'build-production', label: 'Build' },
-      { key: 'build-tech', label: 'Tech Lab' },
       { key: 'pause', label: 'Pause' }
     ];
 
@@ -455,6 +450,10 @@ export default class HudScene extends Phaser.Scene {
 
     this.buttons = [];
     this.createButtons(width, height);
+    [
+      this.objectiveText, this.waveCounter, this.unitCountText,
+      this.selectionHeader, this.logHeader, this.logText
+    ].forEach((node) => node?.setVisible(false));
 
     // Command mode indicator (small dot above active button)
     this.commandIndicator = this.add.circle(0, 0, COMMAND_INDICATOR_RADIUS, COMMAND_INDICATOR_COLOR, 0.9).setVisible(false);
@@ -592,8 +591,12 @@ export default class HudScene extends Phaser.Scene {
     const viewportPortrait = typeof window !== 'undefined' && window.innerWidth / window.innerHeight < 0.75;
     const visualPortrait = (canvasRect && canvasRect.width / canvasRect.height < 0.75) || viewportPortrait;
     const portrait = layout.narrowPortrait || visualPortrait;
-    this.logHeader?.setVisible(!portrait);
-    this.logText?.setVisible(!portrait);
+    this.logHeader?.setVisible(false);
+    this.logText?.setVisible(false);
+    this.objectiveText?.setVisible(false);
+    this.waveCounter?.setVisible(false);
+    this.unitCountText?.setVisible(false);
+    this.selectionHeader?.setVisible(false);
     if (portrait) {
       this.selectionDetails?.setFontSize('11px');
       this.selectionDetails?.setLineSpacing(2);
@@ -616,8 +619,8 @@ export default class HudScene extends Phaser.Scene {
 
     if (this.layout.compact) {
       // Compact layout: split into 2 rows (5 top, 4 bottom)
-      const topRow = [0, 1, 2, 3, 8]; // select, move, attack, train-worker, pause
-      const bottomRow = [4, 5, 6, 7]; // train-soldier, train-signature, build-production, build-tech
+      const topRow = [0, 1, 2];
+      const bottomRow = [3, 4, 5];
       const rowConfigs = [
         { keys: topRow, y: this.layout.buttonTopY },
         { keys: bottomRow, y: this.layout.buttonBottomY }
