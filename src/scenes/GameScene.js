@@ -12,6 +12,7 @@ import { installBattleVisualPolish } from '../game/battleVisualPolish.js';
 import { getAnimationState } from '../game/animationState.js';
 import { MARINE_ANIMATION_PROFILE, BASIC_UNIT_ANIMATION_PROFILES } from '../game/animationProfiles.js';
 import { getDamageTier } from '../game/damageState.js';
+import { createFogOfWar } from '../game/fogOfWar.js';
 
 const WORLD_WIDTH = 1680;
 const WORLD_HEIGHT = 960;
@@ -152,6 +153,10 @@ export default class BattleScene extends Phaser.Scene {
     this.createGasGeysers();
     this.spawnStartingForces();
     this.createMinimap();
+    this.fog = createFogOfWar(this, WORLD_WIDTH, WORLD_HEIGHT);
+    this.fog.update();
+    audioSystem.init();
+    audioSystem.startTheme?.('battle') || audioSystem.startAmbient();
     // Twenty-pass battle visual layer: attached after all initial entities exist.
     this.visualPolish = installBattleVisualPolish(this);
 
@@ -742,7 +747,7 @@ export default class BattleScene extends Phaser.Scene {
     // Resource nodes (small cyan dots)
     this.minimapCanvas.fillStyle(0x67e8f9, 0.5);
     this.resourceNodes.forEach((n) => {
-      if (n.amount > 0) this.minimapCanvas.fillCircle(ox + n.x * sx, oy + n.y * sy, 1.5);
+      if (n.amount > 0 && (!this.fog || this.fog.isExplored(n.x, n.y))) this.minimapCanvas.fillCircle(ox + n.x * sx, oy + n.y * sy, 1.5);
     });
 
     // Gas geysers (purple dots)
@@ -753,6 +758,7 @@ export default class BattleScene extends Phaser.Scene {
 
     // Structures (small squares)
     this.structures.forEach((s) => {
+      if (s.team !== 'player' && this.fog && !this.fog.isVisible(s.x, s.y)) return;
       const color = s.team === 'player' ? 0x3b82f6 : (s.team === 'enemy' ? 0xf97316 : 0x64748b);
       this.minimapCanvas.fillStyle(color, s.hp > 0 ? 0.7 : 0);
       this.minimapCanvas.fillRect(ox + s.x * sx - 1.5, oy + s.y * sy - 1.5, 3, 3);
@@ -767,7 +773,9 @@ export default class BattleScene extends Phaser.Scene {
     // Enemy units (orange dots) — only show when near player side or known
     this.minimapCanvas.fillStyle(0xf97316, 0.5);
     this.enemyUnits.forEach((u) => {
-      if (u.hp > 0 && u.type !== 'worker') this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.5);
+      if (u.hp > 0 && u.type !== 'worker' && (!this.fog || this.fog.isVisible(u.x, u.y))) {
+        this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.5);
+      }
     });
 
     // Living workers (smaller economy dots)
@@ -782,7 +790,7 @@ export default class BattleScene extends Phaser.Scene {
 
     this.minimapCanvas.fillStyle(0xfdba74, 0.7);
     this.enemyUnits.forEach((u) => {
-      if (u.hp > 0 && u.type === 'worker') {
+      if (u.hp > 0 && u.type === 'worker' && (!this.fog || this.fog.isVisible(u.x, u.y))) {
         this.minimapCanvas.fillCircle(ox + u.x * sx, oy + u.y * sy, 1.0);
         workerDots++;
       }
@@ -2036,6 +2044,7 @@ export default class BattleScene extends Phaser.Scene {
     this.updateEnemyAI(dt);
     this.resolveCombat(dt);
     this.reapDeadEntities();
+    this.fog?.update();
     this.syncSession();
     this.updateMinimap();
     this.checkVictoryDefeat();

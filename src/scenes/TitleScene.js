@@ -3,6 +3,7 @@ import { GameStates, session } from '../game/state/gameSession.js';
 import { DIFFICULTY_ORDER, getDifficulty } from '../game/data/difficulties.js';
 import { RACE_ORDER, getRace } from '../game/data/races.js';
 import { getShellSize } from '../game/shellSize.js';
+import { audioSystem } from '../game/audio/audioSystem.js';
 
 // ── Card spacing & start-button sizing constants (compact vs wide) ──────────
 const CARD_SPACING = {
@@ -126,39 +127,39 @@ export default class MenuScene extends Phaser.Scene {
     this.shellInner = this.add.rectangle(shell.x, shell.y, shell.width - 12, shell.height - 12, 0x000000, 0)
       .setStrokeStyle(1, 0x1e3a5f, 0.6);
 
-    this.titleHalo = this.add.text(width / 2, this.layout.titleY + 2, 'SCC', {
+    this.titleHalo = this.add.text(width / 2, this.layout.titleY + 2, 'STAR COMMAND', {
       ...MENU_TEXT_STYLE,
-      fontSize: 'clamp(48px, 10vw, 92px)',
+      fontSize: 'clamp(42px, 9vw, 86px)',
       fontStyle: '900', color: '#1d4ed8', align: 'center', alpha: 0.32,
     }).setOrigin(0.5).setBlendMode(Phaser.BlendModes.ADD);
-    this.titleText = this.add.text(width / 2, this.layout.titleY, 'SCC', {
+    this.titleText = this.add.text(width / 2, this.layout.titleY, 'STAR COMMAND', {
       ...MENU_TEXT_STYLE,
-      fontSize: 'clamp(48px, 10vw, 92px)',
+      fontSize: 'clamp(42px, 9vw, 86px)',
       fontStyle: '900',
       color: '#ffffff',
-      align: 'center', letterSpacing: 8,
-      shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 8, stroke: true, fill: true }
+      align: 'center', letterSpacing: 6,
+      shadow: { offsetX: 0, offsetY: 6, color: '#000000', blur: 12, stroke: true, fill: true }
     }).setOrigin(0.5);
     this.titleRule = this.add.graphics();
     this.titleRule.lineStyle(1, 0x60a5fa, 0.65);
     this.titleRule.lineBetween(width / 2 - 150, this.layout.titleY + 52, width / 2 + 150, this.layout.titleY + 52);
 
     // Version number (top-right corner)
-    this.versionText = this.add.text(width - 16, 16, 'v2.14.0', {
+    this.versionText = this.add.text(width - 16, 16, 'v2.15.0', {
       ...MENU_TEXT_STYLE,
       fontSize: '12px',
       fontStyle: '600',
       color: '#475569'
     }).setOrigin(1, 0);
 
-    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY, 'StarCraft-inspired mobile RTS skirmish', {
+    this.subtitleText = this.add.text(width / 2, this.layout.subtitleY, 'ONE WORLD. TWO ARMIES. ZERO MERCY.', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(14px, 3vw, 22px)',
       color: '#cbd5e1',
       align: 'center'
     }).setOrigin(0.5);
 
-    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY, 'Choose a race, then build, scout, and push across the battlefield.', {
+    this.descriptionText = this.add.text(width / 2, this.layout.descriptionY, 'Harvest. Build. Fog of war. Destroy the enemy command center.', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(13px, 2.6vw, 18px)',
       color: '#94a3b8',
@@ -184,14 +185,14 @@ export default class MenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     this.startHighlight = this.add.rectangle(width / 2, this.layout.startY - START_BUTTON.height / 2 + 2, this.layout.startWidth - 4, 2, 0xffffff, 0.35);
 
-    this.startLabel = this.add.text(width / 2, this.layout.startY - 4, 'Deploy into Mission', {
+    this.startLabel = this.add.text(width / 2, this.layout.startY - 4, 'DEPLOY', {
       ...MENU_TEXT_STYLE,
       fontSize: 'clamp(16px, 3vw, 22px)',
       fontStyle: '700',
       color: '#ffffff',
       align: 'center'
     }).setOrigin(0.5);
-    this.startSubLabel = this.add.text(width / 2, this.layout.startY + 20, 'CLICK TO INITIALIZE DEPLOYMENT', {
+    this.startSubLabel = this.add.text(width / 2, this.layout.startY + 20, 'CLICK TO IGNITE THE WAR', {
       ...MENU_TEXT_STYLE, fontSize: '10px', fontStyle: '700', color: '#dbeafe',
       letterSpacing: 2, align: 'center'
     }).setOrigin(0.5);
@@ -237,6 +238,21 @@ export default class MenuScene extends Phaser.Scene {
       { radius: Math.max(width, height) * 0.24, alpha: 0.1, color: palette.hot },
     ].forEach((layer) => this.backdropGlow.fillStyle(layer.color, layer.alpha)
       .fillCircle(width / 2, height * 0.34, layer.radius));
+    this.backdropGlow.fillStyle(palette.hot, 0.16);
+    this.backdropGlow.fillCircle(width / 2, height * 0.28, Math.max(width, height) * 0.22);
+    this.backdropGlow.fillStyle(0xffedd5, 0.08);
+    this.backdropGlow.fillCircle(width / 2, height * 0.28, Math.max(width, height) * 0.1);
+    this.backdropGlow.fillStyle(0x020617, 1);
+    this.backdropGlow.fillCircle(width * 0.78, height * 0.18, 54);
+    this.backdropGlow.fillStyle(palette.mid, 0.55);
+    this.backdropGlow.fillCircle(width * 0.78, height * 0.18, 48);
+    this.backdropGlow.fillCircle(width / 2, height * 0.28, Math.max(width, height) * 0.22);
+    this.backdropGlow.fillStyle(0xffedd5, 0.08);
+    this.backdropGlow.fillCircle(width / 2, height * 0.28, Math.max(width, height) * 0.1);
+    this.backdropGlow.fillStyle(0x020617, 1);
+    this.backdropGlow.fillCircle(width * 0.78, height * 0.18, 54);
+    this.backdropGlow.fillStyle(palette.mid, 0.55);
+    this.backdropGlow.fillCircle(width * 0.78, height * 0.18, 48);
 
     this.backdropGrid.clear();
     this.backdropGrid.lineStyle(1, palette.hot, 0.35);
@@ -295,6 +311,10 @@ export default class MenuScene extends Phaser.Scene {
   noteInteraction() {
     this.lastInteractionAt = this.time.now;
     this.attractIndex = -1;
+    if (!this._themeStarted && audioSystem.init()) {
+      audioSystem.startTheme('title');
+      this._themeStarted = true;
+    }
   }
 
   updateAttractMode() {

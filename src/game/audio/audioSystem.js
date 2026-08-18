@@ -381,100 +381,82 @@ export class AudioSystem {
    * Uses layered oscillators for a sci-fi atmosphere.
    */
   startAmbient() {
+    this.startTheme('battle');
+  }
+
+  startTheme(mode = 'battle') {
     if (!this.initialized || this.muted) return;
     this.stopAmbient();
 
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const bpm = 60;
-    const beatDur = 60 / bpm;
+    const title = mode === 'title';
+    const root = title ? 49 : 55;
+    const fifth = title ? 73.4 : 82.5;
+    const octave = root * 2;
+    const pulseHz = title ? 0.28 : 0.72;
 
-    // Pad voice: low drone
-    const padFreqs = [55, 82.5, 110]; // A1, E2, A2
-    padFreqs.forEach((freq) => {
+    [root, fifth, octave].forEach((freq, i) => {
       const osc = ctx.createOscillator();
-      osc.type = 'sine';
+      osc.type = i === 2 ? 'triangle' : 'sine';
       osc.frequency.value = freq;
-
       const env = ctx.createGain();
-      env.gain.value = 0.12;
-
-      // Slow LFO on volume for movement
+      env.gain.value = title ? 0.09 : 0.07;
       const lfo = ctx.createOscillator();
       lfo.type = 'sine';
-      lfo.frequency.value = 0.1 + Math.random() * 0.1; // 0.1-0.2 Hz
+      lfo.frequency.value = 0.07 + i * 0.03;
       const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 0.04;
+      lfoGain.gain.value = 0.03;
       lfo.connect(lfoGain);
       lfoGain.connect(env.gain);
-
-      osc.connect(env);
-      env.connect(this.musicGain);
-
-      osc.start(now);
-      lfo.start(now);
-
-      this.ambientNodes.push({ osc, lfo });
-    });
-
-    // Sparkle voice: high ethereal tones
-    const sparkleFreqs = [440, 554.37, 659.25]; // A4, C#5, E5
-    sparkleFreqs.forEach((freq) => {
-      const osc = ctx.createOscillator();
-      osc.type = 'triangle';
-      // Arpeggiate slowly
-      const arpIndex = sparkleFreqs.indexOf(freq);
-      osc.frequency.setValueAtTime(freq, now);
-      // Slow frequency modulation
-      const lfo = ctx.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.05 + arpIndex * 0.02;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = freq * 0.02;
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-
-      const env = ctx.createGain();
-      env.gain.value = 0.03;
-
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 2000;
-
+      lp.frequency.value = title ? 1400 : 900;
       osc.connect(lp);
       lp.connect(env);
       env.connect(this.musicGain);
-
       osc.start(now);
       lfo.start(now);
-
       this.ambientNodes.push({ osc, lfo });
     });
 
-    // Sub bass pulse (heartbeat-like)
-    const subOsc = ctx.createOscillator();
-    subOsc.type = 'sine';
-    subOsc.frequency.value = 36.7; // F1
+    const motif = title
+      ? [196, 247, 294, 392, 294, 247]
+      : [110, 147, 165, 196, 165, 147];
+    const lead = ctx.createOscillator();
+    lead.type = title ? 'sawtooth' : 'square';
+    const leadEnv = ctx.createGain();
+    leadEnv.gain.value = title ? 0.035 : 0.028;
+    const leadFilter = ctx.createBiquadFilter();
+    leadFilter.type = 'lowpass';
+    leadFilter.frequency.value = title ? 1800 : 1100;
+    lead.connect(leadFilter);
+    leadFilter.connect(leadEnv);
+    leadEnv.connect(this.musicGain);
+    motif.forEach((freq, i) => {
+      lead.frequency.setValueAtTime(freq, now + i * 1.6);
+    });
+    lead.frequency.setValueAtTime(motif[0], now + motif.length * 1.6);
+    lead.start(now);
+    this.ambientNodes.push({ osc: lead });
 
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = title ? 36.7 : 41.2;
     const subEnv = ctx.createGain();
     subEnv.gain.value = 0;
-
-    // Pulse at half-time
-    const pulseLfo = ctx.createOscillator();
-    pulseLfo.type = 'sine';
-    pulseLfo.frequency.value = 0.5; // half-beat pulse
-
-    const pulseEnv = ctx.createGain();
-    pulseEnv.gain.value = 0.15;
-
-    pulseLfo.connect(pulseEnv);
-    subOsc.connect(subEnv);
+    const pulse = ctx.createOscillator();
+    pulse.type = 'sine';
+    pulse.frequency.value = pulseHz;
+    const pulseGain = ctx.createGain();
+    pulseGain.gain.value = title ? 0.12 : 0.16;
+    pulse.connect(pulseGain);
+    pulseGain.connect(subEnv.gain);
+    sub.connect(subEnv);
     subEnv.connect(this.musicGain);
-
-    subOsc.start(now);
-    pulseLfo.start(now);
-
-    this.ambientNodes.push({ osc: subOsc, lfo: pulseLfo });
+    sub.start(now);
+    pulse.start(now);
+    this.ambientNodes.push({ osc: sub, lfo: pulse });
   }
 
   /** Stop the ambient music. */

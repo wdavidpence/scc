@@ -121,6 +121,37 @@ export function spawnExplosion(scene, x, y, race, options = {}) {
     onComplete: () => { ring.destroy(); }
   });
 
+  const fire = scene.add.circle(x, y, isStructure ? 18 : 10, 0xfff7ed, 0.95).setDepth(72);
+  scene.tweens.add({
+    targets: fire,
+    scaleX: 2.4,
+    scaleY: 2.4,
+    alpha: 0,
+    duration: life * 420,
+    ease: 'Cubic.easeOut',
+    onComplete: () => fire.destroy()
+  });
+  const smokeCount = isStructure ? 7 : 4;
+  for (let i = 0; i < smokeCount; i += 1) {
+    const smoke = scene.add.circle(
+      x + Phaser.Math.Between(-8, 8),
+      y + Phaser.Math.Between(-4, 6),
+      Phaser.Math.Between(6, isStructure ? 16 : 10),
+      0x1f2937,
+      0.45
+    ).setDepth(64);
+    scene.tweens.add({
+      targets: smoke,
+      y: smoke.y - Phaser.Math.Between(18, 40),
+      alpha: 0,
+      scaleX: 1.8,
+      scaleY: 1.8,
+      duration: life * 1400,
+      ease: 'Sine.easeOut',
+      onComplete: () => smoke.destroy()
+    });
+  }
+
   // --- Core particles (colored burst) ---
   const coreGroup = scene.add.group();
 

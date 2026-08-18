@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { generateAllTextures } from '../game/proceduralTextures.js';
+import { applyHdArt } from '../game/visuals/hdArt.js';
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,6 +9,7 @@ export default class BootScene extends Phaser.Scene {
 
   create() {
     generateAllTextures(this);
+    applyHdArt(this);
     this.scene.start('PreloadScene');
   }
 
