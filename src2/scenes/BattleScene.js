@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
+import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
 import { Audio2 } from '../engine/audio2.js';
@@ -40,10 +41,13 @@ export class BattleScene extends Phaser.Scene {
     this.gameTime = 0;
     this.attackMoveMode = false;
     this.audio = new Audio2(this);
+    this.flows = new FlowManager(null, MAP_W, MAP_H); // wired after nav
+    this.spatial = new SpatialHash(28);
 
     createAllTextures(this);
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
+    this.flows.nav = this.nav;
     this.blockTerrain();
     this.createFog();
     this.createCreepLayers();
@@ -438,6 +442,35 @@ export class BattleScene extends Phaser.Scene {
       for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'overlord') cap += 8;
     }
     return cap;
+  }
+
+  // ---------------- movement cohorts (flow fields) ----------------
+  issueGroupMove(list, x, y, attackMove = false) {
+    if (list.length >= 3) {
+      const key = `m:${Math.round(x / TILE)}:${Math.round(y / TILE)}:${attackMove ? 'a' : 'm'}`;
+      const clearance = 0;
+      const field = this.flows.ensure(key, x, y, this.gameTime, 0.6, clearance);
+      for (const u of list) { u.flowField = field; u.issueMove(x, y, attackMove); if (!u.flying) { /* ground flow */ } }
+      this.flowsDirty = true;
+    } else {
+      for (const u of list) { u.flowField = null; u.issueMove(x, y, attackMove); }
+    }
+  }
+
+  separationVector(u) {
+    let sx = 0, sy = 0;
+    for (const o of this.spatial.near(u.x, u.y)) {
+      if (o === u || o.dead) continue;
+      if (o.flying !== u.flying) continue;
+      const dx = u.x - o.x, dy = u.y - o.y;
+      const d2 = dx * dx + dy * dy;
+      const minD = (u.radius + o.radius) * 1.15;
+      if (d2 > minD * minD || d2 === 0) continue;
+      const d = Math.sqrt(d2);
+      const push = (minD - d) / minD;
+      sx += (dx / d) * push; sy += (dy / d) * push;
+    }
+    return { x: sx, y: sy };
   }
 
   // ---------------- resources ----------------
@@ -916,6 +949,19 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     // autoscroll to selection back (Q handled elsewhere)
+
+    // spatial hash rebuild (separation + neighbor queries)
+    this.spatial.clear();
+    for (const u of this.units) if (!u.dead && !u.flying) this.spatial.insert(u);
+
+    // flow cohorts refresh (throttled; only goal keys still in use)
+    this.flowRefreshTimer = (this.flowRefreshTimer ?? 0) - dt;
+    if (this.flowRefreshTimer <= 0) {
+      this.flowRefreshTimer = 0.5;
+      for (const rec of this.flows.fields.values()) {
+        if (!rec.field.valid || this.gameTime - rec.lastBuild >= 0.5) rec.field.build(rec.goalX, rec.goalY, -1, 0);
+      }
+    }
 
     // units
     for (const u of this.units) u.update(dt);

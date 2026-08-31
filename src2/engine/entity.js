@@ -128,12 +128,41 @@ export class Unit {
       if (this.pathIndex >= this.path.length) return true;
     } else {
       this.setPos(this.x + (dx / d) * step, this.y + (dy / d) * step);
-      if (dx !== 0) this.sprite.setFlipX(dx < 0);
+      this.face(dx, dy);
     }
     return false;
   }
 
+  // flow-field descent: steer by shared integrator field instead of own path
+  stepAlongFlow(dt, field) {
+    const f = field.flowAt(this.x, this.y);
+    if (!f) { this.path = []; this.pathIndex = 0; return false; } // local pocket; separation + nudge
+    const step = this.speed * dt;
+    let vx = f.x, vy = f.y;
+    // separation from neighbors
+    const sep = this.world.separationVector(this);
+    vx += sep.x * 0.9; vy += sep.y * 0.9;
+    const l = Math.hypot(vx, vy) || 1;
+    this.setPos(this.x + (vx / l) * step, this.y + (vy / l) * step);
+    this.face(vx, vy);
+    return field.distAt(this.x, this.y) <= 1.2;
+  }
+
+  // rotate/facing: flip + squash so idle troops look oriented toward orders
+  face(dx, dy) {
+    if (dx !== 0) this.sprite.setFlipX(dx < 0);
+    if (!this.flying) {
+      const horiz = Math.abs(dx) >= Math.abs(dy);
+      this.sprite.setScale(this.sprite.scaleX > 1 ? (horiz ? 1.06 : 0.98) : (horiz ? 1 : 0.98));
+    }
+  }
+
   updateMove(dt) {
+    // flow field when group-cohort registered for this order point
+    if (this.flowField) {
+      const arrived = this.stepAlongFlow(dt, this.flowField);
+      if (arrived) { this.flowField = null; this.order = null; this.state = 'idle'; }
+    } else {
     if (this.needsPath) { this.needsPath = false; this.repath(this.order.point.x, this.order.point.y); }
     const arrived = this.stepAlongPath(dt);
     this.repathTimer -= dt;
@@ -145,6 +174,7 @@ export class Unit {
     if (arrived) {
       this.order = null;
       this.state = 'idle';
+    }
     }
     if (this.state === 'attackMove') {
       const range = this.def.range * TILE * 1.5;
