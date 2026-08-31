@@ -41,6 +41,10 @@ export class BattleScene extends Phaser.Scene {
     this.gameTime = 0;
     this.attackMoveMode = false;
     this.audio = new Audio2(this);
+    this.audio.setRace(this.race);
+    // start music after first user gesture (title already had one)
+    this.input.once('pointerdown', () => this.audio.startMusic());
+    this.input.keyboard.once('keydown', () => this.audio.startMusic());
     this.flows = new FlowManager(null, MAP_W, MAP_H); // wired after nav
     this.spatial = new SpatialHash(28);
 
@@ -782,7 +786,7 @@ export class BattleScene extends Phaser.Scene {
       else if (fb) u.setOrder({ type: 'attackTarget', target: fb });
       else u.issueMove(wp.x, wp.y, false);
     }
-    if (foe || fb) { this.audio?.attackCmd(); } else this.audio?.move();
+    if (foe || fb) { this.audio?.attackCmd(); this.audio?.attackBark(); } else this.audio?.move();
   }
 
   enemyUnitAt(x, y) {
@@ -1171,6 +1175,7 @@ export class BattleScene extends Phaser.Scene {
       pMine._supAlertShown = true;
       this.events.emit('hud:alert', this.race === 'zerg' ? 'NEED MORE OVERLORDS' : 'SUPPLY BLOCKED');
       this.audio?.error();
+      this.audio?.adminBark();
       this.time.delayedCall(15000, () => { pMine._supAlertShown = false; });
     }
     if (idleWorkers >= 2 && !pMine._idleAlertShown) {

@@ -1,4 +1,5 @@
 // Lightweight procedural audio for SCC2 (Web Audio API, no assets).
+// Race-tinted SFX + procedural ambient music + voice barks (SpeechSynthesis, free).
 export class Audio2 {
   constructor(scene) {
     this.scene = scene;
@@ -66,4 +67,65 @@ export class Audio2 {
     const seq = win ? [523, 659, 784, 1046] : [392, 330, 262, 196];
     seq.forEach((f, i) => setTimeout(() => this.tone(f, 0.22, 'triangle', 0.05), i * 180));
   }
+
+  // ---------- race tint ----------
+  setRace(race) {
+    this.race = race;
+    this.raceChord = race === 'zerg' ? [110, 138, 164] : race === 'protoss' ? [196, 294, 392] : [131, 196, 262];
+    this.raceWave = race === 'zerg' ? 'sawtooth' : race === 'protoss' ? 'sine' : 'triangle';
+  }
+
+  // ---------- ambient music: slow procedural pads ----------
+  startMusic() {
+    if (this.musicOn || !this.ctx) return;
+    this.musicOn = true;
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.value = 0.045;
+    this.musicBus.connect(this.ctx.destination);
+    this.setRace(this.scene?.race || 'terran');
+    const playPad = () => {
+      if (!this.musicOn || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      const chord = this.raceChord;
+      chord.forEach((f, i) => {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = this.raceWave;
+        o.frequency.setValueAtTime(f * (i === 2 && Math.random() < 0.3 ? 1.5 : 1), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.5, t + 2.2);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 7.5);
+        o.connect(g); g.connect(this.musicBus);
+        o.start(t); o.stop(t + 8);
+      });
+      // sparse arpeggio sparkle
+      if (Math.random() < 0.7) {
+        const arp = chord[Math.floor(Math.random() * 3)] * 2;
+        const o2 = this.ctx.createOscillator(); const g2 = this.ctx.createGain();
+        o2.type = 'triangle'; o2.frequency.setValueAtTime(arp, t + 3);
+        g2.gain.setValueAtTime(0.0001, t + 3);
+        g2.gain.exponentialRampToValueAtTime(0.25, t + 3.1);
+        g2.gain.exponentialRampToValueAtTime(0.0001, t + 3.8);
+        o2.connect(g2); g2.connect(this.musicBus); o2.start(t + 3); o2.stop(t + 4);
+      }
+      this._musicTimer = setTimeout(playPad, 6500 + Math.random() * 2000);
+    };
+    playPad();
+  }
+  stopMusic() { this.musicOn = false; if (this._musicTimer) clearTimeout(this._musicTimer); if (this.musicBus) { try { this.musicBus.gain.value = 0; } catch (e) {} } }
+
+  // ---------- voice barks (SpeechSynthesis; silent fallback) ----------
+  bark(text, pitch = 0.8, rate = 1.05) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.pitch = pitch; u.rate = rate; u.volume = 0.9;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* silent */ }
+  }
+  attackBark() { const L = ['My units are ready to attack.', 'Kill them all!', 'Attack!', 'Destroy!']; this.bark(L[Math.floor(Math.random() * L.length)], 0.7); }
+  underAttackBark() { this.bark('We are under attack!', 1.1, 1.1); }
+  buildBark() { const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
+  adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
 }
