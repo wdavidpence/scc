@@ -382,6 +382,12 @@ function createFx(scene) {
     g.addColorStop(0, '#9fc8ff'); g.addColorStop(1, 'rgba(159,200,255,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, 32, 12);
   });
+  // persistent death scorch decal
+  makeTex(scene, 'scorch', 24, 24, (ctx) => {
+    ctx.fillStyle = 'rgba(20,14,10,0.75)'; ctx.beginPath(); ctx.ellipse(12, 12, 11, 8, 0.3, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(45,32,22,0.6)'; ctx.beginPath(); ctx.ellipse(10, 11, 6, 4, 0.8, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(80,55,35,0.5)'; ctx.fillRect(6, 14, 3, 2); ctx.fillRect(15, 8, 2, 2);
+  });
 }
 
 function createCursor(scene) {

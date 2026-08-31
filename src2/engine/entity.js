@@ -52,6 +52,8 @@ export class Unit {
     this.radius = 8;
     this.stunTimer = 0;
     this.dead = false;
+    this.animT = Math.random() * 10;
+    this.moving = false;
     if (this.def.worker) {
       // find nearest mineral patch automatically (starting harvest)
       this.setOrder({ type: 'harvest' });
@@ -79,7 +81,8 @@ export class Unit {
 
   update(dt) {
     if (this.dead) return;
-    if (this.stunTimer > 0) { this.stunTimer -= dt; this.drawHp(); return; }
+    this.moving = false;
+    if (this.stunTimer > 0) { this.stunTimer -= dt; this.drawHp(); this.moving = false; this.animate(dt); return; }
     // shield regen
     if (this.maxShield > 0) {
       if (this.shieldRegenDelay > 0) this.shieldRegenDelay -= dt;
@@ -98,6 +101,7 @@ export class Unit {
         if (this.def.worker || this.def.weaponless) { if (!this.order) this.setOrder({ type: 'harvest' }); }
         else this.updateAutoAcquire(dt);
     }
+    this.animate(dt);
     this.drawHp();
   }
 
@@ -129,6 +133,7 @@ export class Unit {
     } else {
       this.setPos(this.x + (dx / d) * step, this.y + (dy / d) * step);
       this.face(dx, dy);
+      this.moving = true;
     }
     return false;
   }
@@ -145,15 +150,25 @@ export class Unit {
     const l = Math.hypot(vx, vy) || 1;
     this.setPos(this.x + (vx / l) * step, this.y + (vy / l) * step);
     this.face(vx, vy);
+    this.moving = true;
     return field.distAt(this.x, this.y) <= 1.2;
   }
 
   // rotate/facing: flip + squash so idle troops look oriented toward orders
   face(dx, dy) {
     if (dx !== 0) this.sprite.setFlipX(dx < 0);
-    if (!this.flying) {
-      const horiz = Math.abs(dx) >= Math.abs(dy);
-      this.sprite.setScale(this.sprite.scaleX > 1 ? (horiz ? 1.06 : 0.98) : (horiz ? 1 : 0.98));
+  }
+
+  // per-frame procedural animation: walk bob + idle breathing + attack recoil
+  animate(dt) {
+    this.animT += dt;
+    if (this.moving) {
+      const bob = Math.sin(this.animT * 12) * 1.4;
+      this.sprite.setY(bob);
+      this.sprite.setRotation(Math.sin(this.animT * 12) * 0.06);
+    } else {
+      this.sprite.setY(Math.sin(this.animT * 2.4) * 0.5);
+      this.sprite.setRotation(0);
     }
   }
 
@@ -311,6 +326,10 @@ export class Unit {
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
     this.world.tweens.add({ targets: boom, scale: (this.def.size === 'large' ? 2.2 : 1.4), alpha: 0, duration: 320, onComplete: () => boom.destroy() });
+    // persistent scorch decal
+    const decal = this.world.add.image(this.x, this.y, 'scorch');
+    decal.setDepth(6).setAlpha(0.55).setScale(this.def.size === 'large' ? 1.3 : 0.7);
+    this.world.tweens.add({ targets: decal, alpha: 0.18, duration: 12000 });
     this.world.audio?.death(this.def.size === 'large');
     this.container.destroy();
     this.world.nav.unblockBy(this.id);
