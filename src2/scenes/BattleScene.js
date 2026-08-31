@@ -271,8 +271,27 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: g, alpha: 0, duration: dur, onComplete: () => { g.active = false; } });
   }
 
+  // persistent ground fire (nuke fallout / building fires)
+  spawnPersistentFire(x, y, life = 6000) {
+    if (!this.camNear(x, y)) return;
+    const flame = this.add.image(x, y, 'glow').setTint(0xff8c3c).setBlendMode(Phaser.BlendModes.ADD).setDepth(45).setScale(0.7).setAlpha(0.8);
+    this.tweens.add({ targets: flame, scale: { from: 0.5, to: 1 }, alpha: 0.45, duration: 350, yoyo: true, repeat: Math.floor(life / 700), onComplete: () => flame.destroy() });
+    const embers = this.time.addEvent({ delay: 400, repeat: Math.floor(life / 400), callback: () => {
+      if (!flame.active) { embers.remove(); return; }
+      const e = this.add.circle(x + Math.random() * 10 - 5, y, 1.5, 0xffb060, 0.9).setDepth(46);
+      this.tweens.add({ targets: e, y: y - 30 - Math.random() * 25, x: e.x + Math.random() * 16 - 8, alpha: 0, duration: 900, onComplete: () => e.destroy() });
+    } });
+  }
+
   updateLighting(dt) {
     if (!this.lightLayer) return;
+    // psi-storm screen warp: rolling camera micro-rotation while active
+    if (this._stormWarp && this._stormWarp.t > 0) {
+      this._stormWarp.t -= dt;
+      const c = this.cameras.main;
+      c.angle = Math.sin(this.time.now / 90) * 0.7;
+      if (this._stormWarp.t <= 0) { c.angle = 0; this._stormWarp = null; }
+    }
     const t = this.time.now / 1000;
     for (const l of this._lights) l.img.setAlpha(l.base + Math.sin(t * l.sp + l.phase) * l.pulse);
     // day/night ambience cycle
@@ -416,39 +435,91 @@ export class BattleScene extends Phaser.Scene {
     if (kind === 'nuke') {
       this.audio?.nukeLaunch();
       this.events.emit('hud:alert', 'NUCLEAR STRIKE INBOUND — 3s');
-      // incoming streak
-      const streak = this.add.rectangle(wx, wy - 500, 4, 500, 0xffd27a, 0.5).setDepth(506);
-      this.tweens.add({ targets: streak, y: wy - 250, alpha: 0.1, duration: 2800, ease: 'Cubic.easeIn' });
+      // incoming re-entry streak: hot core + ablation sparks + contrail
+      const trail = this.add.graphics().setDepth(505);
+      const streak = this.add.rectangle(wx, wy - 500, 5, 500, 0xffd27a, 0.5).setDepth(506);
+      const core = this.add.image(wx, wy - 500, 'glow').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setDepth(507).setScale(1.2);
+      this.tweens.add({ targets: [streak, core], y: streak.y + 500, duration: 2800, ease: 'Cubic.easeIn' });
+      this.tweens.add({ targets: streak, alpha: 0.1, duration: 2800 });
+      const ablate = this.time.addEvent({ delay: 90, repeat: 30, callback: () => {
+        const sx = wx + (Math.random() * 24 - 12), sy = core.y - 20 - Math.random() * 60;
+        const s = this.add.circle(sx, sy, 1.5 + Math.random() * 2, Math.random() < 0.5 ? 0xffd27a : 0xff8c4a, 0.9).setDepth(507);
+        this.tweens.add({ targets: s, y: s.y + 30, alpha: 0, duration: 400, onComplete: () => s.destroy() });
+      } });
+      // growing target glow so the player can see the death zone
+      const tgt = this.add.circle(wx, wy, 60, 0xff4020, 0).setStrokeStyle(3, 0xff6030, 0.8).setDepth(48);
+      this.tweens.add({ targets: tgt, scale: 2.1, alpha: 0.9, duration: 2800, ease: 'Sine.easeIn' });
       this.time.delayedCall(2900, () => {
-        streak.destroy();
+        streak.destroy(); core.destroy(); tgt.destroy(); if (ablate) ablate.remove(); trail.destroy();
         this.audio?.nukeImpact();
-        this.shake(14, 0.7);
+        this.shake(18, 0.9);
+        // WHITE FLASH across whole screen
+        const flash = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0xffffff, 0.95).setDepth(900).setScrollFactor(0);
+        this.tweens.add({ targets: flash, alpha: 0, duration: 700, onComplete: () => flash.destroy() });
         const r = 130;
-        const boom = this.add.circle(wx, wy, r, 0xffd27a, 0.85).setDepth(500);
-        this.tweens.add({ targets: boom, scale: 2.4, alpha: 0, duration: 900, onComplete: () => boom.destroy() });
-        const ring = this.add.circle(wx, wy, r, 0xff5c2e, 0).setStrokeStyle(6, 0xff9c3c, 0.9).setDepth(500);
-        this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 1100, onComplete: () => ring.destroy() });
-        this.add.image(wx, wy, 'scorch').setDepth(6).setAlpha(0.7).setScale(4);
+        // triple shockwave rings
+        for (let k = 0; k < 3; k++) {
+          const ring = this.add.circle(wx, wy, r * 0.6, 0x000000, 0).setStrokeStyle(6 - k, [0xfff4d0, 0xff9c3c, 0xff5c2e][k], 0.9).setDepth(500 + k);
+          this.tweens.add({ targets: ring, scale: 2 + k * 0.9, alpha: 0, duration: 900 + k * 250, delay: k * 90, onComplete: () => ring.destroy() });
+        }
+        const boom = this.add.image(wx, wy, 'glow-soft').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setDepth(501).setScale(3.4);
+        this.tweens.add({ targets: boom, scale: 1.2, alpha: 0, duration: 800, onComplete: () => boom.destroy() });
+        // MUSHROOM: rising stem + billowing cap puffs
+        const stem = this.add.rectangle(wx, wy - 50, 26, 120, 0xd8c8a8, 0.55).setDepth(499);
+        this.tweens.add({ targets: stem, height: 220, y: wy - 110, alpha: 0, duration: 1400 });
+        for (let k = 0; k < 7; k++) {
+          const puff = this.add.circle(wx + (Math.random() * 90 - 45), wy - 150 - Math.random() * 50, 16 + Math.random() * 18, k % 2 ? 0xe8d8b8 : 0xc8a888, 0.5).setDepth(498);
+          this.tweens.add({ targets: puff, scale: 1.8 + Math.random(), y: puff.y - 60 - Math.random() * 40, alpha: 0, duration: 1800 + Math.random() * 800, onComplete: () => puff.destroy() });
+        }
+        // ring of fallout fire
+        for (let k = 0; k < 10; k++) {
+          const a = (k / 10) * Math.PI * 2;
+          const fx = wx + Math.cos(a) * (r * 0.8), fy = wy + Math.sin(a) * (r * 0.8);
+          this.time.delayedCall(100 + k * 60, () => this.spawnPersistentFire(fx, fy));
+        }
+        this.add.image(wx, wy, 'scorch').setDepth(6).setAlpha(0.85).setScale(4.5);
+        this.flash(wx, wy, 0xffffff, 5, 500);
         for (const u of this.units) { if (!u.dead && Math.hypot(u.x - wx, u.y - wy) <= r + u.radius) u.takeDamage(400); }
         for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 24) b.takeDamage(350); }
       });
     } else if (kind === 'storm') {
       this.audio?.psiCast();
       const r = 95;
-      const storm = this.add.circle(wx, wy, r, 0xc060ff, 0.18).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
+      // swirling vortex base
+      const vortex = this.add.circle(wx, wy, r, 0x6020c0, 0.22).setDepth(49);
+      this.tweens.add({ targets: vortex, scale: 1.15, alpha: 0, angle: 180, duration: 4600, onComplete: () => vortex.destroy() });
+      const storm = this.add.circle(wx, wy, r, 0xc060ff, 0).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
       this.tweens.add({ targets: storm, alpha: 0, duration: 4200, onComplete: () => storm.destroy() });
+      // screen distortion: rolling camera micro-shake for the duration
+      this._stormWarp = { t: 4.6 };
+      const bolt = (x1, y1, x2, y2, wid, col) => {
+        const g = this.add.graphics().setDepth(50);
+        g.lineStyle(wid, col, 0.95);
+        g.beginPath(); g.moveTo(x1, y1);
+        const segs = 5;
+        for (let s = 1; s <= segs; s++) {
+          const tt = s / segs;
+          g.lineTo(x1 + (x2 - x1) * tt + (s < segs ? Math.random() * 22 - 11 : 0), y1 + (y2 - y1) * tt + (s < segs ? Math.random() * 10 - 5 : 0));
+        }
+        g.strokePath();
+        this.tweens.add({ targets: g, alpha: 0, duration: 200, onComplete: () => g.destroy() });
+        return g;
+      };
       let ticks = 0;
-      const iv = this.time.addEvent({ delay: 500, repeat: 8, callback: () => {
+      const iv = this.time.addEvent({ delay: 450, repeat: 9, callback: () => {
         ticks++;
         this.audio?.zap();
-        for (let i = 0; i < 5; i++) {
-          const a = Math.random() * Math.PI * 2, rr = Math.random() * r;
+        // 3 lightning TENTACLES: ground strike with upward branching
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * r;
           const bx = wx + Math.cos(a) * rr, by = wy + Math.sin(a) * rr;
-          const zap = this.add.graphics().setDepth(50);
-          zap.lineStyle(2, 0xe0a0ff, 0.9);
-          zap.lineBetween(bx, by - 26, bx + (Math.random() * 14 - 7), by + (Math.random() * 14 - 7));
-          this.tweens.add({ targets: zap, alpha: 0, duration: 180, onComplete: () => zap.destroy() });
+          bolt(bx, by - 130 - Math.random() * 60, bx, by, 3, 0xe0a0ff);
+          bolt(bx - 10, by - 60, bx + Math.random() * 40 - 20, by - 8, 2, 0xc060ff);
+          bolt(bx + 8, by - 90, bx + Math.random() * 50 - 25, by - 20, 1.5, 0xffffff);
+          const impact = this.add.image(bx, by, 'glow').setTint(0xc060ff).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.1);
+          this.tweens.add({ targets: impact, scale: 0.2, alpha: 0, duration: 260, onComplete: () => impact.destroy() });
         }
+        this.flash(wx, wy, 0xb060ff, 2.5, 200);
         for (const u of this.units) { if (!u.dead && u.team !== 0 && Math.hypot(u.x - wx, u.y - wy) <= r) u.takeDamage(22); }
         for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 16) b.takeDamage(14); }
       } });
@@ -458,9 +529,30 @@ export class BattleScene extends Phaser.Scene {
       // zerg: brood surge — spawn extra zerglings at target + speed/attack buff to nearby swarm
       const pool = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
       for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); this.time.delayedCall(12000, () => { if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } }); } }
-      for (let i = 0; i < 8; i++) { const u = this.spawnUnit(0, 'zergling', wx + Math.random() * 80 - 40, wy + Math.random() * 80 - 40, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true); }
+      // pulsing brood sacs erupt at the target, each hatching a zergling
+      for (let i = 0; i < 8; i++) {
+        const sx = wx + Math.random() * 90 - 45, sy = wy + Math.random() * 90 - 45;
+        const sac = this.add.circle(sx, sy, 6, 0x8a3a22, 0.95).setStrokeStyle(2, 0xff7b2e, 0.8).setDepth(48);
+        this.tweens.add({ targets: sac, scale: 1.6, duration: 300 + i * 90, yoyo: false });
+        this.tweens.add({ targets: sac, scale: 2.6, alpha: 0, duration: 220, delay: 320 + i * 90, onComplete: () => sac.destroy() });
+        this.time.delayedCall(340 + i * 90, () => {
+          const burst = this.add.image(sx, sy, 'glow').setTint(0xff7b2e).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.3);
+          this.tweens.add({ targets: burst, scale: 0.3, alpha: 0, duration: 300, onComplete: () => burst.destroy() });
+          const u = this.spawnUnit(0, 'zergling', sx, sy, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true);
+        });
+      }
+      // organic tendrils spreading from center
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+        const tnd = this.add.graphics().setDepth(48);
+        tnd.lineStyle(3, 0xa04a28, 0.8);
+        tnd.lineBetween(wx, wy, wx + Math.cos(a) * 20, wy + Math.sin(a) * 20);
+        tnd.strokePath();
+        this.tweens.add({ targets: tnd, alpha: 0, scaleX: 5, scaleY: 5, angle: Math.random() * 30 - 15, duration: 900, onComplete: () => tnd.destroy() });
+      }
       const pulse = this.add.circle(wx, wy, 40, 0xff7b2e, 0.4).setDepth(49);
       this.tweens.add({ targets: pulse, scale: 8, alpha: 0, duration: 800, onComplete: () => pulse.destroy() });
+      this.flash(wx, wy, 0xff7b2e, 3, 400);
       this.events.emit('hud:alert', 'BROOD SURGE');
     }
     this.cmdCount += 1;
