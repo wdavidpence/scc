@@ -77,7 +77,6 @@ export class TitleScene extends Phaser.Scene {
 
   launch() {
     if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'zerg' ? 'terran' : 'zerg';
-    this.scene.launch('Hud', { race: this.pick.race });
     this.scene.start('Battle', { race: this.pick.race, enemyRace: this.pick.enemy, difficulty: this.pick.difficulty });
   }
 }

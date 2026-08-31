@@ -5,7 +5,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 
 export function createGame2(parent = 'game') {
   const g = new Phaser.Game({
-    type: Phaser.AUTO,
+    type: Phaser.CANVAS,
     parent,
     backgroundColor: '#04070d',
     pixelArt: true,

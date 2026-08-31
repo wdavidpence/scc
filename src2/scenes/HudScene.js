@@ -18,9 +18,18 @@ export class HudScene extends Phaser.Scene {
     this.createGameOverPanel();
 
     const battle = this.scene.get('Battle');
-    battle.events.on('hud:tick', () => this.refresh());
-    battle.events.on('hud:selection', (info) => this.onSelection(info));
-    battle.events.on('hud:gameover', (r) => this.showGameOver(r));
+    // clear stale listeners from any previous boot of this scene
+    battle.events.off('hud:tick');
+    battle.events.off('hud:selection');
+    battle.events.off('hud:gameover');
+    battle.events.on('hud:tick', () => { if (this.scene.isActive()) this.refresh(); });
+    battle.events.on('hud:selection', (info) => { if (this.scene.isActive()) this.onSelection(info); });
+    battle.events.on('hud:gameover', (r) => { if (this.scene.isActive()) this.showGameOver(r); });
+    this.events.once('shutdown', () => {
+      battle.events.off('hud:tick');
+      battle.events.off('hud:selection');
+      battle.events.off('hud:gameover');
+    });
 
     this.events.on('resize', () => this.handleResize());
     this.input.on('pointerdown', () => { this.audioUnlock = true; });
@@ -80,7 +89,7 @@ export class HudScene extends Phaser.Scene {
     const sub = this.add.text(0, 44, 'click to return', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#8fa3c8' }).setOrigin(0.5);
     this.goPanel.add([dim, title, sub]);
     this.goTitle = title; this.goDim = dim;
-    this.input.on('pointerdown', () => { if (this.gameOver) this.scene.stop(); this.scene.start('Title'); });
+    this.input.on('pointerdown', () => { if (!this.gameOver) return; this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title'); });
   }
 
   mkBtn(x, y, w, h, label, cb) {
