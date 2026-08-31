@@ -30,7 +30,7 @@ export class Unit {
     this.shieldRegenDelay = 0;
     this.bonusDamage = 0;
     this.bonusArmor = 0;
-    this.speed = this.def.speed * TILE; // px/sec
+    this.speed = this.def.speed * TILE * 5; // px/sec (5x scale so units traverse the map briskly)
     this.flying = !!this.def.flying;
     this.state = 'idle';
     this.order = null; // {type:'move'|'attackMove'|'attackTarget'|'harvest'|'build'|'returnCargo', ...}

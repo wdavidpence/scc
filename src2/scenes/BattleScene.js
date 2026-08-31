@@ -58,22 +58,28 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- terrain ----------------
   buildTerrain() {
-    this.groundLayer = this.add.layer();
-    this.groundLayer.setDepth(0);
-    // deterministic-ish random terrain
+    // batch ground into one big texture
+    const gc = document.createElement('canvas');
+    gc.width = PXW; gc.height = PXH;
+    const gx = gc.getContext('2d');
+    const rnd = this.rng();
     for (let ty = 0; ty < MAP_H; ty++) {
       for (let tx = 0; tx < MAP_W; tx++) {
         const v = (Math.sin(tx * 12.9898 + ty * 78.233) * 43758.5453) % 1;
         const pick = Math.abs(v);
-        const key = pick < 0.25 ? 'g0' : pick < 0.5 ? 'g1' : pick < 0.75 ? 'g2' : 'g3';
-        const img = this.add.image(tx * TILE + 8, ty * TILE + 8, key);
-        img.setBlendMode(Phaser.BlendModes.NORMAL);
-        this.groundLayer.add(img);
+        const cols = pick < 0.25 ? ['#1d2b1f', '#233524', '#2b4030'] : pick < 0.5 ? ['#202d1e', '#283625', '#31422e'] : pick < 0.75 ? ['#252a1c', '#2d3222', '#39412c'] : ['#1c2820', '#22302a', '#2c3e35'];
+        gx.fillStyle = cols[0]; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+        for (let i = 0; i < 5; i++) {
+          gx.fillStyle = rnd() < 0.5 ? cols[1] : cols[2];
+          gx.fillRect(tx * TILE + ((rnd() * TILE) | 0), ty * TILE + ((rnd() * TILE) | 0), 2 + ((rnd() * 3) | 0), 1 + ((rnd() * 2) | 0));
+        }
       }
     }
+    if (this.textures.exists('terrain')) this.textures.remove('terrain');
+    this.textures.addCanvas('terrain', gc);
+    this.add.image(PXW / 2, PXH / 2, 'terrain').setOrigin(0.5).setDepth(0);
     // rock clusters / chokepoints
     this.rockClusters = [];
-    const rnd = this.rng();
     const placeCluster = (cx, cy, size) => {
       const kept = [];
       for (let i = 0; i < size; i++) {
@@ -520,47 +526,51 @@ export class BattleScene extends Phaser.Scene {
     this.boxStart = null;
     this.box = this.add.graphics().setDepth(600).setScrollFactor(0);
     this.edgePan = true;
+    this.mouseActive = false;
+    this._wasLeft = false;
+    this._wasRight = false;
 
     this.input.on('pointerdown', (p) => {
-      if (p.rightButtonDown && p.rightButtonDown()) return;
+      window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
+      if (p.button === 2) return;
       if (this.placing) {
         this.tryPlace(p.worldX, p.worldY);
         return;
       }
-      if (p.button === 2) return;
-      const wp = { x: p.worldX, y: p.worldY };
+      const wp0 = { x: p.worldX, y: p.worldY };
       // click select building?
-      const b = this.buildingAt(wp.x, wp.y);
+      const b = this.buildingAt(wp0.x, wp0.y);
       if (b && b.team === 0) {
         this.selectBuilding(b);
         return;
       }
-      this.dragStart = wp;
+      this.dragStart = wp0;
       this.dragMoved = false;
     });
 
     this.input.on('pointermove', (p) => {
       if (this.placing && this.ghost) {
-        this.snapGhost(wp(p));
+        this.snapGhost({ x: p.worldX, y: p.worldY });
       }
       if (!this.dragStart) return;
-      const wp = wp(p);
-      if (Math.hypot(wp.x - this.dragStart.x, wp.y - this.dragStart.y) > 6) this.dragMoved = true;
+      const wpt = { x: p.worldX, y: p.worldY };
+      if (Math.hypot(wpt.x - this.dragStart.x, wpt.y - this.dragStart.y) > 6) this.dragMoved = true;
       if (this.dragMoved) {
-        const rect = this.dragBox(this.dragStart, wp);
+        const rect = this.dragBox(this.dragStart, wpt);
         this.drawBox(rect);
       }
     });
 
     this.input.on('pointerup', (p) => {
+      window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['up', p.button, Math.round(p.x), Math.round(p.y), !!this.dragStart, !!this.dragMoved]);
       if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }); return; }
       if (!this.dragStart) return;
-      const wp = wp(p);
+      const wpt = { x: p.worldX, y: p.worldY };
       if (this.dragMoved) {
-        const rect = this.dragBox(this.dragStart, wp);
+        const rect = this.dragBox(this.dragStart, wpt);
         this.boxSelect(rect, p.shiftKey);
       } else {
-        this.clickSelect(wp.x, wp.y, p.shiftKey);
+        this.clickSelect(wpt.x, wpt.y, p.shiftKey);
       }
       this.dragStart = null;
       this.box.clear();
@@ -767,8 +777,8 @@ export class BattleScene extends Phaser.Scene {
       if (u.kind === 'marine' && u.hp > 20) {
         u.speed *= 1.5; u.bonusDamage += 6;
         u.hp -= 10;
-        this.tweens.add({ targets: u.sprite, alpha: 0.6, duration: 200, yoyo: true, onComplete: () => { u.speed = u.def.speed * TILE; u.bonusDamage -= 6; u.sprite.setAlpha(1); } });
-        this.tweens.add({ targets: u, duration: 14000, onComplete: () => { u.speed = u.def.speed * TILE; u.bonusDamage -= 6; } });
+        this.tweens.add({ targets: u.sprite, alpha: 0.6, duration: 200, yoyo: true, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; u.sprite.setAlpha(1); } });
+        this.tweens.add({ targets: u, duration: 14000, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; } });
         this.audio?.attack('stim');
       }
     }

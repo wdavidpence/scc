@@ -4,12 +4,17 @@ export class Audio2 {
     this.scene = scene;
     this.ctx = null;
     this.enabled = true;
+    // unlock/create on first input (headless-safe)
+    scene.input.once('pointerdown', () => this.init());
+    scene.input.keyboard.once('keydown', () => this.init());
+  }
+  init() {
+    if (this.ctx || !this.enabled) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) this.ctx = new AC();
+      this.resume();
     } catch (e) { this.enabled = false; }
-    // unlock on first input
-    scene.input.once('pointerdown', () => this.resume());
   }
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
   tone(freq, dur, type = 'square', vol = 0.05, slide = 0) {
