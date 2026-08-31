@@ -8,7 +8,7 @@ export function createGame2(parent = 'game') {
   const g = new Phaser.Game({
     type: Phaser.CANVAS,
     parent,
-    backgroundColor: '#04070d',
+    backgroundColor: '#0c141f',
     pixelArt: true,
     antialias: false,
     scale: {

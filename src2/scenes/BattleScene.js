@@ -671,7 +671,7 @@ export class BattleScene extends Phaser.Scene {
     this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W, MAP_H);
     this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
-    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.88);
+    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.72);
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.visCanvas = document.createElement('canvas');
     this.visCanvas.width = MAP_W; this.visCanvas.height = MAP_H;
@@ -692,7 +692,7 @@ export class BattleScene extends Phaser.Scene {
       if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx, ty, 1, 1); }
     }
     // explored => dim gray (seen), currently visible => transparent in vis layer
-    visCtx.fillStyle = 'rgba(70,75,90,1)';
+    visCtx.fillStyle = 'rgba(108,116,134,1)';
     visCtx.fillRect(0, 0, MAP_W, MAP_H);
     const stamp = (cx, cy, r, layer) => {
       for (let dy = -r; dy <= r; dy++) {

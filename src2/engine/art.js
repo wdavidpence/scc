@@ -120,10 +120,10 @@ export function createAllTextures(scene) {
 function createTerrain(scene) {
   // 4 ground variants + cliff tile
   const bases = [
-    { key: 'g0', c1: '#1d2b1f', c2: '#233524', speck: '#2b4030' },
-    { key: 'g1', c1: '#202d1e', c2: '#283625', speck: '#31422e' },
-    { key: 'g2', c1: '#252a1c', c2: '#2d3222', speck: '#39412c' },
-    { key: 'g3', c1: '#1c2820', c2: '#22302a', speck: '#2c3e35' }
+    { key: 'g0', c1: '#37523a', c2: '#415f45', speck: '#4d7054' },
+    { key: 'g1', c1: '#3b5536', c2: '#476041', speck: '#557050' },
+    { key: 'g2', c1: '#425233', c2: '#4d5f3d', speck: '#5d7049' },
+    { key: 'g3', c1: '#354c3f', c2: '#40594c', speck: '#4e6a5b' }
   ];
   for (const b of bases) {
     makeTex(scene, b.key, T, T, (ctx) => {
@@ -180,11 +180,11 @@ function createResources(scene) {
 
 function createCreep(scene) {
   makeTex(scene, 'creep', T, T, (ctx) => {
-    px(ctx, 0, 0, T, T, '#3d1f2e');
+    px(ctx, 0, 0, T, T, '#5c3048');
     for (let i = 0; i < 30; i++) {
-      px(ctx, (Math.random() * T) | 0, (Math.random() * T) | 0, 2, 2, Math.random() < 0.5 ? '#52293d' : '#2e1622');
+      px(ctx, (Math.random() * T) | 0, (Math.random() * T) | 0, 2, 2, Math.random() < 0.5 ? '#713b55' : '#472537');
     }
-    ctx.fillStyle = '#6b3550';
+    ctx.fillStyle = '#8f4768';
     ctx.beginPath(); ctx.arc(8, 10, 3, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(22, 20, 2.5, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(15, 26, 2, 0, 7); ctx.fill();
