@@ -473,6 +473,18 @@ export class BattleScene extends Phaser.Scene {
     return { x: sx, y: sy };
   }
 
+  showRallyFlag(b) {
+    if (b._rallyFlag) b._rallyFlag.destroy();
+    const fl = this.add.container(b.rallyPoint.x, b.rallyPoint.y).setDepth(48);
+    const pole = this.add.rectangle(0, -6, 2, 14, 0xdbe7ff);
+    const flag = this.add.triangle(4, -11, 0, 0, 10, 3, 0, 6, 0x6ee7a0);
+    fl.add([pole, flag]);
+    b._rallyFlag = fl;
+    this.tweens.add({ targets: flag, scaleX: { from: 0.7, to: 1 }, duration: 200, yoyo: true, repeat: 1 });
+    // auto-clear flag after 6s
+    this.time.delayedCall(6000, () => { if (b._rallyFlag === fl) { fl.destroy(); b._rallyFlag = null; } });
+  }
+
   // ---------------- resources ----------------
   canAfford(team, m, g = 0) { const p = this.players[team]; return p.minerals >= m && p.gas >= (g || 0); }
   spend(team, m, g = 0) { const p = this.players[team]; p.minerals -= m; p.gas -= g || 0; }
@@ -729,6 +741,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   rightClickOrder(wp) {
+    // rally point placement when a production building is selected
+    if (this.selectedBuilding && this.selectedBuilding.built && this.selectedBuilding.def.rally) {
+      const sb = this.selectedBuilding;
+      sb.rallyPoint = { x: wp.x, y: wp.y };
+      this.showRallyFlag(sb);
+      this.audio?.move();
+      return;
+    }
     if (this.attackMoveMode) {
       for (const u of this.selection) u.issueMove(wp.x, wp.y, true);
       this.attackMoveMode = false;
@@ -751,6 +771,12 @@ export class BattleScene extends Phaser.Scene {
     // combat units
     const foe = this.enemyUnitAt(wp.x, wp.y);
     const fb = this.enemyBuildingAt(wp.x, wp.y);
+    const list = [...this.selection];
+    if (!foe && !fb && list.length >= 3) {
+      this.issueGroupMove(list, wp.x, wp.y, false);
+      this.audio?.move();
+      return;
+    }
     for (const u of this.selection) {
       if (foe) u.setOrder({ type: 'attackTarget', target: foe });
       else if (fb) u.setOrder({ type: 'attackTarget', target: fb });
@@ -1135,28 +1161,115 @@ export class BattleScene extends Phaser.Scene {
       if (!this.hasBuilding('missileTurret', team) && this.gameTime > 60) buildIfPossible('missileTurret');
     }
 
-    // army production
-    const armyCap = this.difficulty === 'hard' ? 34 : this.difficulty === 'easy' ? 8 : 18;
+    // ---- hill-climbing: evaluate army value vs player ----
+    // supply-block alert + idle worker census for HUD
+    const pMine = this.players[0];
+    const idleWorkers = this.units.filter(u => !u.dead && u.team === 0 && u.def.worker && u.state === 'idle' && !u.order).length;
+    pMine.idleWorkers = idleWorkers;
+    const blockedProducers = this.buildings.filter(b => b.team === 0 && b.built && !b.dead && b.def.produces?.length && b.queue.length > 0 && pMine.supplyUsed >= pMine.supplyCap);
+    if (blockedProducers.length && !pMine._supAlertShown) {
+      pMine._supAlertShown = true;
+      this.events.emit('hud:alert', this.race === 'zerg' ? 'NEED MORE OVERLORDS' : 'SUPPLY BLOCKED');
+      this.audio?.error();
+      this.time.delayedCall(15000, () => { pMine._supAlertShown = false; });
+    }
+    if (idleWorkers >= 2 && !pMine._idleAlertShown) {
+      pMine._idleAlertShown = true;
+      this.events.emit('hud:alert', `${idleWorkers} WORKERS IDLE`);
+      this.time.delayedCall(12000, () => { pMine._idleAlertShown = false; });
+    }
+
+    const value = (u) => (UNITS[u.kind]?.minerals || 50) + (UNITS[u.kind]?.gas || 0) * 1.4;
     const army = this.units.filter(u => !u.dead && u.team === team && !u.def.worker && u.kind !== 'overlord');
+    const playerArmy = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
+    const myValue = army.reduce((a, u) => a + value(u), 0) + eb.reduce((a, b) => a + (b.def.minerals || 0) * 0.3, 0);
+    const foeValue = playerArmy.reduce((a, u) => a + value(u), 0) + 400; // base insurance
+    s.myValue = myValue; s.foeValue = foeValue;
+
+    // counter-production: observe visible enemy composition and bias training
+    if (!s.counter) s.counter = { air: 0, ground: 0 };
+    const visibleFoe = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker && this.isVisible(u.x, u.y));
+    for (const vf of visibleFoe) { if (vf.flying) s.counter.air++; else s.counter.ground++; }
+
+    // army production with counters
+    const armyCap = this.difficulty === 'hard' ? 34 : this.difficulty === 'easy' ? 8 : 18;
     if (army.length < armyCap) {
       for (const b of eb) {
         if (b.queue.length >= 2) continue;
-        const kinds = (b.def.produces || []).filter(k => b.canProduce(k));
-        // prefer mix
+        let kinds = (b.def.produces || []).filter(k => b.canProduce(k));
+        if (!kinds.length) continue;
+        // score kinds: counter bias + supply efficiency
+        kinds = kinds.sort((a, c) => {
+          const da = UNITS[a], dc = UNITS[c];
+          const anti = (k) => {
+            const d = UNITS[k];
+            let sc = 0;
+            if (d.targets === 'air' || d.targets === 'both') sc += s.counter.air * 2.2;
+            if (d.targets !== 'air') sc += s.counter.ground * 1.4;
+            if (d.splash) sc += s.counter.ground * 0.8; // anti-cluster
+            return sc;
+          };
+          const effA = anti(a) / ((da.minerals + (da.gas || 0) * 1.4) + 1);
+          const effC = anti(c) / ((dc.minerals + (dc.gas || 0) * 1.4) + 1);
+          return effC - effA;
+        });
         for (const k of kinds) {
           const def = UNITS[k];
-          if (p.minerals >= def.minerals + 50 && p.gas >= (def.gas || 0)) { b.queueUnit(k); break; }
+          if (p.minerals >= def.minerals + 40 && p.gas >= (def.gas || 0)) { b.queueUnit(k); break; }
         }
       }
     }
 
-    // attack waves
-    s.nextAttackAt -= 1;
+    // ---- harass squad: fast units poke the player economy ----
+    if (!s.harvestSquad) s.harvestSquad = [];
+    s.harassAt = (s.harassAt ?? 75) - 1;
+    const fast = army.filter(u => u.def.speed >= 1.05 || u.flying);
+    if (s.harassAt <= 0 && fast.length >= 3 && myValue > foeValue * 0.9) {
+      s.harassAt = this.difficulty === 'hard' ? 40 : 65;
+      const squad = fast.slice(0, 3);
+      s.harvestSquad = squad;
+      // attack-move at player's visible miners or natural expansion direction
+      const victim = this.units.find(u => u.team === 0 && u.def.worker && this.isVisible(u.x, u.y));
+      const tgt = victim ? { x: victim.x, y: victim.y } : { x: PXW * 0.30 + Math.random() * 80, y: PXH * 0.32 + Math.random() * 80 };
+      squad.forEach(u => u.issueMove(tgt.x, tgt.y, true));
+    } else {
+      s.harvestSquad = s.harvestSquad.filter(u => !u.dead);
+    }
+
+    // ---- scouts: drop an overlord/scout toward player base periodically ----
+    s.scoutAt = (s.scoutAt ?? 40) - 1;
+    if (s.scoutAt <= 0) {
+      s.scoutAt = 55;
+      if (race === 'zerg') {
+        const ov = army.find(u => u.kind === 'overlord');
+        if (ov) { ov.issueMove(PXW * 0.25, PXH * 0.28, false); }
+        else { const pool = eb.find(b => b.buildId === 'hatchery' && b.queue.length === 0); pool?.queueUnit('overlord'); }
+      } else {
+        const sc = army.find(u => !u.def.worker && (u.flying || u.kind === 'vulture' || u.kind === 'scout'));
+        sc?.issueMove(PXW * 0.22 + Math.random() * 100, PXH * 0.22 + Math.random() * 100, false);
+      }
+    }
+
+    // ---- main attack: hill-climb on value advantage ----
+    const ready = army.filter(u => !s.harvestSquad.includes(u));
+    const advantage = myValue / Math.max(1, foeValue);
+    const threshold = this.difficulty === 'hard' ? 0.8 : 1.15;
     const aggro = s.aggroUntil > this.gameTime;
-    if ((army.length >= (this.difficulty === 'hard' ? 8 : 10) && (s.nextAttackAt <= 0 || aggro && army.length > 6))) {
-      s.nextAttackAt = this.difficulty === 'hard' ? 34 : 50;
+    s.nextAttackAt -= 1;
+    if ((ready.length >= 6 && (advantage >= threshold || s.nextAttackAt <= -20)) || (aggro && ready.length > 5)) {
+      s.nextAttackAt = this.difficulty === 'hard' ? 30 : 45;
       const tgt = s.lastSeenPlayerPos || { x: PXW * 0.2, y: PXH * 0.2 };
-      for (const u of army) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
+      // split force: main push + flank
+      const flank = ready.slice(Math.ceil(ready.length * 0.7));
+      for (const u of ready.slice(0, Math.ceil(ready.length * 0.7))) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
+      for (const u of flank) u.issueMove(tgt.x + 140 + Math.random() * 60, tgt.y - 120 + Math.random() * 60, true);
+      s.aggroUntil = 0;
+    }
+    // retreat when hopelessly outvalued (fight another day)
+    if (advantage < 0.55 && ready.length > 3 && s.myDrop < (this.gameTime | 0) / 30) {
+      s.myDrop = (this.gameTime | 0) / 30;
+      const base = this.buildings.find(b => b.team === team && b.def.primary);
+      if (base) ready.slice(0, 6).forEach(u => { if (!this.isVisible(u.x, u.y) || Math.random() < 0.5) u.issueMove(base.x + Math.random() * 60 - 30, base.y + Math.random() * 60 - 30, false); });
     }
     // defenders: units near base under attack already handled by auto-acquire
   }

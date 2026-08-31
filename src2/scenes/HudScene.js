@@ -25,10 +25,12 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:tick', () => { if (this.scene.isActive()) this.refresh(); });
     battle.events.on('hud:selection', (info) => { if (this.scene.isActive()) this.onSelection(info); });
     battle.events.on('hud:gameover', (r) => { if (this.scene.isActive()) this.showGameOver(r); });
+    battle.events.on('hud:alert', (msg) => { if (this.scene.isActive()) this.banner(msg); });
     this.events.once('shutdown', () => {
       battle.events.off('hud:tick');
       battle.events.off('hud:selection');
       battle.events.off('hud:gameover');
+      battle.events.off('hud:alert');
     });
 
     this.events.on('resize', () => this.handleResize());
@@ -188,7 +190,11 @@ export class HudScene extends Phaser.Scene {
     const b = this.scene.get('Battle');
     if (!b || !b.players) return;
     const p = b.players[0];
-    this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}`);
+    const capped = p.supplyUsed >= p.supplyCap;
+    this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
+    this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');
+    const idle = p.idleWorkers || 0;
+    if (this.idleTxt) { this.idleTxt.setText(idle > 0 ? `IDLE ${idle}` : '').setVisible(idle > 0); }
     const t = Math.floor(b.gameTime);
     this.timeText.setText(`${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
     this.selCount.setText(`SEL ${b.selection.size}`);
