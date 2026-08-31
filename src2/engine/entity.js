@@ -346,7 +346,7 @@ export class Unit {
       this._dmgAcc = 0;
     }
     // blood/spray particles
-    if (this.world.camNear && this.world.camNear(this.x, this.y) && this.world.fxTextures && this.world.fxTextures.has('blood')) {
+    if (this.world.camNear && this.world.camNear(this.x, this.y) && this.world.textures && this.world.textures.exists('blood')) {
       for (let i = 0; i < 3; i++) {
         const b = this.world.add.image(this.x, this.y, 'blood').setDepth(55).setRotation(Math.random() * 6.28).setAlpha(0.9);
         this.world.tweens.add({ targets: b, x: this.x + (Math.random() * 24 - 12), y: this.y + (Math.random() * 24 - 12), alpha: 0, scale: 0.5, duration: 350, onComplete: () => b.destroy() });

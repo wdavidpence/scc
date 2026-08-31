@@ -238,8 +238,6 @@ export class BattleScene extends Phaser.Scene {
     return x > vw.x - 60 && x < vw.x + vw.width + 60 && y > vw.y - 60 && y < vw.y + vw.height + 60;
   }
 
-  get fxTextures() { return this.textures; }
-
   // ---------------- terrain ----------------
   buildTerrain() {
     // batch ground into one big texture
