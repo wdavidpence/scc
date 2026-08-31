@@ -101,6 +101,7 @@ export class BattleScene extends Phaser.Scene {
     this.showBriefingCard();
     this.events.emit('hud:objectives', this.objectives);
     this.spawnAmbient();
+    this.createLighting();
     // F7: veteran perks from campaign
     if (this.campaign && this.campaign.owned) {
       this.perks = { flag: !!this.campaign.owned.pk_flag, chrome: !!this.campaign.owned.pk_chrome, skins: !!this.campaign.owned.pk_skins };
@@ -218,6 +219,83 @@ export class BattleScene extends Phaser.Scene {
     for (let i = 0; i < 4; i++) {
       const c = this.add.circle(300 + Math.random() * 4200, 300 + Math.random() * 4200, 2.5, 0x9fffff, 0.5).setDepth(7);
       this._critters.push({ c, dir: Math.random() * Math.PI * 2, timer: 0 });
+    }
+  }
+
+  // ---------------- lighting engine (F#7): point lights + day/night ----------------
+  createLighting() {
+    this.lightLayer = this.add.container(0, 0).setDepth(46); // above units(30/40), below fx(50+)
+    this.tintRect = this.add.rectangle(PXW / 2, PXH / 2, PXW + 400, PXH + 400, 0x0a1230, 0).setDepth(47).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    this._lights = [];           // {img, base, pulse, phase}
+    this._flashPool = [];
+    // geyser cyan pulses
+    for (const g of this.geysers) {
+      const glow = this.add.image(g.x, g.y - 4, 'glow-soft').setTint(0x4affc8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.25).setScale(0.9);
+      this.lightLayer.add(glow);
+      this._lights.push({ img: glow, base: 0.25, pulse: 0.12, phase: Math.random() * 6.28, sp: 1.4 });
+    }
+    // mineral crystal shimmer
+    if (this.minerals) for (const m of this.minerals) {
+      const glow = this.add.image(m.x, m.y, 'glow').setTint(0x69a6ff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.12).setScale(0.7);
+      this.lightLayer.add(glow);
+      this._lights.push({ img: glow, base: 0.12, pulse: 0.05, phase: Math.random() * 6.28, sp: 2.2 });
+    }
+    this._dayT = 0.3; // mission starts mid-morning; full cycle ~4 min
+  }
+
+  // building windows: team-colored soft glows once built
+  addBuildingLights(b) {
+    if (!this.lightLayer || !b || b.dead) return;
+    const col = b.team === 0 ? 0x4ea1ff : b.team === 1 ? 0xff7b2e : 0xff4fa3;
+    const n = b.def.size === 'large' || (b.def.tiles && b.def.tiles >= 8) ? 3 : b.def.size === 'medium' ? 2 : 1;
+    b._bglows = [];
+    for (let i = 0; i < n; i++) {
+      const dx = (Math.random() - 0.5) * 30, dy = (Math.random() - 0.5) * 20;
+      const g = this.add.image(b.x + dx, b.y + dy, 'glow').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(0.6);
+      this.lightLayer.add(g);
+      b._bglows.push(g);
+    }
+  }
+
+  // transient point light (muzzle flash, explosion)
+  flash(x, y, col = 0xffd27a, size = 1.4, dur = 120) {
+    if (!this.lightLayer || !this.camNear(x, y)) return;
+    let g = this._flashPool.find(f => !f.active);
+    if (!g) {
+      g = this.add.image(0, 0, 'glow'); this.lightLayer.add(g);
+      this._flashPool.push(g);
+      if (this._flashPool.length > 24) { const old = this._flashPool.shift(); old.destroy(); }
+    }
+    g.active = true;
+    g.setPosition(x, y).setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setScale(size);
+    this.tweens.add({ targets: g, alpha: 0, duration: dur, onComplete: () => { g.active = false; } });
+  }
+
+  updateLighting(dt) {
+    if (!this.lightLayer) return;
+    const t = this.time.now / 1000;
+    for (const l of this._lights) l.img.setAlpha(l.base + Math.sin(t * l.sp + l.phase) * l.pulse);
+    // day/night ambience cycle
+    this._dayT = (this._dayT + dt / 240) % 1;
+    const d = this._dayT;
+    // curve: day at 0-0.45, dusk to night at 0.5-0.75, dawn back
+    let night;
+    if (d < 0.4) night = 0;
+    else if (d < 0.55) night = (d - 0.4) / 0.15;
+    else if (d < 0.85) night = 1;
+    else night = 1 - (d - 0.85) / 0.15;
+    const nightAlpha = night * 0.32;
+    this.tintRect.setAlpha(nightAlpha);
+    const dusk = (d >= 0.35 && d < 0.6) ? 1 : 0;
+    this.tintRect.fillColor = dusk && nightAlpha > 0 ? 0x2a1a40 : 0x0a1230;
+    // building window glows fade in at night
+    for (const b of this.buildings) {
+      if (!b._bglows) continue;
+      const want = b.built && !b.dead ? 0.14 + night * 0.4 : 0;
+      for (const g of b._bglows) {
+        g.alpha += (want - g.alpha) * Math.min(1, dt * 2);
+        g.x += (b.x - g.x) * Math.min(1, dt); // follow if moved
+      }
     }
   }
 
@@ -776,6 +854,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (b.def.creepGrowth) this.addCreep(b.team, b.x, b.y, b.def.creepRadius || 8);
     if (b.def.power) { b.powerRadius = TILE * 10; this.drawPowerField(b); }
+    this.addBuildingLights(b);
     this.audio?.buildComplete();
   }
 
@@ -1518,6 +1597,7 @@ export class BattleScene extends Phaser.Scene {
     this.updateAI(dt);
     this.updateThreats(dt);
     this.updateAmbient(dt);
+    this.updateLighting(dt);
     this.updateTutorial();
 
     // income trickle from assigned gas (simplification: gas income via worker returns only)

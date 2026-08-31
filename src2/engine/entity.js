@@ -250,6 +250,10 @@ export class Unit {
     if (this.world.camNear && this.world.camNear(this.x, this.y)) {
       const m = this.world.add.image(this.x + (target.x > this.x ? 10 : -10), this.y - 2, 'spark').setDepth(55).setScale(1.3);
       this.world.tweens.add({ targets: m, scale: 0.2, alpha: 0, duration: 130, onComplete: () => m.destroy() });
+      if (this.world.flash) {
+        const psionic = this.race === 'protoss' || ['zealot', 'dragoon', 'htemplar', 'dtemplar', 'highTemplar', 'darkTemplar', 'archon', 'carrier', 'reaver'].includes(this.kind);
+        this.world.flash(this.x + (target.x > this.x ? 12 : -12), this.y - 2, psionic ? 0x8fd0ff : (this.def.size === 'large' ? 0xffc24a : 0xffe9a0), this.def.size === 'large' ? 2.2 : 1.2);
+      }
     }
     this.sprite.setScale(1, 0.92);
     this.world.time.delayedCall(90, () => { if (this.sprite && !this.dead) this.sprite.setScale(this.baseScale || (this.flying ? 1.06 : 1)); });
@@ -376,6 +380,7 @@ export class Unit {
     this.world.onUnitDeath(this);
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
+    if (this.world.flash) this.world.flash(this.x, this.y, 0xff9c3c, this.def.size === 'large' ? 3 : 1.6, 260);
     this.world.tweens.add({ targets: boom, scale: (this.def.size === 'large' ? 2.2 : 1.4), alpha: 0, duration: 320, onComplete: () => boom.destroy() });
     // debris shards
     if (this.world.camNear && this.world.camNear(this.x, this.y)) {
@@ -500,6 +505,7 @@ export class Building {
     const s = Math.max(this.def.w, this.def.h);
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(s * 0.7);
+    if (this.world.flash) this.world.flash(this.x, this.y, 0xff9c3c, s * 1.2, 420);
     this.world.tweens.add({ targets: boom, scale: s * 1.4, alpha: 0, duration: 500, onComplete: () => boom.destroy() });
     this.world.audio?.death(true);
     this.container.destroy();

@@ -493,7 +493,22 @@ function createCursor(scene) {
   makeTex(scene, 'crosshair', 16, 16, (ctx) => {
     ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(8, 8, 6, 0, 7); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(8, 4); ctx.moveTo(8, 12); ctx.lineTo(8, 16); ctx.moveTo(0, 8); ctx.lineTo(4, 8); ctx.moveTo(12, 8); ctx.lineTo(16, 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(8, 4); ctx.moveTo(8, 12); ctx.lineTo(16, 8); ctx.moveTo(0, 8); ctx.lineTo(4, 8); ctx.moveTo(12, 8); ctx.lineTo(16, 8); ctx.stroke();
+  });
+  // soft radial glow for point lights (white; tinted at draw time)
+  makeTex(scene, 'glow', 64, 64, (ctx) => {
+    const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  });
+  makeTex(scene, 'glow-soft', 128, 128, (ctx) => {
+    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
   });
 }
 
