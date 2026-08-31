@@ -171,6 +171,11 @@ export class HudScene extends Phaser.Scene {
     this.mkBtn(12, this.H - 96, 68, 38, 'HELP', () => this.showHelp());
   }
 
+  banner(msg) {
+    this.alert.setText(msg).setColor('#ffd23f').setAlpha(1);
+    this.tweens.add({ targets: this.alert, alpha: 0, delay: 2200, duration: 500 });
+  }
+
   showHelp() {
     this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-3=groups  wheel=zoom').setAlpha(1);
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 3200, duration: 400 });

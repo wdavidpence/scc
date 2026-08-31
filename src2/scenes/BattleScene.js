@@ -199,13 +199,21 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     };
-    // visible: cut holes in fog (seen texture) & make vis layer transparent
+    // visible: cut holes in fog (seen texture) & make vis layer transparent — soft radial edges
     for (const u of this.units) { if (!u.dead) stamp(u.x, u.y, u.def.sight); }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
+    const softCut = (ctx, cx, cy, r) => {
+      const rr = Math.max(1.5, r);
+      const grad = ctx.createRadialGradient(cx, cy, rr * 0.55, cx, cy, rr);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.fill();
+    };
     fogCtx.globalCompositeOperation = 'destination-out';
     visCtx.globalCompositeOperation = 'destination-out';
-    for (const u of this.units) { if (!u.dead) { visCtx.beginPath(); visCtx.arc(u.x / TILE, u.y / TILE, u.def.sight, 0, 7); visCtx.fill(); } }
-    for (const b of this.buildings) { if (!b.dead) { visCtx.beginPath(); visCtx.arc(b.x / TILE, b.y / TILE, (b.def.sight || 5), 0, 7); visCtx.fill(); } }
+    for (const u of this.units) { if (!u.dead) { softCut(visCtx, u.x / TILE, u.y / TILE, u.def.sight); } }
+    for (const b of this.buildings) { if (!b.dead) { softCut(visCtx, b.x / TILE, b.y / TILE, (b.def.sight || 5)); } }
     fogCtx.globalCompositeOperation = 'source-over';
     visCtx.globalCompositeOperation = 'source-over';
     // repopulate holes in fog: fog = black where unseen only
@@ -831,7 +839,12 @@ export class BattleScene extends Phaser.Scene {
     grp.forEach(u => this.addToSelection(u));
     const cx = grp.reduce((a, u) => a + u.x, 0) / grp.length;
     const cy = grp.reduce((a, u) => a + u.y, 0) / grp.length;
-    this.cameras.main.centerOn(cx, cy);
+    // double-tap: center camera on group (SC1 behavior)
+    const now = this.gameTime;
+    if (this._lastGroupTap && this._lastGroupTap.n === n && now - this._lastGroupTap.t < 0.4) {
+      this.cameras.main.centerOn(cx, cy);
+    }
+    this._lastGroupTap = { n, t: now };
     this.audio?.select();
   }
 
