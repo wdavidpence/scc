@@ -45,8 +45,9 @@ export class Unit {
     this.container = world.add.container(x, y);
     const key = `u-${this.def.icon}-t${team > 2 ? 2 : team}`;
     this.sprite = world.add.image(0, 0, key);
-    if (this.flying) { this.sprite.setScale(1.06); this.container.setDepth(40); } else { this.container.setDepth(30); }
-    this.baseScale = this.flying ? 1.06 : 1;
+    const sizeScale = this.def.size === 'large' ? 1.25 : this.def.size === 'medium' ? 1.08 : 1;
+    if (this.flying) { this.sprite.setScale(1.06 * sizeScale); this.container.setDepth(40); } else { this.sprite.setScale(sizeScale); this.container.setDepth(30); }
+    this.baseScale = (this.flying ? 1.06 : 1) * sizeScale;
     this.hpBar = world.add.graphics();
     this.container.add([this.sprite, this.hpBar]);
     this.selected = false;

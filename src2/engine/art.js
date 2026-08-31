@@ -14,6 +14,92 @@ function makeTex(scene, key, w, h, draw) {
 
 function px(ctx, x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
 
+// ---- hand-finish pass: outline + rim light + energy accents on unit sprites ----
+function hex2rgb(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function mix(c1, c2, t) {
+  const a = typeof c1 === 'string' ? hex2rgb(c1) : c1, b = typeof c2 === 'string' ? hex2rgb(c2) : c2;
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+}
+function darker(c, t = 0.35) { return mix(c, '#000000', t); }
+function lighter(c, t = 0.45) { return mix(c, '#ffffff', t); }
+
+// Post-process a 20x20 unit sprite: content auto-crops to its bounding box
+// and re-centers, then gets a dark drop-stencil outline, NW rim light,
+// SE shade, and a race-energy accent pixel.
+function finishSprite(canvas, race, teamCol) {
+  const ctx = canvas.getContext('2d');
+  const S = canvas.width;
+  const F = 32;
+  const src = ctx.getImageData(0, 0, S, S);
+  const oc = document.createElement('canvas'); oc.width = F; oc.height = F;
+  const octx = oc.getContext('2d');
+  // ---- auto-crop bbox ----
+  let x0 = S, y0 = S, x1 = -1, y1 = -1;
+  const sd = src.data;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (sd[(y * S + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return oc;
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+  const scale = Math.min(((F - 4) / cw), ((F - 4) / ch), 1.5);
+  const dw = Math.round(cw * scale), dh = Math.round(ch * scale);
+  const ox = Math.round((F - dw) / 2), oy = Math.round((F - dh) / 2);
+  octx.imageSmoothingEnabled = false;
+  // ---- outline: 4 offset silhouettes in near-black ----
+  const sil = document.createElement('canvas'); sil.width = dw; sil.height = dh;
+  const sctx = sil.getContext('2d');
+  sctx.imageSmoothingEnabled = false;
+  sctx.drawImage(canvas, x0, y0, cw, ch, 0, 0, dw, dh);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = 'rgba(8,8,12,1)';
+  sctx.fillRect(0, 0, dw, dh);
+  const OFF = Math.max(1, Math.round(scale));
+  for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF]]) octx.drawImage(sil, ox + dx, oy + dy);
+  // ---- body ----
+  octx.drawImage(canvas, x0, y0, cw, ch, ox, oy, dw, dh);
+  // ---- rim/shade from the rendered body alpha ----
+  const bd = octx.getImageData(ox, oy, dw, dh).data;
+  const at = (x, y) => (x < 0 || y < 0 || x >= dw || y >= dh) ? 0 : bd[(y * dw + x) * 4 + 3];
+  const rim = document.createElement('canvas'); rim.width = F; rim.height = F;
+  const rctx = rim.getContext('2d');
+  const shade = document.createElement('canvas'); shade.width = F; shade.height = F;
+  const shctx = shade.getContext('2d');
+  const rimCol = teamCol;
+  const accentCol = race === 'zerg' ? '#c9ff5a' : race === 'protoss' ? '#7ad7ff' : '#ffd23f';
+  const img = octx.getImageData(0, 0, F, F);
+  const d = img.data;
+  const rimD = rctx.createImageData(F, F).data;
+  const shD = shctx.createImageData(F, F).data;
+  for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
+    const i = (y * F + x) * 4;
+    if (d[i + 3] < 10) continue;
+    // NW edge => rim; SE edge => shade
+    if (!at(x - ox - 1, y - oy - 1) || !at(x - ox, y - oy - 1)) {
+      rimD[i] = 255; rimD[i + 1] = 255; rimD[i + 2] = 255; rimD[i + 3] = 160;
+    }
+    if (!at(x - ox + 1, y - oy + 1) || !at(x - ox, y - oy + 1)) {
+      shD[i] = 0; shD[i + 1] = 0; shD[i + 2] = 0; shD[i + 3] = 110;
+    }
+  }
+  rctx.putImageData(new ImageData(rimD, F, F), 0, 0);
+  shctx.putImageData(new ImageData(shD, F, F), 0, 0);
+  octx.drawImage(shade, 0, 0);
+  // rim tinted with team color over white base
+  const tint = document.createElement('canvas'); tint.width = F; tint.height = F;
+  const tctx = tint.getContext('2d');
+  tctx.drawImage(rim, 0, 0);
+  tctx.globalCompositeOperation = 'source-atop';
+  tctx.fillStyle = rimCol; tctx.globalAlpha = 0.55; tctx.fillRect(0, 0, F, F);
+  octx.globalAlpha = 0.9; octx.drawImage(tint, 0, 0); octx.globalAlpha = 1;
+  // ---- race energy accent: glowing notch on the spine ----
+  octx.globalCompositeOperation = 'lighter';
+  octx.fillStyle = accentCol;
+  octx.fillRect(Math.round(F / 2 - 1), oy + 1, 2, 2);
+  octx.globalAlpha = 0.5;
+  octx.fillRect(Math.round(F / 2 - 2), oy, 4, 4);
+  octx.globalAlpha = 1;
+  octx.globalCompositeOperation = 'source-over';
+  return oc;
+}
+
 function teamHex(team, colors) {
   const n = team === 0 ? colors[0] : team === 1 ? colors[1] : colors[2];
   return '#' + n.toString(16).padStart(6, '0');
@@ -270,10 +356,18 @@ function createUnitTextures(scene) {
     }
   };
 
+  const raceOf = { scv: 'terran', marine: 'terran', firebat: 'terran', tank: 'terran', vulture: 'terran', goliath: 'terran', wraith: 'terran', bc: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran',
+    drone: 'zerg', zergling: 'zerg', zereling: 'zerg', hydra: 'zerg', hydralisk: 'zerg', muta: 'zerg', mutalisk: 'zerg', ultra: 'zerg', ultralisk: 'zerg', overlord: 'zerg', scourge: 'zerg', lurker: 'zerg', queen: 'zerg', broodling: 'zerg',
+    probe: 'protoss', zealot: 'protoss', dragoon: 'protoss', htemplar: 'protoss', highTemplar: 'protoss', dtemplar: 'protoss', darkTemplar: 'protoss', archon: 'protoss', carrier: 'protoss', reaver: 'protoss', shuttle: 'protoss', corsair: 'protoss' };
+  const largeKinds = ['tank', 'bc', 'ultra', 'carrier', 'goliath', 'overlord', 'lurker', 'dragoon', 'reaver', 'battleship', 'battlecruiser'];
   for (const [kind, fn] of Object.entries(defs)) {
     for (let team = 0; team < 3; team++) {
       const col = team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
-      makeTex(scene, `u-${kind}-t${team}`, 20, 20, (ctx) => fn(ctx, col));
+      const raw = document.createElement('canvas'); raw.width = 20; raw.height = 20;
+      fn(raw.getContext('2d'), col);
+      const finished = finishSprite(raw, raceOf[kind] || 'terran', col);
+      if (scene.textures.exists(`u-${kind}-t${team}`)) continue;
+      scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
     }
   }
 }
