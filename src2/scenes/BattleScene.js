@@ -78,8 +78,9 @@ export class BattleScene extends Phaser.Scene {
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
     // start music after first user gesture (title already had one)
-    this.input.once('pointerdown', () => this.audio.startMusic());
-    this.input.keyboard.once('keydown', () => this.audio.startMusic());
+    const startMusicNow = () => this.audio.startMusic({ boss: !!(this.mods && this.mods.boss) });
+    this.input.once('pointerdown', startMusicNow);
+    this.input.keyboard.once('keydown', startMusicNow);
     this.flows = new FlowManager(null, MAP_W, MAP_H); // wired after nav
     this.spatial = new SpatialHash(28);
 
@@ -140,6 +141,7 @@ export class BattleScene extends Phaser.Scene {
       u.sprite.setScale(1.5);
       this.events.emit('hud:alert', 'ENEMY CHAMPION DEPLOYED');
       this.audio?.ultimateBark();
+      this.audio?.bossTheme(true);
     }
   }
 
@@ -731,6 +733,7 @@ export class BattleScene extends Phaser.Scene {
       this.shake(10, 0.6);
       this.events.emit('hud:alert', 'CHAMPION SLAIN');
       this.audio?.objective();
+      this.audio?.bossTheme(false);
       const k = this.objectives.find(o => o.id === 'boss'); if (k) { k.done = true; this.mods.boss = false; this.events.emit('hud:objectives', this.objectives); }
       if (this._holdDone) this.endGame('victory');
     }
@@ -1483,6 +1486,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // ultimate energy charge + recording + objectives
+    const engaged = this.units.filter(u => !u.dead && u.target && !u.target.dead);
+    if (engaged.length >= 6) this.audio?.markHeavyCombat();
     const combatNow = this.units.some(u => !u.dead && u.team === 0 && u.target && !u.target.dead) || this.units.some(u => !u.dead && u.team === 1 && Math.abs(u.x - cam.midPoint.x) < 400);
     this.audio?.setCombat(combatNow);
     this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + dt * (5 + this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker).length * 0.25));

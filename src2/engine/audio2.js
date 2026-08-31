@@ -64,8 +64,8 @@ export class Audio2 {
   death(big) { this.noise(big ? 0.4 : 0.15, big ? 0.1 : 0.05, big ? 300 : 900); }
   error() { this.tone(180, 0.12, 'square', 0.04, -60); }
   gameEnd(win) {
-    const seq = win ? [523, 659, 784, 1046] : [392, 330, 262, 196];
-    seq.forEach((f, i) => setTimeout(() => this.tone(f, 0.22, 'triangle', 0.05), i * 180));
+    this.stopMusic();
+    if (win) this.victoryFanfare(); else this.defeatDirge();
   }
 
   // ---------- race tint ----------
@@ -76,44 +76,178 @@ export class Audio2 {
     this.raceWave = race === 'zerg' ? 'sawtooth' : race === 'protoss' ? 'sine' : 'triangle';
   }
 
-  // ---------- ambient music: slow procedural pads ----------
-  startMusic() {
+  // ================= adaptive multi-track music engine =================
+  // Three real mixer layers (percussion bed / string pad / lead line) on
+  // separate gain buses, crossfaded by a combat-intensity level (0..2).
+  // Race selects scale, waveform, and groove. Free, procedural, no assets.
+  MUSIC_SCALES = {
+    terran:  { root: 130.81, steps: [0, 3, 5, 7, 10], pad: 'triangle', lead: 'square',   bpm: 84,  groove: [1, 0, 0, 1, 0, 0, 1, 0] },
+    zerg:    { root: 110.00, steps: [0, 1, 5, 6, 8],  pad: 'sawtooth', lead: 'sawtooth', bpm: 116, groove: [1, 0, 1, 1, 0, 1, 0, 1] },
+    protoss: { root: 146.83, steps: [0, 2, 4, 7, 9],   pad: 'sine',     lead: 'sine',     bpm: 72,  groove: [1, 0, 0, 0, 1, 0, 0, 0] },
+  };
+  freqAt(step) { const s = this.MUSIC_SCALES[this.race] || this.MUSIC_SCALES.terran; return s.root * Math.pow(2, step / 12); }
+
+  startMusic(opts = {}) {
     if (this.musicOn || !this.ctx) return;
     this.musicOn = true;
-    this.musicBus = this.ctx.createGain();
-    this.musicBus.gain.value = 0.045;
-    this.musicBus.connect(this.ctx.destination);
     this.setRace(this.scene?.race || 'terran');
-    const playPad = () => {
-      if (!this.musicOn || !this.ctx) return;
-      const t = this.ctx.currentTime;
-      const chord = this.raceChord;
-      chord.forEach((f, i) => {
-        const o = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        o.type = this.raceWave;
-        o.frequency.setValueAtTime(f * (i === 2 && Math.random() < 0.3 ? 1.5 : 1), t);
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.5, t + 2.2);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 7.5);
-        o.connect(g); g.connect(this.musicBus);
-        o.start(t); o.stop(t + 8);
-      });
-      // sparse arpeggio sparkle
-      if (Math.random() < 0.7) {
-        const arp = chord[Math.floor(Math.random() * 3)] * 2;
-        const o2 = this.ctx.createOscillator(); const g2 = this.ctx.createGain();
-        o2.type = 'triangle'; o2.frequency.setValueAtTime(arp, t + 3);
-        g2.gain.setValueAtTime(0.0001, t + 3);
-        g2.gain.exponentialRampToValueAtTime(0.25, t + 3.1);
-        g2.gain.exponentialRampToValueAtTime(0.0001, t + 3.8);
-        o2.connect(g2); g2.connect(this.musicBus); o2.start(t + 3); o2.stop(t + 4);
-      }
-      this._musicTimer = setTimeout(playPad, 6500 + Math.random() * 2000);
-    };
-    playPad();
+    this.bossMode = !!opts.boss;
+    const t = this.ctx.currentTime;
+    // master + per-layer buses with gentle master compression illusion
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.setValueAtTime(0.0001, t);
+    this.musicBus.gain.linearRampToValueAtTime(0.09, t + 3);
+    const comp = this.ctx.createDynamicsCompressor ? this.ctx.createDynamicsCompressor() : null;
+    if (comp) { comp.threshold.value = -18; comp.ratio.value = 4; this.musicBus.connect(comp); comp.connect(this.ctx.destination); }
+    else this.musicBus.connect(this.ctx.destination);
+    this.layerBuses = {};
+    for (const L of ['perc', 'pad', 'lead']) {
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(L === 'pad' ? 0.6 : 0.0001, t);
+      // pad always present; perc arrives at intensity>=1; lead at >=2
+      g.connect(this.musicBus);
+      this.layerBuses[L] = g;
+    }
+    this._step = 0;
+    this._leadMotif = [];
+    this._tickMusic();
+    if (opts.sting !== false) this.introSting();
   }
-  stopMusic() { this.musicOn = false; if (this._musicTimer) clearTimeout(this._musicTimer); if (this.musicBus) { try { this.musicBus.gain.value = 0; } catch (e) {} } }
+
+  _tickMusic() {
+    if (!this.musicOn || !this.ctx) return;
+    const s = this.MUSIC_SCALES[this.race] || this.MUSIC_SCALES.terran;
+    const beat = 60 / (this.bossMode ? s.bpm + 24 : s.bpm); // seconds per 8th step
+    const t = this.ctx.currentTime + 0.02;
+    const i = this._intensity || 0;
+    const st = this._step % 8;
+    // ---- percussion bed (intensity >= 1) ----
+    if (i >= 1 && s.groove[st]) {
+      this._kick(t, this.layerBuses.perc, st === 0 ? 1 : 0.7);
+      if (st % 2 === 1 || this.bossMode) this._hat(t, this.layerBuses.perc, 0.5 + i * 0.15);
+    }
+    if (i >= 1 && st === 0) this._kick(t, this.layerBuses.perc, 1);
+    // ---- string pad: chord swap every 8 steps ----
+    if (st === 0) this._padChord(t, s);
+    // ---- lead line (intensity >= 2) ----
+    if (i >= 2 && Math.random() < (this.bossMode ? 0.8 : 0.55)) {
+      const step = s.steps[Math.floor(Math.random() * s.steps.length)] + (Math.random() < 0.3 ? 12 : 0);
+      this._leadNote(t, this.freqAt(step), beat * (1 + Math.floor(Math.random() * 2)), s);
+    }
+    // layer crossfade toward targets
+    const ramp = (bus, v) => { try { bus.gain.cancelScheduledValues(t); bus.gain.linearRampToValueAtTime(v, t + 1.2); } catch (e) {} };
+    ramp(this.layerBuses.perc, i >= 1 ? (this.bossMode ? 0.9 : 0.55) : 0.0001);
+    ramp(this.layerBuses.lead, i >= 2 ? 0.7 : 0.0001);
+    this._step++;
+    this._musicTimer = setTimeout(() => this._tickMusic(), beat * 1000);
+  }
+
+  _kick(t, bus, v = 1) {
+    const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
+    g.gain.setValueAtTime(0.9 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.25);
+  }
+  _hat(t, bus, v = 1) {
+    const len = Math.max(1, (0.05 * this.ctx.sampleRate) | 0);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * (1 - k / len);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+    const g = this.ctx.createGain(); g.gain.value = 0.12 * v;
+    src.connect(f); f.connect(g); g.connect(bus); src.start(t);
+  }
+  _padChord(t, s) {
+    // diatonic triad from scale, slow attack, held ~4 beats; boss = minor cluster
+    const degs = this.bossMode ? [0, 1, 6] : [0, 2, 4];
+    if (Math.random() < 0.35) degs.push(s.steps[3] ?? 7);
+    for (const dg of degs) {
+      const f = this.freqAt(dg) * (dg === 0 ? 0.5 : 1);
+      const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+      o.type = s.pad; o.detune.setValueAtTime((Math.random() * 8 - 4), t);
+      o.frequency.setValueAtTime(f, t);
+      const dur = (60 / s.bpm) * 4;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16, t + dur * 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.4);
+      const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = this.bossMode ? 900 : 1600;
+      o.connect(lp); lp.connect(g); g.connect(this.layerBuses.pad);
+      o.start(t); o.stop(t + dur + 0.5);
+    }
+  }
+  _leadNote(t, f, dur, s) {
+    const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+    o.type = s.lead; o.frequency.setValueAtTime(f * (this.bossMode ? 0.94 : 1), t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const dly = this.ctx.createDelay ? this.ctx.createDelay(1) : null;
+    if (dly) { dly.delayTime.value = 0.28; const fb = this.ctx.createGain(); fb.gain.value = 0.32; const wet = this.ctx.createGain(); wet.gain.value = 0.5; o.connect(g); g.connect(this.layerBuses.lead); g.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(this.layerBuses.lead); }
+    else { o.connect(g); g.connect(this.layerBuses.lead); }
+    o.start(t); o.stop(t + dur + 0.1);
+  }
+
+  // ---- cinematic stings ----
+  introSting() { // mission start: rising swell + low thud
+    if (!this.ctx || !this.musicBus) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(this.freqAt(0) * 0.5, t);
+    o.frequency.exponentialRampToValueAtTime(this.freqAt(7), t + 2.4);
+    const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(4000, t + 2.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, t + 1.8); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+    o.connect(lp); lp.connect(g); g.connect(this.musicBus); o.start(t); o.stop(t + 3.3);
+    this._kick(t + 2.3, this.musicBus, 1.4);
+  }
+  bossTheme(on) { // switch groove under boss fight
+    if (this.bossMode === on || !this.ctx) return;
+    this.bossMode = on;
+    this.bark(on ? 'Massive biosignature detected.' : 'Threat eliminated.', 0.55, 0.95);
+    if (on) { // descending minor stinger
+      const t = this.ctx.currentTime;
+      [0, 1, 6, 5].forEach((dg, k) => this.tone(this.freqAt(dg) * (k === 3 ? 0.5 : 1), 0.5, 'sawtooth', 0.05));
+    }
+  }
+  victoryFanfare() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const notes = [0, 4, 7, 12, 7, 12, 16];
+    notes.forEach((dg, k) => {
+      const f = this.freqAt(dg);
+      const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(f, t + k * 0.16);
+      g.gain.setValueAtTime(0.0001, t + k * 0.16);
+      g.gain.exponentialRampToValueAtTime(0.16, t + k * 0.16 + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + (k >= 5 ? 1.4 : 0.4));
+      o.connect(g); g.connect(this.ctx.destination); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 1.6);
+      const o2 = this.ctx.createOscillator(); const g2 = this.ctx.createGain();
+      o2.type = 'sine'; o2.frequency.setValueAtTime(f * 2, t + k * 0.16);
+      g2.gain.setValueAtTime(0.0001, t + k * 0.16); g2.gain.exponentialRampToValueAtTime(0.07, t + k * 0.16 + 0.03); g2.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.5);
+      o2.connect(g2); g2.connect(this.ctx.destination); o2.start(t + k * 0.16); o2.stop(t + k * 0.16 + 0.6);
+    });
+    this._kick(t + 0.96, this.ctx.destination, 1.2);
+  }
+  defeatDirge() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [7, 5, 3, 0].forEach((dg, k) => {
+      const f = this.freqAt(dg) * 0.5;
+      const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t + k * 0.4);
+      const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
+      g.gain.setValueAtTime(0.0001, t + k * 0.4); g.gain.exponentialRampToValueAtTime(0.12, t + k * 0.4 + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.4 + (k === 3 ? 2.2 : 0.8));
+      o.connect(lp); lp.connect(g); g.connect(this.ctx.destination); o.start(t + k * 0.4); o.stop(t + k * 0.4 + 2.4);
+    });
+  }
+
+  stopMusic() {
+    this.musicOn = false;
+    if (this._musicTimer) clearTimeout(this._musicTimer);
+    if (this.musicBus && this.ctx) { try { this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime); this.musicBus.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.8); } catch (e) { try { this.musicBus.gain.value = 0; } catch (e2) {} } }
+  }
 
   // ---------- voice barks (SpeechSynthesis; silent fallback) ----------
   bark(text, pitch = 0.8, rate = 1.05) {
@@ -173,11 +307,26 @@ export class Audio2 {
   orderPing() { this.tone(1050, 0.045, 'sine', 0.02); }
   objective() { const seq = [659, 830, 988]; seq.forEach((f, i) => setTimeout(() => this.tone(f, 0.15, 'triangle', 0.04), i * 120)); }
   setCombat(intense) {
-    if (this._intense === intense) return;
-    this._intense = intense;
-    if (this.musicBus && this.ctx) {
-      try { this.musicBus.gain.linearRampToValueAtTime(intense ? 0.075 : 0.045, this.ctx.currentTime + 1.5); } catch (e) {}
+    // intensity levels: 0 calm (pad) -> 1 skirmish (+perc) -> 2 full battle (+lead).
+    // Sticky with decay: a blip of combat holds the level up for a few seconds
+    // so the music doesn't stutter when engagement flickers frame to frame.
+    const now = Date.now();
+    if (intense) this._lastCombat = now;
+    if (this._heavyCombat && this._heavyCombat > now - 4000) this._lastHeavy = now;
+    let lvl = 0;
+    if (now - (this._lastCombat || 0) < 6000) lvl = 1;
+    if (now - (this._lastHeavy || 0) < 5000) lvl = 2;
+    if (this._intensity === lvl) return;
+    this._intensity = lvl;
+    // crossfade handled in _tickMusic on next step; nudge pad down as layers enter
+    if (this.layerBuses && this.ctx) {
+      try {
+        this.layerBuses.pad.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.layerBuses.pad.gain.linearRampToValueAtTime(lvl === 0 ? 0.6 : 0.35, this.ctx.currentTime + 1.5);
+      } catch (e) {}
     }
+    if (lvl >= 1) this.resume();
   }
+  markHeavyCombat() { this._heavyCombat = Date.now(); }
 }
 
