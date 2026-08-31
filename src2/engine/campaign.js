@@ -21,7 +21,10 @@ export const UPGRADES = [
   { id: 'tr1', name: 'START +400 MIN', cost: 250, effect: 'startMinerals', val: 400 },
   { id: 'tr2', name: 'START +200 GAS', cost: 250, effect: 'startGas', val: 200 },
   { id: 'ts1', name: 'BUILD SPEED +15%', cost: 400, effect: 'buildSpeed', val: 0.15 },
-  { id: 'sc1', name: 'FREE SCOUT DRONE', cost: 200, effect: 'freeScout', val: 1 }
+  { id: 'sc1', name: 'FREE SCOUT DRONE', cost: 200, effect: 'freeScout', val: 1 },
+  { id: 'pk_flag', name: 'VETERAN BANNERS', cost: 600, effect: 'perk', val: 1 },
+  { id: 'pk_chrome', name: 'CHROME PLATING', cost: 900, effect: 'perk', val: 1 },
+  { id: 'pk_skins', name: 'OBSIDIAN SKINS', cost: 1200, effect: 'perk', val: 1 }
 ];
 
 // Between-mission maintenance cost so credits stay scarce (charged at mission launch).

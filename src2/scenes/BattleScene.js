@@ -23,6 +23,7 @@ export class BattleScene extends Phaser.Scene {
     this.difficulty = data.difficulty || 'normal';
     this.mission = data.mission || null;
     this.campaign = data.campaign || null;
+    this.tutorialMode = !!data.tutorial;
     this.mods = data.mods || (this.mission ? this.mission.mods : null) || {};
     // F5: difficulty profiles — build orders/aggression, not just stat multipliers
     this.aiProfile = data.difficulty === 'hard'
@@ -65,6 +66,12 @@ export class BattleScene extends Phaser.Scene {
     this._recTimer = 0;
     this._shake = { t: 0, mag: 0, ox: 0, oy: 0 };
     this._shakeCam = { x: 0, y: 0 };
+    this.paused = false;          // F8 tactical pause
+    this.threats = [];            // F3 incoming-wave pings {x,y,t}
+    this._threatTimer = 0;
+    this.perks = {};             // F7 cosmetic meta perks
+    this.ambient = null;         // F4 weather
+    this.tut = null;             // F10 tutorial state
     // ---- mission objectives (F10) ----
     this.objectives = this.buildObjectives();
     this.mods = this.applyMissionMods();
@@ -92,6 +99,14 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:ready');
     this.showBriefingCard();
     this.events.emit('hud:objectives', this.objectives);
+    this.spawnAmbient();
+    // F7: veteran perks from campaign
+    if (this.campaign && this.campaign.owned) {
+      this.perks = { flag: !!this.campaign.owned.pk_flag, chrome: !!this.campaign.owned.pk_chrome, skins: !!this.campaign.owned.pk_skins };
+      for (const u of this.units) if (u.team === 0) this.veteranFlag(u);
+    }
+    // F10: tutorial mode
+    if (this.tutorialMode) this.startTutorial();
   }
 
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
@@ -143,6 +158,150 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => cont.destroy() });
     } });
     if (this.mods.boss) this.time.delayedCall(1500, () => this.spawnMissionBoss());
+  }
+
+  // ---------------- tactical pause (F8) ----------------
+  togglePause() {
+    if (this.gameOver) return;
+    this.paused = !this.paused;
+    this.audio?.orderPing();
+    this.events.emit('hud:pause', this.paused);
+  }
+
+  // ---------------- threat pings (F3) ----------------
+  updateThreats(dt) {
+    this._threatTimer -= dt;
+    if (this._threatTimer > 0) return;
+    this._threatTimer = 4;
+    const cam = this.cameras.main;
+    const vw = cam.worldView;
+    const base = this.buildings.find(b => b.team === 0 && b.def.primary);
+    // groups: enemy clusters of 3+ (crude grid cluster)
+    const grid = {};
+    for (const u of this.units) {
+      if (u.dead || u.team === 1 && !this.isVisible(u.x, u.y)) continue;
+      if (u.team !== 1 || u.def.worker) continue;
+      const gx = Math.round(u.x / 160), gy = Math.round(u.y / 160);
+      (grid[gx + ':' + gy] = grid[gx + ':' + gy] || []).push(u);
+    }
+    for (const k in grid) {
+      const g = grid[k];
+      if (g.length < 3) continue;
+      const cx = g[0].x, cy = g[0].y;
+      if (cx > vw.x && cx < vw.x + vw.width && cy > vw.y && cy < vw.y + vw.height) continue; // on screen already
+      if (base && Math.hypot(cx - base.x, cy - base.y) > TILE * 40) continue; // too far to threaten
+      this.threats.push({ x: cx, y: cy, t: 5 });
+      this.audio?.underAttackBark();
+      this.events.emit('hud:alert', 'INCOMING — ' + g.length + ' HOSTILES');
+      break;
+    }
+    this.threats = this.threats.filter(t => (t.t -= 4) > 0);
+  }
+
+  // ---------------- ambient weather + map life (F4) ----------------
+  spawnAmbient() {
+    const layer = this.add.container(0, 0).setDepth(8).setScrollFactor(0);
+    this.ambientLayer = layer;
+    this._ambient = [];
+    const cols = this.race === 'zerg' ? [0xff9c7c, 0xd8785c] : this.race === 'protoss' ? [0xbfe0ff, 0x8ab4ff] : [0xffd8a0, 0xc8b890];
+    for (let i = 0; i < 26; i++) {
+      const p = this.add.circle(Math.random() * this.scale.width, Math.random() * this.scale.height, 1 + Math.random() * 1.5, cols[i % 2], 0.35 + Math.random() * 0.3);
+      layer.add(p);
+      this._ambient.push({ p, vx: 8 + Math.random() * 14, vy: 14 + Math.random() * 22 });
+    }
+    // geyser gas puffs (world space)
+    this._geyserTimer = 0;
+    // critters: little scuttling dots far from bases
+    this._critters = [];
+    for (let i = 0; i < 4; i++) {
+      const c = this.add.circle(300 + Math.random() * 4200, 300 + Math.random() * 4200, 2.5, 0x9fffff, 0.5).setDepth(7);
+      this._critters.push({ c, dir: Math.random() * Math.PI * 2, timer: 0 });
+    }
+  }
+
+  updateAmbient(dt) {
+    if (!this._ambient) return;
+    const W = this.scale.width, H = this.scale.height;
+    for (const a of this._ambient) {
+      a.p.x += a.vx * dt; a.p.y += a.vy * dt;
+      if (a.p.y > H + 4) { a.p.y = -4; a.p.x = Math.random() * W; }
+      if (a.p.x > W + 4) a.p.x = -4;
+    }
+    this._geyserTimer -= dt;
+    if (this._geyserTimer <= 0) {
+      this._geyserTimer = 0.9 + Math.random() * 1.2;
+      const ge = this.geysers[Math.floor(Math.random() * this.geysers.length)];
+      if (ge && this.camNear(ge.x, ge.y)) {
+        const puff = this.add.circle(ge.x + (Math.random() * 10 - 5), ge.y - 6, 3, 0x7ee0c0, 0.5).setDepth(21);
+        this.tweens.add({ targets: puff, y: ge.y - 34, alpha: 0, scale: 2.2, duration: 1600, onComplete: () => puff.destroy() });
+      }
+    }
+    for (const cr of this._critters) {
+      cr.timer -= dt;
+      if (cr.timer <= 0) { cr.timer = 2 + Math.random() * 4; cr.dir = Math.random() * Math.PI * 2; }
+      cr.c.x += Math.cos(cr.dir) * 26 * dt; cr.c.y += Math.sin(cr.dir) * 26 * dt;
+    }
+  }
+
+  // ---------------- battle stances (F6) ----------------
+  setStance(stance) {
+    if (!this.selection.size) return;
+    for (const u of this.selection) { if (!u.def.worker) u.stance = stance; }
+    this.audio?.orderPing();
+    this.events.emit('hud:alert', 'STANCE: ' + stance.toUpperCase());
+  }
+
+  // ---------------- combat aura for perks (F7) ----------------
+  veteranFlag(u) {
+    if (!(this.perks && this.perks.flag)) return;
+    const f = this.add.triangle(0, -u.radius - 10, 0, 0, 10, 0, 5, 8, 0xffd23f, 0.9).setDepth(31);
+    u.container.add(f);
+    u._flag = f;
+    this.tweens.add({ targets: f, angle: { from: -6, to: 6 }, duration: 500, yoyo: true, repeat: -1 });
+  }
+
+  // ---------------- tutorial (F10) ----------------
+  startTutorial() {
+    const steps = [
+      { text: 'LEFT-CLICK a WORKER to select it', check: () => this.selection.size >= 1 && [...this.selection].some(u => u.def.worker) },
+      { text: 'RIGHT-CLICK a MINERAL to harvest', check: () => [...this.selection].some(u => u.order?.type === 'harvest' || u.harvestTarget) },
+      { text: 'Open the BUILD menu (B) and place a BARRACKS near your base', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'barracks') },
+      { text: 'Select the BARRACKS and train a MARINE', check: () => this.units.some(u => u.team === 0 && (u.kind === 'marine' || u.kind === 'firebat')) },
+      { text: 'Select your Marine and right-click an enemy to attack!', check: () => !this.gameOver && this.units.some(u => u.team === 0 && u.target && !u.target.dead) }
+    ];
+    this.tut = { steps, i: 0, text: this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '15px', color: '#ffd23f', backgroundColor: '#050a14d0', padding: { x: 10, y: 6 } }).setDepth(950).setScrollFactor(0).setOrigin(0.5, 1), marker: null };
+    this.tut.text.setPosition(this.scale.width / 2, this.scale.height - 150);
+    this.tut.text.setText('TUTORIAL — ' + steps[0].text);
+    this._tutMarker = this.add.circle(this.scale.width / 2, this.scale.height / 2, 26, 0xffd23f, 0.12).setStrokeStyle(2, 0xffd23f, 0.9).setDepth(940).setScrollFactor(0);
+    this.tweens.add({ targets: this._tutMarker, scale: 1.35, alpha: 0.4, duration: 600, yoyo: true, repeat: -1 });
+    this.events.on('tutorial:pos', (x, y) => { const c = this.cameras.main; this._tutMarker.setPosition((x - c.worldView.x) * c.zoom, (y - c.worldView.y) * c.zoom); });
+    // point at first worker
+    const w = this.units.find(u => u.team === 0 && u.def.worker);
+    if (w) { this.cameras.main.centerOn(w.x, w.y); this.events.emit('tutorial:pos', w.x, w.y); }
+  }
+
+  updateTutorial() {
+    if (!this.tut || this.gameOver) return;
+    const s = this.tut.steps[this.tut.i];
+    if (s && s.check()) {
+      this.audio?.objective();
+      this.tut.i++;
+      if (this.tut.i >= this.tut.steps.length) {
+        this.tut.text.setText('TUTORIAL COMPLETE — good luck, Commander.');
+        this.tweens.add({ targets: [this.tut.text, this._tutMarker], alpha: 0, delay: 2200, duration: 600, onComplete: () => { this.tut.text.destroy(); this._tutMarker.destroy(); this.tut = null; } });
+        return;
+      }
+      this.tut.text.setText('TUTORIAL — ' + this.tut.steps[this.tut.i].text);
+      // move marker to context of next step
+      const b = this.buildings.find(x => x.team === 0 && x.buildId === 'barracks' && !x.built) || this.buildings.find(x => x.team === 0 && x.buildId === 'barracks');
+      const u = this.units.find(x => x.team === 0 && (x.kind === 'marine' || x.kind === 'firebat'));
+      const foe = this.units.find(x => x.team === 1 && !x.dead);
+      const tgt = b || u || foe;
+      if (tgt) { this.cameras.main.centerOn(tgt.x, tgt.y); this.events.emit('tutorial:pos', tgt.x, tgt.y); }
+    }
+    // keep marker glued to current hint target
+    const w = this.units.find(x => x.team === 0 && x.def.worker);
+    if (this.tut.i === 0 && w) this.events.emit('tutorial:pos', w.x, w.y);
   }
 
   // ---------------- ultimate abilities (F7) ----------------
@@ -497,6 +656,12 @@ export class BattleScene extends Phaser.Scene {
     // apply weapon upgrades
     u.bonusDamage = this.getWeaponLevel(team) * (def.targets !== 'air' ? 2 : 0);
     u.bonusArmor = this.getArmorLevel(team);
+    // F7 perks + F2 upgrade visuals on birth
+    if (team === 0) {
+      if (this.perks?.flag && !def.worker) this.veteranFlag(u);
+      if (this.perks?.chrome) u.sprite.setTint(0xcfd8e6);
+      if (this.perks?.skins) { u.sprite.setTintFill(0x2a3f5f); this.tweens.add({ targets: u.sprite, tint: this.perks?.chrome ? 0xcfd8e6 : 0xffffff, duration: 220 }); }
+    }
     if (!opts.arriveReady && def.worker === false && !def.weaponless) u.setOrder({ type: 'attackMove', point: team === 1 ? { x: PXW * 0.15, y: PXH * 0.15 } : { x: PXW * 0.85, y: PXH * 0.85 } });
     return u;
   }
@@ -648,10 +813,31 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- movement cohorts (flow fields) ----------------
   issueGroupMove(list, x, y, attackMove = false) {
     if (list.length >= 3) {
+      // F6: formation spread — assign slots perpendicular to travel axis so armies stack in a line, not a blob
+      const anchor = list[0];
+      let ax = anchor.x, ay = anchor.y;
+      const combat = list.filter(u => !u.def.worker);
+      const useFormation = combat.length === list.length;
+      const dx = x - ax, dy = y - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const px = -dy / len, py = dx / len; // perpendicular unit
+      const spacing = TILE * 0.8;
+      const n = list.length;
+      const slot = (i) => {
+        const k = i - (n - 1) / 2; // centered
+        const off = k * spacing;
+        // slight stagger depth for large groups to avoid overlap
+        const depth = (Math.abs(k) % 2) * spacing * 0.4;
+        return { x: x + px * off - (dx / len) * depth, y: y + py * off - (dy / len) * depth };
+      };
       const key = `m:${Math.round(x / TILE)}:${Math.round(y / TILE)}:${attackMove ? 'a' : 'm'}`;
       const clearance = 0;
       const field = this.flows.ensure(key, x, y, this.gameTime, 0.6, clearance);
-      for (const u of list) { u.flowField = field; u.issueMove(x, y, attackMove); if (!u.flying) { /* ground flow */ } }
+      let i = 0;
+      for (const u of list) {
+        const t = useFormation ? slot(i) : { x, y };
+        u.flowField = field; u.issueMove(t.x, t.y, attackMove); i++;
+      }
       this.flowsDirty = true;
     } else {
       for (const u of list) { u.flowField = null; u.issueMove(x, y, attackMove); }
@@ -755,7 +941,29 @@ export class BattleScene extends Phaser.Scene {
     if (techId === 'terranInfantryArmor1') this.players[team].upgrades.armor++;
     if (techId === 'protossGroundWeapons1') this.players[team].upgrades.weapons++;
     if (techId === 'protossGroundPlating1') this.players[team].upgrades.armor++;
+    // F2: visible research effects — unit tint flash + glow ring on the lab
+    if (team === 0) {
+      const tint = t?.affects?.toLowerCase?.().includes('weapon') || /weapon|attack/i.test(techId) ? 0xffe08a : 0x8ad4ff;
+      const lab = this.buildings.find(b => b.team === team && !b.dead && (b.buildId === t?.building || b.morphedTo === t?.building)) || this.buildings.find(b => b.team === team && b.def.primary);
+      if (lab) {
+        const ring = this.add.circle(lab.x, lab.y, 14, 0x000000, 0).setStrokeStyle(3, tint, 0.9).setDepth(25);
+        this.tweens.add({ targets: ring, radius: TILE * 4, alpha: 0, duration: 900, onComplete: () => ring.destroy() });
+        lab.sprite.setTintFill(tint);
+        this.tweens.add({ targets: lab.sprite, tint: 0xffffff, duration: 700 });
+      }
+      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker) {
+        u.sprite.setTintFill(tint);
+        this.tweens.add({ targets: u.sprite, tint: 0xffffff, duration: 500 });
+      }
+      this.events.emit('hud:alert', (t?.name || techId) + ' RESEARCH COMPLETE');
+    }
     this.audio?.researchComplete();
+  }
+
+  applyUpgradeTintToBuildings(team) {
+    const lvl = this.getWeaponLevel(team);
+    if (!lvl) return;
+    for (const b of this.buildings) if (!b.dead && b.team === team && b.built && b.def.weapon) b.sprite.setTint(0xd8c090);
   }
   getWeaponLevel(team) { return this.players[team].upgrades.weapons; }
   getArmorLevel(team) { return this.players[team].upgrades.armor; }
@@ -846,6 +1054,10 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
+    this.input.keyboard.on('keydown-SPACE', (e) => { if (e.preventDefault) e.preventDefault(); this.togglePause(); });
+    this.input.keyboard.on('keydown-Z', () => this.setStance('aggressive'));
+    this.input.keyboard.on('keydown-X', () => this.setStance('defensive'));
+    this.input.keyboard.on('keydown-C', () => this.setStance('hold'));
     this.input.keyboard.on('keydown-P', () => { /* reserved */ });
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
     window.addEventListener('keydown', (e) => { if (e.shiftKey && /^[1-8]$/.test(e.key)) this.ctrlHeldWas = false; });
@@ -889,6 +1101,7 @@ export class BattleScene extends Phaser.Scene {
       if (!additive) this.clearSelection();
       this.addToSelection(found);
       this.audio?.select();
+      this.audio?.selectBark([found.kind]);
     } else if (!additive) {
       const b = this.buildingAt(x, y);
       if (b && b.team === 0) this.selectBuilding(b);
@@ -905,7 +1118,7 @@ export class BattleScene extends Phaser.Scene {
         this.addToSelection(u); added++;
       }
     }
-    if (added) this.audio?.select();
+    if (added) { this.audio?.select(); this.audio?.selectBark([...this.selection].map(u => u.kind)); }
   }
 
   addToSelection(u) {
@@ -956,7 +1169,9 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.attackMoveMode) {
-      for (const u of this.selection) u.issueMove(wp.x, wp.y, true);
+      const list = [...this.selection];
+      if (list.length >= 3) this.issueGroupMove(list, wp.x, wp.y, true);
+      else for (const u of list) u.issueMove(wp.x, wp.y, true);
       this.attackMoveMode = false;
       this.input.setDefaultCursor('default');
       this.audio?.move();
@@ -1186,6 +1401,7 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- update loop ----------------
   update(time, delta) {
     if (this.gameOver) return;
+    if (this.paused) { this.updateAmbient(0); return; } // F8: world frozen, orders still work via input
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
     this.gameTime += dt;
 
@@ -1295,6 +1511,9 @@ export class BattleScene extends Phaser.Scene {
 
     // enemy AI
     this.updateAI(dt);
+    this.updateThreats(dt);
+    this.updateAmbient(dt);
+    this.updateTutorial();
 
     // income trickle from assigned gas (simplification: gas income via worker returns only)
     // supply check
@@ -1554,7 +1773,18 @@ export class BattleScene extends Phaser.Scene {
   endGame(result) {
     if (this.gameOver) return;
     this.gameOver = result;
-    this.audio?.gameEnd(result === 'victory');
+    // F9: cinematic beat — slow-mo + zoom on the kill shot
+    const last = this.units.filter(u => !u.dead && u.team === (result === 'victory' ? 1 : 0))[0]
+      || this.buildings.filter(b => !b.dead && b.team === (result === 'victory' ? 1 : 0))[0];
+    if (last) {
+      this.cameras.main.centerOn(last.x, last.y);
+      this.tweens.add({ targets: this.cameras.main, zoom: this.cameras.main.zoom * 1.5, duration: 900, ease: 'Sine.easeInOut' });
+    }
+    this.tweens.add({ targets: this, timeScale: 0.25, duration: 500, onComplete: () => {
+      this.audio?.gameEnd(result === 'victory');
+      this.events.emit('hud:cinema', result);
+      this.tweens.add({ targets: this, timeScale: 0, delay: 700, duration: 300, onComplete: () => this.showGameOverBoard(result) });
+    } });
     // F8: persist replay + apm + campaign progression
     try {
       const apm = Math.round((this.cmdCount / Math.max(30, this.gameTime)) * 60);
@@ -1572,6 +1802,9 @@ export class BattleScene extends Phaser.Scene {
       saveCampaign(this.campaign);
       this.lastReward = reward;
     }
+  }
+
+  showGameOverBoard(result) {
     this.events.emit('hud:gameover', result);
   }
 

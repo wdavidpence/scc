@@ -143,6 +143,28 @@ export class Audio2 {
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
   ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Yamato, fire!'], zerg: ['The swarm descends!', 'Surge!'], protoss: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
 
+  selectBark(unitKinds) {
+    // selection-dependent voice groups with rotation (never repeats the same line twice in a row)
+    const G = {
+      worker: { terran: ['Yes sir.', 'Working.', 'Reporting.'], zerg: ['Sss.', 'At service.', 'Yes.'], protoss: ['Affirmative.', 'Ready.', 'Awaiting.'] },
+      marine: { terran: ['Rock and stone!', 'Sir!', 'Marines up!', 'Let\'s rock!'], zerg: ['Ready.', 'Kill.', 'Here.'], protoss: ['Ready.', 'For Aiur.', 'Adept standing.'] },
+      tank: { terran: ['Artillery in position.', 'Give me a target.', 'Locked and loaded.'], zerg: ['Siege ready.', 'Fire soon.'], protoss: ['Target locked.', 'Ready to fire.'] },
+      air: { terran: ['Airborne.', 'Flight ready.', 'Wings up.'], zerg: ['Wings up.', 'Soaring.'], protoss: ['Squadrons ready.', 'Eyes skyward.'] },
+      default: { terran: ['Ready.', 'Orders?', 'Standing by.'], zerg: ['Ready.', 'Waiting.', 'Yes.'], protoss: ['Ready.', 'Command?', 'Standing by.'] }
+    };
+    let group = 'default';
+    if (unitKinds.includes('scv') || unitKinds.includes('drone') || unitKinds.includes('probe')) group = 'worker';
+    else if (unitKinds.includes('marine') || unitKinds.includes('firebat') || unitKinds.includes('zereling') || unitKinds.includes('hydralisk') || unitKinds.includes('zealot')) group = 'marine';
+    else if (unitKinds.includes('tank') || unitKinds.includes('goliath') || unitKinds.includes('siege')) group = 'tank';
+    else if (unitKinds.some(k => ['wraith', 'banshee', 'corsair', 'phoenix', 'mutalisk', 'viper', 'carrier', 'battlecruiser', 'observer', 'overlord', 'scout', 'raven', 'medic', 'darktemplar'].includes(k))) group = 'air';
+    const race = this.race || 'terran';
+    const lines = G[group][race] || G.default.terran;
+    this._selIdx = this._selIdx || {};
+    const i = ((this._selIdx[group] || 0) + 1) % lines.length;
+    this._selIdx[group] = i;
+    this.bark(lines[i], group === 'worker' ? 1.0 : 0.75, 1.08);
+  }
+
   // ---------- signature ability SFX ----------
   nukeLaunch() { this.tone(220, 0.5, 'sawtooth', 0.05, -150); this.noise(0.6, 0.06, 400); }
   nukeImpact() { this.noise(1.2, 0.16, 250); this.tone(60, 0.9, 'sawtooth', 0.08, -30); }

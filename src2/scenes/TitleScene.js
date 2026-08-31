@@ -36,14 +36,22 @@ export class TitleScene extends Phaser.Scene {
     this.buildChoiceRow('DIFFICULTY', this.W / 2 - 170, top + 128, 'diff');
 
     const launch = this.add.rectangle(this.W / 2, top + 200, 220, 52, 0x123f74, 1).setStrokeStyle(2, 0x4ea1ff).setInteractive({ useHandCursor: true });
-    this.add.text(this.W / 2, top + 200, 'LAUNCH MISSION', { fontFamily: 'Menlo, monospace', fontSize: '18px', color: '#bfe0ff' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const launchTxt = this.add.text(this.W / 2, top + 200, 'LAUNCH MISSION', { fontFamily: 'Menlo, monospace', fontSize: '18px', color: '#bfe0ff' }).setOrigin(0.5);
     launch.on('pointerdown', () => this.launch());
     launch.on('pointerover', () => launch.setFillStyle(0x1c5da8, 1));
     launch.on('pointerout', () => launch.setFillStyle(0x123f74, 1));
     this.input.keyboard.on('keydown-ENTER', () => this.launch());
 
-    this.add.text(this.W / 2, top + 262, `maintenance -${UPKEEP}cr on launch · ENTER to launch`, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#54688a' }).setOrigin(0.5);
-    this.subtitle = this.add.text(this.W / 2, top + 284, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8' }).setOrigin(0.5);
+    // F10: tutorial entry
+    const tut = this.add.rectangle(this.W / 2, top + 262, 220, 36, 0x101822, 1).setStrokeStyle(1, 0x3a8f5f).setInteractive({ useHandCursor: true });
+    this.add.text(this.W / 2, top + 262, 'TRAINING (TUTORIAL)', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fe0b0' }).setOrigin(0.5);
+    tut.on('pointerdown', () => this.launchTutorial());
+    tut.on('pointerover', () => tut.setFillStyle(0x14582f, 1));
+    tut.on('pointerout', () => tut.setFillStyle(0x101822, 1));
+    this.input.keyboard.on('keydown-T', () => this.launchTutorial());
+
+    this.add.text(this.W / 2, top + 296, `maintenance -${UPKEEP}cr on launch · ENTER=mission · T=tutorial`, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#54688a' }).setOrigin(0.5);
+    this.subtitle = this.add.text(this.W / 2, top + 318, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8' }).setOrigin(0.5);
     this.updateSubtitle();
 
     this.buildShop();
@@ -140,6 +148,15 @@ export class TitleScene extends Phaser.Scene {
     this.scene.start('Battle', {
       race: this.pick.race, enemyRace: this.pick.enemy, difficulty: this.pick.difficulty,
       mission: m, campaign: this.camp
+    });
+  }
+
+  launchTutorial() {
+    // F10: guided mission 0 — no campaign cost, soft enemy
+    this.scene.start('Battle', {
+      race: this.pick.race === 'zerg' ? 'zerg' : 'terran', enemyRace: 'zerg', difficulty: 'easy',
+      mission: { n: 0, name: 'TRAINING GROUNDS', enemy: 'zerg', difficulty: 'easy', bonusMinerals: 0, brief: 'Learn the ropes. Follow the marker.' },
+      tutorial: true
     });
   }
 }

@@ -26,11 +26,15 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:selection', (info) => { if (this.scene.isActive()) this.onSelection(info); });
     battle.events.on('hud:gameover', (r) => { if (this.scene.isActive()) this.showGameOver(r); });
     battle.events.on('hud:alert', (msg) => { if (this.scene.isActive()) this.banner(msg); });
+    battle.events.on('hud:pause', (on) => { if (this.scene.isActive()) this.showPause(on); });
+    battle.events.on('hud:cinema', (r) => { if (this.scene.isActive()) this.cinemaFlash(r); });
     this.events.once('shutdown', () => {
       battle.events.off('hud:tick');
       battle.events.off('hud:selection');
       battle.events.off('hud:gameover');
       battle.events.off('hud:alert');
+      battle.events.off('hud:pause');
+      battle.events.off('hud:cinema');
     });
 
     this.events.on('resize', () => this.handleResize());
@@ -201,6 +205,33 @@ export class HudScene extends Phaser.Scene {
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 2200, duration: 500 });
   }
 
+  showPause(on) {
+    if (!this.pauseText) {
+      this.pauseText = this.add.text(this.W / 2, this.H * 0.22, '', { fontFamily: 'Menlo, monospace', fontSize: '22px', color: '#bfe0ff', backgroundColor: '#050a14c0', padding: { x: 14, y: 8 } }).setOrigin(0.5).setScrollFactor(0);
+    }
+    if (on) {
+      this.pauseText.setText('  PAUSED  ·  issue orders, SPACE to resume  ');
+      this.pauseText.setVisible(true);
+      if (this._pauseTwn) this._pauseTwn.stop();
+      this._pauseTwn = this.tweens.add({ targets: this.pauseText, alpha: { from: 1, to: 0.55 }, duration: 700, yoyo: true, repeat: -1 });
+    } else {
+      this.pauseText.setVisible(false);
+    }
+  }
+
+  cinemaFlash(r) {
+    // F9: letterbox bars slide in for the kill shot
+    if (!this._lbTop) {
+      this._lbTop = this.add.rectangle(0, -40, this.W, 40, 0x000000, 0.95).setOrigin(0, 0).setScrollFactor(0);
+      this._lbBot = this.add.rectangle(0, this.H + 40, this.W, 40, 0x000000, 0.95).setOrigin(0, 1).setScrollFactor(0);
+    }
+    this._lbTop.setSize(this.W, 40); this._lbBot.setSize(this.W, 40);
+    this._lbBot.y = this.H + 40;
+    this.tweens.add({ targets: this._lbTop, y: 0, duration: 350, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: this._lbBot, y: this.H, duration: 350, ease: 'Cubic.easeOut' });
+    this.banner(r === 'victory' ? 'TARGET DESTROYED' : 'BASE LOST');
+  }
+
   showHelp() {
     this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-3=groups  wheel=zoom').setAlpha(1);
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 3200, duration: 400 });
@@ -298,6 +329,17 @@ export class HudScene extends Phaser.Scene {
     const cam = b.cameras.main;
     g.lineStyle(1, 0xffffff, 0.7);
     g.strokeRect(this.mmX + cam.worldView.x * s, this.mmY + cam.worldView.y * s, cam.worldView.width * s, cam.worldView.height * s);
+    // F3: incoming threat pings (blinking red clusters)
+    if (b.threats) {
+      const blink = (Math.sin(Date.now() / 160) + 1) / 2;
+      for (const t of b.threats) {
+        const mx = this.mmX + t.x * s, my = this.mmY + t.y * s;
+        g.fillStyle(0xff4040, 0.35 + blink * 0.6);
+        g.fillCircle(mx, my, 3.4);
+        g.lineStyle(1, 0xff8080, 0.5 + blink * 0.4);
+        g.strokeCircle(mx, my, 5 + blink * 3);
+      }
+    }
   }
 
   handleResize() {

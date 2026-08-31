@@ -107,7 +107,12 @@ export class Unit {
   }
 
   updateAutoAcquire(dt) {
-    const range = this.def.range * TILE * 1.4;
+    const mult = this.stance === 'hold' ? 0 : this.stance === 'defensive' ? 0.65 : this.stance === 'aggressive' ? 2.0 : 1.5;
+    if (mult === 0) {
+      // hold fire: drift back toward last commanded point, fire only if already engaged
+      return;
+    }
+    const range = this.def.range * TILE * mult;
     const foe = this.world.findNearestEnemy(this.x, this.y, range, this.flying, !this.flying);
     if (foe) {
       this.setOrder({ type: 'attackTarget', target: foe });
@@ -315,6 +320,14 @@ export class Unit {
     }
     b.constructionProgress += dt;
     b.workers.push(this);
+    // F5: construction sparks at the build site
+    if (!this._sparkT || this._sparkT <= 0) {
+      this._sparkT = 0.25 + Math.random() * 0.2;
+      const sx = b.x + (Math.random() * b.def.w * TILE * 0.8 - b.def.w * TILE * 0.4);
+      const sy = b.y + (Math.random() * b.def.h * TILE * 0.5);
+      const sp = this.world.add.rectangle(sx, sy, 2, 4, 0xffd23f, 0.9).setDepth(25).setRotation(Math.random() * 6.28);
+      this.world.tweens.add({ targets: sp, y: sy + 10, alpha: 0, duration: 300, onComplete: () => sp.destroy() });
+    } else this._sparkT -= dt;
     if (b.constructionProgress >= b.buildTime) {
       b.completeConstruction();
       this.order = null;
@@ -455,6 +468,11 @@ export class Building {
     this.workers = [];
     if (this.buildId === 'nexus') this.def.supply = 15;
     if (this.buildId === 'commandCenter' || this.buildId === 'nexus') this.def.supply = this.buildId === 'commandCenter' ? 10 : 15;
+    // F5: completion spin-up flourish
+    this.world.tweens.add({ targets: this.sprite, angle: { from: 0, to: 360 }, scale: { from: 1.12, to: 1 }, duration: 420, ease: 'Cubic.easeOut' });
+    const ring = this.world.add.circle(this.x, this.y, 10, 0x6ee7a0, 0.0).setStrokeStyle(3, 0x6ee7a0, 0.8).setDepth(25);
+    this.world.tweens.add({ targets: ring, radius: Math.max(this.def.w, this.def.h) * TILE * 0.7, alpha: 0, duration: 600, onComplete: () => ring.destroy() });
+    this.world.applyUpgradeTintToBuildings?.(this.team);
     this.world.onBuildingComplete(this);
   }
 
