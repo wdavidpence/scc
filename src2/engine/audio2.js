@@ -71,6 +71,7 @@ export class Audio2 {
   // ---------- race tint ----------
   setRace(race) {
     this.race = race;
+    this.setRaceVoice(race);
     this.raceChord = race === 'zerg' ? [110, 138, 164] : race === 'protoss' ? [196, 294, 392] : [131, 196, 262];
     this.raceWave = race === 'zerg' ? 'sawtooth' : race === 'protoss' ? 'sine' : 'triangle';
   }
@@ -118,14 +119,43 @@ export class Audio2 {
   bark(text, pitch = 0.8, rate = 1.05) {
     if (!('speechSynthesis' in window)) return;
     try {
+      // rate-limit: never overlap, min gap between barks
+      const now = Date.now();
+      if (this._lastBark && now - this._lastBark < 1400) return;
+      this._lastBark = now;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.pitch = pitch; u.rate = rate; u.volume = 0.9;
+      const rp = this.racePitch || 0.8;
+      u.pitch = pitch * rp; u.rate = rate; u.volume = 0.9;
       window.speechSynthesis.speak(u);
     } catch (e) { /* silent */ }
   }
-  attackBark() { const L = ['My units are ready to attack.', 'Kill them all!', 'Attack!', 'Destroy!']; this.bark(L[Math.floor(Math.random() * L.length)], 0.7); }
+  // race-flavored player voice: Terran crisp-low, Zerg guttural, Protoss resonant
+  setRaceVoice(race) {
+    this.racePitch = race === 'zerg' ? 0.55 : race === 'protoss' ? 1.25 : 0.85;
+  }
+  readyBark() { const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], zerg: ['Yes master.', 'Hatching now.', 'Ready to kill.'], protoss: ['My life for Aiur.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
+  moveBark() { const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], zerg: ['Obey.', 'We move.', 'Hunting.'], protoss: ['It is done.', 'Advancing.', 'En taro Adun.'] }; const a = L[this.race] || L.terran; if (Math.random() < 0.5) this.bark(a[Math.floor(Math.random() * a.length)]); }
+  attackBark() { const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], zerg: ['KILL!', 'Slay them all!', 'For the Overmind!'], protoss: ['Attack!', 'Purge the enemy!', 'For the Daelaam!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
   underAttackBark() { this.bark('We are under attack!', 1.1, 1.1); }
   buildBark() { const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
+  nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
+  ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Yamato, fire!'], zerg: ['The swarm descends!', 'Surge!'], protoss: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
+
+  // ---------- signature ability SFX ----------
+  nukeLaunch() { this.tone(220, 0.5, 'sawtooth', 0.05, -150); this.noise(0.6, 0.06, 400); }
+  nukeImpact() { this.noise(1.2, 0.16, 250); this.tone(60, 0.9, 'sawtooth', 0.08, -30); }
+  psiCast() { this.tone(200, 0.4, 'sine', 0.05, 1400); }
+  zap() { this.tone(1800 + Math.random() * 600, 0.07, 'sawtooth', 0.02, -1200); }
+  orderPing() { this.tone(1050, 0.045, 'sine', 0.02); }
+  objective() { const seq = [659, 830, 988]; seq.forEach((f, i) => setTimeout(() => this.tone(f, 0.15, 'triangle', 0.04), i * 120)); }
+  setCombat(intense) {
+    if (this._intense === intense) return;
+    this._intense = intense;
+    if (this.musicBus && this.ctx) {
+      try { this.musicBus.gain.linearRampToValueAtTime(intense ? 0.075 : 0.045, this.ctx.currentTime + 1.5); } catch (e) {}
+    }
+  }
 }
+

@@ -388,6 +388,11 @@ function createFx(scene) {
     ctx.fillStyle = 'rgba(45,32,22,0.6)'; ctx.beginPath(); ctx.ellipse(10, 11, 6, 4, 0.8, 0, 7); ctx.fill();
     ctx.fillStyle = 'rgba(80,55,35,0.5)'; ctx.fillRect(6, 14, 3, 2); ctx.fillRect(15, 8, 2, 2);
   });
+  // blood splat for hits
+  makeTex(scene, 'blood', 10, 10, (ctx) => {
+    ctx.fillStyle = '#b3372e'; ctx.beginPath(); ctx.arc(5, 5, 3, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8f2b24'; ctx.fillRect(2, 4, 2, 2); ctx.fillRect(7, 6, 2, 1);
+  });
 }
 
 function createCursor(scene) {

@@ -46,6 +46,7 @@ export class Unit {
     const key = `u-${this.def.icon}-t${team > 2 ? 2 : team}`;
     this.sprite = world.add.image(0, 0, key);
     if (this.flying) { this.sprite.setScale(1.06); this.container.setDepth(40); } else { this.container.setDepth(30); }
+    this.baseScale = this.flying ? 1.06 : 1;
     this.hpBar = world.add.graphics();
     this.container.add([this.sprite, this.hpBar]);
     this.selected = false;
@@ -154,21 +155,29 @@ export class Unit {
     return field.distAt(this.x, this.y) <= 1.2;
   }
 
-  // rotate/facing: flip + squash so idle troops look oriented toward orders
+  // rotate/facing: full rotation toward movement/attack vector + squash so troops look oriented
   face(dx, dy) {
-    if (dx !== 0) this.sprite.setFlipX(dx < 0);
+    if (dx === 0 && dy === 0) return;
+    if (this.def.flying || this.def.size === 'large' || ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath'].includes(this.kind)) {
+      const a = Math.atan2(dy, dx);
+      this.sprite.setFlipX(false);
+      this.sprite.setRotation(Math.abs(a) > Math.PI / 2 ? a + Math.PI : a);
+    } else {
+      if (dx !== 0) this.sprite.setFlipX(dx < 0);
+    }
   }
 
   // per-frame procedural animation: walk bob + idle breathing + attack recoil
   animate(dt) {
     this.animT += dt;
+    const rotKinds = ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath'];
     if (this.moving) {
       const bob = Math.sin(this.animT * 12) * 1.4;
       this.sprite.setY(bob);
-      this.sprite.setRotation(Math.sin(this.animT * 12) * 0.06);
+      if (!(this.def.flying || this.def.size === 'large' || rotKinds.includes(this.kind))) this.sprite.setRotation(Math.sin(this.animT * 12) * 0.06);
     } else {
       this.sprite.setY(Math.sin(this.animT * 2.4) * 0.5);
-      this.sprite.setRotation(0);
+      if (!(this.def.flying || this.def.size === 'large' || rotKinds.includes(this.kind))) this.sprite.setRotation(0);
     }
   }
 
@@ -231,6 +240,13 @@ export class Unit {
 
   fireAt(target) {
     const dmg = effectiveDamage(this, target);
+    // muzzle flash + attack windup feel
+    if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+      const m = this.world.add.image(this.x + (target.x > this.x ? 10 : -10), this.y - 2, 'spark').setDepth(55).setScale(1.3);
+      this.world.tweens.add({ targets: m, scale: 0.2, alpha: 0, duration: 130, onComplete: () => m.destroy() });
+    }
+    this.sprite.setScale(1, 0.92);
+    this.world.time.delayedCall(90, () => { if (this.sprite && !this.dead) this.sprite.setScale(this.baseScale || (this.flying ? 1.06 : 1)); });
     this.world.spawnProjectile({
       from: { x: this.x, y: this.y },
       target,
@@ -312,9 +328,30 @@ export class Unit {
       const s = Math.min(this.shield, amount);
       this.shield -= s; amount -= s;
       this.shieldRegenDelay = 5;
+      // shield impact ripple
+      if (s > 0 && this.world.camNear && this.world.camNear(this.x, this.y)) {
+        const rip = this.world.add.circle(this.x, this.y, this.radius + 4, 0x4ea1ff, 0).setStrokeStyle(1.5, 0x8ab4ff, 0.9).setDepth(55);
+        this.world.tweens.add({ targets: rip, scale: 1.5, alpha: 0, duration: 240, onComplete: () => rip.destroy() });
+      }
     }
     this.hp -= amount;
     this.sprite.setTint(0xffffff);
+    // damage numbers (throttled, camera-visible only)
+    if (!this._dmgAcc) this._dmgAcc = 0;
+    this._dmgAcc += amount;
+    if (this.world.camNear && this.world.camNear(this.x, this.y) && (!this._dmgT || this.world.time.now - this._dmgT > 260)) {
+      this._dmgT = this.world.time.now;
+      const g = this.world.add.text(this.x + (Math.random() * 8 - 4), this.y - 14, `${Math.round(this._dmgAcc)}`, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: attacker && attacker.team === 0 ? '#ffd23f' : '#ff6b6b', fontStyle: 'bold' }).setOrigin(0.5).setDepth(75).setScrollFactor(1);
+      this.world.tweens.add({ targets: g, y: this.y - 34, alpha: 0, duration: 650, onComplete: () => g.destroy() });
+      this._dmgAcc = 0;
+    }
+    // blood/spray particles
+    if (this.world.camNear && this.world.camNear(this.x, this.y) && this.world.fxTextures && this.world.fxTextures.has('blood')) {
+      for (let i = 0; i < 3; i++) {
+        const b = this.world.add.image(this.x, this.y, 'blood').setDepth(55).setRotation(Math.random() * 6.28).setAlpha(0.9);
+        this.world.tweens.add({ targets: b, x: this.x + (Math.random() * 24 - 12), y: this.y + (Math.random() * 24 - 12), alpha: 0, scale: 0.5, duration: 350, onComplete: () => b.destroy() });
+      }
+    }
     this.world.time.delayedCall(60, () => { if (this.sprite && !this.dead) this.sprite.clearTint(); });
     if (this.hp <= 0) this.die();
   }
@@ -326,11 +363,19 @@ export class Unit {
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
     this.world.tweens.add({ targets: boom, scale: (this.def.size === 'large' ? 2.2 : 1.4), alpha: 0, duration: 320, onComplete: () => boom.destroy() });
+    // debris shards
+    if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+      for (let i = 0; i < 5; i++) {
+        const d = this.world.add.image(this.x, this.y, 'spark').setDepth(58).setScale(0.8 + Math.random());
+        this.world.tweens.add({ targets: d, x: this.x + (Math.random() * 40 - 20), y: this.y + (Math.random() * 40 - 20) + 10, alpha: 0, duration: 420, onComplete: () => d.destroy() });
+      }
+    }
     // persistent scorch decal
     const decal = this.world.add.image(this.x, this.y, 'scorch');
     decal.setDepth(6).setAlpha(0.55).setScale(this.def.size === 'large' ? 1.3 : 0.7);
     this.world.tweens.add({ targets: decal, alpha: 0.18, duration: 12000 });
     this.world.audio?.death(this.def.size === 'large');
+    if (this.def.size === 'large') this.world.shake?.(4, 0.25);
     this.container.destroy();
     this.world.nav.unblockBy(this.id);
   }

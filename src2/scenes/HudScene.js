@@ -45,11 +45,35 @@ export class HudScene extends Phaser.Scene {
     this.resText = this.add.text(12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#dbe7ff' }).setScrollFactor(0);
     this.timeText = this.add.text(this.W / 2, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#8fa3c8' }).setOrigin(0.5, 0).setScrollFactor(0);
     this.selCount = this.add.text(this.W - 12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#6ee7a0' }).setOrigin(1, 0).setScrollFactor(0);
+    this.apmText = this.add.text(this.W - 150, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fb3d8' }).setOrigin(0.5, 0).setScrollFactor(0);
     this.speedBtn = this.mkBtn(this.W - 70, 4, 60, 24, '1x', () => {
       const b = this.scene.get('Battle');
       b.timeScale = b.timeScale === 1 ? 2 : 1;
       this.speedBtn.txt.setText(b.timeScale + 'x');
     });
+    this.createUltimateBar();
+    this.createObjectives();
+  }
+
+  createUltimateBar() {
+    this.ultBtnBG = this.add.rectangle(this.W / 2, this.H - 118, 150, 20, 0x101822, 1).setOrigin(0.5, 0).setScrollFactor(0).setStrokeStyle(1, 0x3f4a5a).setInteractive({ useHandCursor: true });
+    this.ultFill = this.add.rectangle(this.W / 2 - 74, this.H - 116, 0, 16, 0xff9c3c, 0.9).setOrigin(0, 0).setScrollFactor(0);
+    this.ultTxt = this.add.text(this.W / 2, this.H - 108, 'ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#8fa3c8' }).setOrigin(0.5).setScrollFactor(0);
+    this.ultBtnBG.on('pointerdown', () => this.scene.get('Battle').armUltimate());
+  }
+
+  createObjectives() {
+    this.objText = this.add.text(12, 44, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#9fb3d8', lineHeight: 16 }).setScrollFactor(0);
+    const b = this.scene.get('Battle');
+    b.events.on('hud:objectives', (objs) => { if (this.scene.isActive()) this.renderObjectives(objs); });
+    this.events.once('shutdown', () => b.events.off('hud:objectives'));
+    this.renderObjectives(b.objectives);
+  }
+
+  renderObjectives(objs) {
+    if (!objs) return;
+    const lines = objs.map(o => `${o.done ? '✓' : '○'} ${o.text}`);
+    this.objText.setText(lines.join('\n'));
   }
 
   createMinimap() {
@@ -88,9 +112,10 @@ export class HudScene extends Phaser.Scene {
     this.goPanel = this.add.container(0, 0).setDepth(2000).setScrollFactor(0).setAlpha(0).setVisible(false);
     const dim = this.add.rectangle(0, 0, 1, 1, 0x02040a, 0.82);
     const title = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '40px', color: '#ffffff' }).setOrigin(0.5);
-    const sub = this.add.text(0, 44, 'click to return', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#8fa3c8' }).setOrigin(0.5);
-    this.goPanel.add([dim, title, sub]);
-    this.goTitle = title; this.goDim = dim;
+    const stats = this.add.text(0, 2, '', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#ffd23f' }).setOrigin(0.5);
+    const sub = this.add.text(0, 30, 'click to return', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#8fa3c8' }).setOrigin(0.5);
+    this.goPanel.add([dim, title, stats, sub]);
+    this.goTitle = title; this.goDim = dim; this.goStats = stats; this.goSub = sub;
     this.input.on('pointerdown', () => { if (!this.gameOver) return; this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title'); });
   }
 
@@ -185,9 +210,18 @@ export class HudScene extends Phaser.Scene {
     this.gameOver = r;
     this.goPanel.setVisible(true).setAlpha(0);
     this.goDim.setSize(this.W, this.H);
-    this.goTitle.setPosition(this.W / 2, this.H / 2 - 20);
+    this.goTitle.setPosition(this.W / 2, this.H / 2 - 60);
     this.goTitle.setText(r === 'victory' ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED');
     this.goTitle.setColor(r === 'victory' ? '#6ee7a0' : '#ff5c5c');
+    const b = this.scene.get('Battle');
+    const apm = Math.round((b.cmdCount / Math.max(30, b.gameTime)) * 60);
+    const kills = (b.record && b.record.kills) || 0;
+    const reward = b.lastReward || 0;
+    if (this.goStats) {
+      this.goStats.setPosition(this.W / 2, this.H / 2 - 14);
+      this.goStats.setText(`TIME ${((b.gameTime / 60) | 0)}:${String(b.gameTime % 60 | 0).padStart(2, '0')}   APM ${apm}   ARMY ${b.units.filter(u => !u.dead && u.team === 0).length}${reward ? `   +${reward} CR` : ''}`);
+    }
+    if (this.goSub) this.goSub.setPosition(this.W / 2, this.H / 2 + 14);
     this.tweens.add({ targets: this.goPanel, alpha: 1, duration: 600 });
   }
 
@@ -203,6 +237,20 @@ export class HudScene extends Phaser.Scene {
     const t = Math.floor(b.gameTime);
     this.timeText.setText(`${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
     this.selCount.setText(`SEL ${b.selection.size}`);
+    if (this.apmText) {
+      const apm = Math.round((b.cmdCount / Math.max(30, b.gameTime)) * 60);
+      this.apmText.setText(`APM ${apm}`);
+    }
+    if (this.ultFill && b.ultKind) {
+      const pct = b.ultimateEnergy / b.ultimateMax;
+      this.ultFill.displayWidth = 148 * Math.min(1, pct);
+      const ready = pct >= 1;
+      this.ultFill.setFillStyle(ready ? 0x6ee7a0 : 0xff9c3c, ready ? 1 : 0.8);
+      this.ultTxt.setColor(ready ? '#eaf4ff' : '#8fa3c8');
+      this.ultTxt.setText(ready ? `${(b.ultKind() === 'nuke' ? 'NUCLEAR STRIKE' : b.ultKind() === 'storm' ? 'PSIONIC STORM' : 'BROOD SURGE')} [G]` : `ULTIMATE ${Math.floor(pct * 100)}%`);
+      if (this._holdUntilTxt && b._holdUntil != null) { /* noop */ }
+    }
+    if (this.objText && b.objectives) this.renderObjectives(b.objectives);
     this.drawMinimap(b);
     // alert when enemy visible near base
     if (!b._alertShown) {

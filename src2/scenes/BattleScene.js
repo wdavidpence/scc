@@ -7,6 +7,7 @@ import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
 import { Audio2 } from '../engine/audio2.js';
+import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
 
 const MAP_W = 96;   // tiles
 const MAP_H = 96;
@@ -20,6 +21,15 @@ export class BattleScene extends Phaser.Scene {
     this.race = data.race || 'terran';
     this.enemyRace = data.enemyRace || 'zerg';
     this.difficulty = data.difficulty || 'normal';
+    this.mission = data.mission || null;
+    this.campaign = data.campaign || null;
+    this.mods = data.mods || (this.mission ? this.mission.mods : null) || {};
+    // F5: difficulty profiles — build orders/aggression, not just stat multipliers
+    this.aiProfile = data.difficulty === 'hard'
+      ? { income: 2.2, armyCap: 34, threshold: 0.8, attackGap: 30, harassAt: 40, rushBuilds: ['spawningPool', 'barracks', 'gateway'], rushAt: 140, workers: 16, flankSplit: 0.55 }
+      : data.difficulty === 'easy'
+        ? { income: 0.4, armyCap: 8, threshold: 1.5, attackGap: 60, harassAt: 110, rushBuilds: [], rushAt: 1e9, workers: 8, flankSplit: 0.8 }
+        : { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
   }
 
   create() {
@@ -33,6 +43,11 @@ export class BattleScene extends Phaser.Scene {
       { team: 0, race: this.race, minerals: 300, gas: 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } },
       { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : 400, gas: this.difficulty === 'hard' ? 200 : 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
     ];
+    // mission bonuses + persistent campaign upgrades (F4/F10)
+    if (this.mission && this.mission.bonusMinerals) this.players[0].minerals += this.mission.bonusMinerals;
+    if (this.campaign) {
+      try { applyUpgradesToPlayer(this.campaign, this.players[0], UNITS); } catch (e) { /* noop */ }
+    }
     this.selection = new Set();
     this.controlGroups = {};
     this.selectedBuilding = null;
@@ -40,6 +55,19 @@ export class BattleScene extends Phaser.Scene {
     this.gameOver = null;
     this.gameTime = 0;
     this.attackMoveMode = false;
+    this.ultMode = null;      // 'nuke' | 'storm' | 'surge' — targeting mode
+    this.ultGhost = null;
+    this.ultCooldowns = {};
+    this.ultimateEnergy = 0;
+    this.ultimateMax = 100;
+    this.record = { frames: [], min: [], apm: 0 };
+    this.cmdCount = 0;
+    this._recTimer = 0;
+    this._shake = { t: 0, mag: 0, ox: 0, oy: 0 };
+    this._shakeCam = { x: 0, y: 0 };
+    // ---- mission objectives (F10) ----
+    this.objectives = this.buildObjectives();
+    this.mods = this.applyMissionMods();
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
     // start music after first user gesture (title already had one)
@@ -62,7 +90,155 @@ export class BattleScene extends Phaser.Scene {
     this.aiState = { buildQueue: [], lastThink: 0, army: 0, nextAttackAt: 90, retaliations: [] };
     if (!this.scene.isActive('Hud')) this.scene.launch('Hud', { race: this.race });
     this.events.emit('hud:ready');
+    this.showBriefingCard();
+    this.events.emit('hud:objectives', this.objectives);
   }
+
+  // ---------------- mission objectives & modifiers (F10/F4) ----------------
+  buildObjectives() {
+    const objs = [{ id: 'kill', text: 'Destroy the enemy base', done: false }];
+    if (this.mission && this.mission.mods && this.mission.mods.holdTime) {
+      objs.push({ id: 'hold', text: `HOLD THE LINE for ${this.mission.mods.holdTime}s`, done: false });
+    }
+    if (this.mission && this.mission.mods && this.mission.mods.boss) {
+      objs.push({ id: 'boss', text: `Slay the ${this.mission.mods.boss} champion`, done: false });
+    }
+    return objs;
+  }
+
+  applyMissionMods() {
+    const mods = { ...(this.mods || {}) };
+    if (mods.holdTime) { this._holdUntil = this.mission.mods.holdTime; }
+    return mods;
+  }
+
+  spawnMissionBoss() {
+    const kind = this.enemyRace === 'protoss' ? 'carrier' : this.enemyRace === 'zerg' ? 'ultralisk' : 'battlecruiser';
+    const base = this.buildings.find(b => b.team === 1 && b.def.primary);
+    if (!base) return;
+    const u = this.spawnUnit(1, kind, base.x + 60, base.y + 60, { arriveReady: true });
+    if (u) {
+      u.maxHp = Math.round(u.maxHp * 2.5); u.hp = u.maxHp;
+      u.maxShield = Math.round(u.maxShield * 2.5); u.shield = u.maxShield;
+      u.bonusDamage += 10;
+      u.isBoss = true;
+      u.sprite.setScale(1.5);
+      this.events.emit('hud:alert', 'ENEMY CHAMPION DEPLOYED');
+      this.audio?.ultimateBark();
+    }
+  }
+
+  showBriefingCard() {
+    if (!this.mission) return;
+    const cam = this.cameras.main;
+    const W = this.scale.width, H = this.scale.height;
+    const cont = this.add.container(W / 2, H / 2).setDepth(900).setScrollFactor(0).setAlpha(0);
+    const bg = this.add.rectangle(0, 0, Math.min(560, W - 40), 150, 0x050a14, 0.92).setStrokeStyle(2, 0x4ea1ff);
+    const num = this.add.text(0, -46, `MISSION ${this.mission.n}`, { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#ffd23f' }).setOrigin(0.5);
+    const ttl = this.add.text(0, -16, this.mission.name, { fontFamily: 'Menlo, monospace', fontSize: '34px', color: '#e8f1ff', fontStyle: 'bold' }).setOrigin(0.5);
+    const brf = this.add.text(0, 24, this.mission.brief, { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8', align: 'center', wordWrap: { width: Math.min(520, W - 80) } }).setOrigin(0.5);
+    const obj = this.add.text(0, 56, (this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE') + '   ·   G = ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0' }).setOrigin(0.5);
+    cont.add([bg, num, ttl, brf, obj]);
+    this.tweens.add({ targets: cont, alpha: 1, duration: 500, onComplete: () => {
+      this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => cont.destroy() });
+    } });
+    if (this.mods.boss) this.time.delayedCall(1500, () => this.spawnMissionBoss());
+  }
+
+  // ---------------- ultimate abilities (F7) ----------------
+  ultKind() { return this.race === 'terran' ? 'nuke' : this.race === 'protoss' ? 'storm' : 'surge'; }
+  ultReady() { return this.ultimateEnergy >= this.ultimateMax && !this.ultMode && !this.gameOver; }
+
+  armUltimate() {
+    if (!this.ultReady()) {
+      this.events.emit('hud:alert', `ULTIMATE CHARGING ${Math.floor(this.ultimateEnergy)}%`);
+      this.audio?.error();
+      return;
+    }
+    this.ultMode = this.ultKind();
+    this.input.setDefaultCursor('crosshair');
+    this.ultGhost = this.add.circle(0, 0, this.ultMode === 'nuke' ? 110 : 90, 0xff5c5c, 0.15).setStrokeStyle(2, 0xff9c3c, 0.9).setDepth(505).setScrollFactor(0);
+    this.events.emit('hud:alert', this.ultMode === 'nuke' ? 'SELECT NUKE TARGET' : this.ultMode === 'storm' ? 'SELECT STORM TARGET' : 'SELECT SURGE TARGET');
+  }
+
+  cancelUltimate() {
+    this.ultMode = null;
+    if (this.ultGhost) { this.ultGhost.destroy(); this.ultGhost = null; }
+    this.input.setDefaultCursor('default');
+  }
+
+  castUltimate(wx, wy) {
+    const kind = this.ultMode;
+    this.ultMode = null;
+    if (this.ultGhost) { this.ultGhost.destroy(); this.ultGhost = null; }
+    this.input.setDefaultCursor('default');
+    this.ultimateEnergy = 0;
+    this.audio?.ultimateBark();
+    if (kind === 'nuke') {
+      this.audio?.nukeLaunch();
+      this.events.emit('hud:alert', 'NUCLEAR STRIKE INBOUND — 3s');
+      // incoming streak
+      const streak = this.add.rectangle(wx, wy - 500, 4, 500, 0xffd27a, 0.5).setDepth(506);
+      this.tweens.add({ targets: streak, y: wy - 250, alpha: 0.1, duration: 2800, ease: 'Cubic.easeIn' });
+      this.time.delayedCall(2900, () => {
+        streak.destroy();
+        this.audio?.nukeImpact();
+        this.shake(14, 0.7);
+        const r = 130;
+        const boom = this.add.circle(wx, wy, r, 0xffd27a, 0.85).setDepth(500);
+        this.tweens.add({ targets: boom, scale: 2.4, alpha: 0, duration: 900, onComplete: () => boom.destroy() });
+        const ring = this.add.circle(wx, wy, r, 0xff5c2e, 0).setStrokeStyle(6, 0xff9c3c, 0.9).setDepth(500);
+        this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 1100, onComplete: () => ring.destroy() });
+        this.add.image(wx, wy, 'scorch').setDepth(6).setAlpha(0.7).setScale(4);
+        for (const u of this.units) { if (!u.dead && Math.hypot(u.x - wx, u.y - wy) <= r + u.radius) u.takeDamage(400); }
+        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 24) b.takeDamage(350); }
+      });
+    } else if (kind === 'storm') {
+      this.audio?.psiCast();
+      const r = 95;
+      const storm = this.add.circle(wx, wy, r, 0xc060ff, 0.18).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
+      this.tweens.add({ targets: storm, alpha: 0, duration: 4200, onComplete: () => storm.destroy() });
+      let ticks = 0;
+      const iv = this.time.addEvent({ delay: 500, repeat: 8, callback: () => {
+        ticks++;
+        this.audio?.zap();
+        for (let i = 0; i < 5; i++) {
+          const a = Math.random() * Math.PI * 2, rr = Math.random() * r;
+          const bx = wx + Math.cos(a) * rr, by = wy + Math.sin(a) * rr;
+          const zap = this.add.graphics().setDepth(50);
+          zap.lineStyle(2, 0xe0a0ff, 0.9);
+          zap.lineBetween(bx, by - 26, bx + (Math.random() * 14 - 7), by + (Math.random() * 14 - 7));
+          this.tweens.add({ targets: zap, alpha: 0, duration: 180, onComplete: () => zap.destroy() });
+        }
+        for (const u of this.units) { if (!u.dead && u.team !== 0 && Math.hypot(u.x - wx, u.y - wy) <= r) u.takeDamage(22); }
+        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 16) b.takeDamage(14); }
+      } });
+      this.time.delayedCall(4600, () => iv.remove());
+      this.events.emit('hud:alert', 'PSIONIC STORM');
+    } else if (kind === 'surge') {
+      // zerg: brood surge — spawn extra zerglings at target + speed/attack buff to nearby swarm
+      const pool = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
+      for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); this.time.delayedCall(12000, () => { if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } }); } }
+      for (let i = 0; i < 8; i++) { const u = this.spawnUnit(0, 'zergling', wx + Math.random() * 80 - 40, wy + Math.random() * 80 - 40, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true); }
+      const pulse = this.add.circle(wx, wy, 40, 0xff7b2e, 0.4).setDepth(49);
+      this.tweens.add({ targets: pulse, scale: 8, alpha: 0, duration: 800, onComplete: () => pulse.destroy() });
+      this.events.emit('hud:alert', 'BROOD SURGE');
+    }
+    this.cmdCount += 1;
+  }
+
+  // ---------------- camera shake (F6/F1) ----------------
+  shake(mag, dur) {
+    this._shake.mag = Math.max(this._shake.mag, mag);
+    this._shake.t = Math.max(this._shake.t, dur);
+  }
+
+  camNear(x, y) {
+    const vw = this.cameras.main.worldView;
+    return x > vw.x - 60 && x < vw.x + vw.width + 60 && y > vw.y - 60 && y < vw.y + vw.height + 60;
+  }
+
+  get fxTextures() { return this.textures; }
 
   // ---------------- terrain ----------------
   buildTerrain() {
@@ -364,6 +540,7 @@ export class BattleScene extends Phaser.Scene {
     target.takeDamage(damage);
     const tx = target.x, ty = target.y;
     if (splash > 0) {
+      if (splash >= 20) this.shake(6, 0.35);
       const boom = this.add.circle(tx, ty, splash, 0xff9c3c, 0.25).setDepth(46);
       this.tweens.add({ targets: boom, scale: 1.6, alpha: 0, duration: 200, onComplete: () => boom.destroy() });
       for (const u of this.units) {
@@ -386,6 +563,19 @@ export class BattleScene extends Phaser.Scene {
     this.units = this.units.filter(x => x !== u);
     this.selection.delete(u);
     this.harvestTargetReset(u);
+    // F1: kill feedback — shake + credit + ultimate energy
+    if (u.isBoss) {
+      this.shake(10, 0.6);
+      this.events.emit('hud:alert', 'CHAMPION SLAIN');
+      this.audio?.objective();
+      const k = this.objectives.find(o => o.id === 'boss'); if (k) { k.done = true; this.mods.boss = false; this.events.emit('hud:objectives', this.objectives); }
+      if (this._holdDone) this.endGame('victory');
+    }
+    if (u.team === 1) {
+      this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + 1.5);
+    } else if (u.team === 0 && this.selection.has(u)) {
+      this.audio?.death(false);
+    }
     // retaliation for AI
     if (u.team === 0 && this.enemyRace) {
       this.aiState.lastSeenPlayerPos = { x: u.x, y: u.y };
@@ -399,6 +589,7 @@ export class BattleScene extends Phaser.Scene {
 
   onBuildingDeath(b) {
     this.buildings = this.buildings.filter(x => x !== b);
+    this.shake(b.def.primary ? 12 : 7, 0.5);
     if (this.selectedBuilding === b) this.selectedBuilding = null;
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
     const info = RACE_INFO[this.players[b.team].race];
@@ -589,6 +780,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
+      if (this.ultMode) { this.castUltimate(p.worldX, p.worldY); return; }
       if (p.button === 2) return;
       if (this.placing) {
         this.tryPlace(p.worldX, p.worldY);
@@ -606,6 +798,7 @@ export class BattleScene extends Phaser.Scene {
     });
 
     this.input.on('pointermove', (p) => {
+      if (this.ultMode && this.ultGhost) { this.ultGhost.setPosition(p.x, p.y); }
       if (this.placing && this.ghost) {
         this.snapGhost({ x: p.worldX, y: p.worldY });
       }
@@ -651,9 +844,10 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-F4', () => this.assignGroup(3));
     this.input.keyboard.on('keydown-CTRL', () => { this.ctrlHeld = true; });
     this.input.keyboard.on('keyup-CTRL', () => { this.ctrlHeld = false; });
-    this.input.keyboard.on('keydown-ESC', () => { this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
+    this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
     this.input.keyboard.on('keydown-P', () => { /* reserved */ });
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
     window.addEventListener('keydown', (e) => { if (e.shiftKey && /^[1-8]$/.test(e.key)) this.ctrlHeldWas = false; });
@@ -753,6 +947,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   rightClickOrder(wp) {
+    this.cmdCount++;
+    this.showOrderMarker(wp.x, wp.y);
     // rally point placement when a production building is selected
     if (this.selectedBuilding && this.selectedBuilding.built && this.selectedBuilding.def.rally) {
       const sb = this.selectedBuilding;
@@ -766,6 +962,7 @@ export class BattleScene extends Phaser.Scene {
       this.attackMoveMode = false;
       this.input.setDefaultCursor('default');
       this.audio?.move();
+      if (this.selection.size) this.audio?.moveBark();
       return;
     }
     // gather workers?
@@ -787,6 +984,7 @@ export class BattleScene extends Phaser.Scene {
     if (!foe && !fb && list.length >= 3) {
       this.issueGroupMove(list, wp.x, wp.y, false);
       this.audio?.move();
+      if (list.length >= 3) this.audio?.moveBark();
       return;
     }
     for (const u of this.selection) {
@@ -794,7 +992,26 @@ export class BattleScene extends Phaser.Scene {
       else if (fb) u.setOrder({ type: 'attackTarget', target: fb });
       else u.issueMove(wp.x, wp.y, false);
     }
-    if (foe || fb) { this.audio?.attackCmd(); this.audio?.attackBark(); } else this.audio?.move();
+    if (foe || fb) { this.audio?.attackCmd(); this.audio?.attackBark(); } else { this.audio?.move(); this.audio?.moveBark(); }
+  }
+
+  // F1: order acknowledgment marker (SC-style green/attack click sprite)
+  showOrderMarker(x, y) {
+    const atk = this.attackMoveMode;
+    const m = this.add.circle(x, y, atk ? 10 : 8, atk ? 0xff5c5c : 0x6ee7a0, 0.25).setStrokeStyle(1.5, atk ? 0xff8080 : 0x9fffff, 0.9).setDepth(70);
+    this.tweens.add({ targets: m, scale: 1.8, alpha: 0, duration: 320, onComplete: () => m.destroy() });
+    if (this.selection.size > 1) { // staggered acks for group
+      let i = 0;
+      for (const u of this.selection) {
+        i++;
+        if (i > 6) break;
+        this.time.delayedCall(i * 60, () => {
+          if (u.dead) return;
+          const c = this.add.circle(u.x, u.y, u.radius + 3, atk ? 0xff8080 : 0xbfe0ff, 0.001).setStrokeStyle(1, 0xbfe0ff, 0.8).setDepth(70);
+          this.tweens.add({ targets: c, scale: 1.6, alpha: 0, duration: 260, onComplete: () => c.destroy() });
+        });
+      }
+    }
   }
 
   enemyUnitAt(x, y) {
@@ -924,6 +1141,7 @@ export class BattleScene extends Phaser.Scene {
 
   tryPlace(x, y) {
     if (!this.isValid) { this.audio?.error(); return; }
+    this.cmdCount++;
     const def = BUILDINGS[this.placing.buildId];
     if (!this.canAfford(0, def.minerals, def.gas)) { this.audio?.error(); this.cancelPlacing(); return; }
     this.spend(0, def.minerals, def.gas);
@@ -945,12 +1163,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   queueFromHud(buildingId, kind) {
+    this.cmdCount++;
     const b = this.buildings.find(b => b.team === 0 && !b.dead && (b.buildId === buildingId || b.morphedTo === buildingId));
     if (!b) { this.audio?.error(); return; }
     if (b.queueUnit(kind)) this.audio?.queue(); else this.audio?.error();
   }
 
   queueResearchFromHud(buildingId, techId) {
+    this.cmdCount++;
     const b = this.buildings.find(b => b.team === 0 && !b.dead && (b.buildId === buildingId));
     if (!b) { this.audio?.error(); return; }
     if (b.queueResearch(techId)) this.audio?.queue(); else this.audio?.error();
@@ -1038,6 +1258,43 @@ export class BattleScene extends Phaser.Scene {
     this.fogTimer -= dt;
     if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); }
 
+    // camera shake (decays)
+    if (this._shake.t > 0) {
+      this._shake.t -= dt;
+      const m = this._shake.mag;
+      this._shakeCam.x = (Math.random() * 2 - 1) * m;
+      this._shakeCam.y = (Math.random() * 2 - 1) * m;
+      cam.scrollX += this._shakeCam.x; cam.scrollY += this._shakeCam.y;
+      if (this._shake.t <= 0) { this._shake.mag = 0; cam.scrollX -= this._shakeCam.x; cam.scrollY -= this._shakeCam.y; }
+    }
+
+    // ultimate energy charge + recording + objectives
+    const combatNow = this.units.some(u => !u.dead && u.team === 0 && u.target && !u.target.dead) || this.units.some(u => !u.dead && u.team === 1 && Math.abs(u.x - cam.midPoint.x) < 400);
+    this.audio?.setCombat(combatNow);
+    this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + dt * (5 + this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker).length * 0.25));
+    this._recTimer -= dt;
+    if (this._recTimer <= 0) {
+      this._recTimer = 1;
+      const fr = { t: Math.round(this.gameTime), u: [], b: [] };
+      for (const u of this.units) if (!u.dead) fr.u.push([Math.round(u.x), Math.round(u.y), u.team]);
+      for (const b of this.buildings) if (!b.dead) fr.b.push([Math.round(b.x), Math.round(b.y), b.team, !!b.built]);
+      this.record.frames.push(fr);
+      if (this.record.frames.length > 900) this.record.frames.shift();
+    }
+
+    // hold-the-line objective countdown
+    if (this._holdUntil != null && !this.gameOver) {
+      const remain = Math.ceil(this._holdUntil - this.gameTime);
+      if (remain <= 0 && !this._holdDone) {
+        this._holdDone = true;
+        const k = this.objectives.find(o => o.id === 'hold'); if (k) k.done = true;
+        this.events.emit('hud:objectives', this.objectives);
+        this.audio?.objective();
+        if (!this.mods.boss) this.endGame('victory');
+        else { this.events.emit('hud:alert', 'HOLD COMPLETE — SLAY THE CHAMPION'); this.mods.boss = false; }
+      }
+    }
+
     // enemy AI
     this.updateAI(dt);
 
@@ -1084,7 +1341,8 @@ export class BattleScene extends Phaser.Scene {
     const s = this.aiState;
     const team = 1;
     const p = this.players[1];
-    p.minerals += dt * (this.difficulty === 'hard' ? 2.2 : this.difficulty === 'easy' ? 0.4 : 1.1);
+    const prof = this.aiProfile || this.aiProfileFallback();
+    p.minerals += dt * prof.income;
 
     s.lastThink -= dt;
     if (s.lastThink > 0) return;
@@ -1094,8 +1352,8 @@ export class BattleScene extends Phaser.Scene {
     const eb = this.buildings.filter(b => b.team === team && !b.dead && b.built);
     const workerCount = this.units.filter(u => !u.dead && u.team === team && u.def.worker).length;
 
-    // keep 8-14 workers
-    if (workerCount < 12 && p.minerals >= 50 && p.supplyUsed + 1 <= p.supplyCap) {
+    // keep workers up to profile cap
+    if (workerCount < prof.workers && p.minerals >= 50 && p.supplyUsed + 1 <= p.supplyCap) {
       const cc = eb.find(b => b.def.produces?.includes(race === 'zerg' ? 'drone' : race === 'protoss' ? 'probe' : 'scv'));
       cc?.queueUnit(race === 'zerg' ? 'drone' : race === 'protoss' ? 'probe' : 'scv');
     }
@@ -1210,7 +1468,7 @@ export class BattleScene extends Phaser.Scene {
     for (const vf of visibleFoe) { if (vf.flying) s.counter.air++; else s.counter.ground++; }
 
     // army production with counters
-    const armyCap = this.difficulty === 'hard' ? 34 : this.difficulty === 'easy' ? 8 : 18;
+    const armyCap = prof.armyCap;
     if (army.length < armyCap) {
       for (const b of eb) {
         if (b.queue.length >= 2) continue;
@@ -1243,7 +1501,7 @@ export class BattleScene extends Phaser.Scene {
     s.harassAt = (s.harassAt ?? 75) - 1;
     const fast = army.filter(u => u.def.speed >= 1.05 || u.flying);
     if (s.harassAt <= 0 && fast.length >= 3 && myValue > foeValue * 0.9) {
-      s.harassAt = this.difficulty === 'hard' ? 40 : 65;
+      s.harassAt = prof.harassAt;
       const squad = fast.slice(0, 3);
       s.harvestSquad = squad;
       // attack-move at player's visible miners or natural expansion direction
@@ -1271,15 +1529,18 @@ export class BattleScene extends Phaser.Scene {
     // ---- main attack: hill-climb on value advantage ----
     const ready = army.filter(u => !s.harvestSquad.includes(u));
     const advantage = myValue / Math.max(1, foeValue);
-    const threshold = this.difficulty === 'hard' ? 0.8 : 1.15;
+    const threshold = prof.threshold;
     const aggro = s.aggroUntil > this.gameTime;
+    // BRUTAL early rush: commit a first wave early even without advantage
+    const rushEarly = prof.rushAt < 1e8 && this.gameTime > prof.rushAt && !s.rushed;
     s.nextAttackAt -= 1;
-    if ((ready.length >= 6 && (advantage >= threshold || s.nextAttackAt <= -20)) || (aggro && ready.length > 5)) {
-      s.nextAttackAt = this.difficulty === 'hard' ? 30 : 45;
+    if ((ready.length >= 6 && (advantage >= threshold || s.nextAttackAt <= -20)) || (aggro && ready.length > 5) || (rushEarly && ready.length >= 4)) {
+      if (rushEarly) s.rushed = true;
+      s.nextAttackAt = prof.attackGap;
       const tgt = s.lastSeenPlayerPos || { x: PXW * 0.2, y: PXH * 0.2 };
       // split force: main push + flank
-      const flank = ready.slice(Math.ceil(ready.length * 0.7));
-      for (const u of ready.slice(0, Math.ceil(ready.length * 0.7))) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
+      const flank = ready.slice(Math.ceil(ready.length * prof.flankSplit));
+      for (const u of ready.slice(0, Math.ceil(ready.length * prof.flankSplit))) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
       for (const u of flank) u.issueMove(tgt.x + 140 + Math.random() * 60, tgt.y - 120 + Math.random() * 60, true);
       s.aggroUntil = 0;
     }
@@ -1296,7 +1557,30 @@ export class BattleScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.gameOver = result;
     this.audio?.gameEnd(result === 'victory');
+    // F8: persist replay + apm + campaign progression
+    try {
+      const apm = Math.round((this.cmdCount / Math.max(30, this.gameTime)) * 60);
+      this.record.apm = apm;
+      this.record.result = result;
+      this.record.time = Math.round(this.gameTime);
+      this.record.min = this.minerals.map(m => [Math.round(m.x), Math.round(m.y)]);
+      localStorage.setItem('scc.replay.last', JSON.stringify(this.record));
+    } catch (e) { /* storage full/private */ }
+    if (result === 'victory' && this.campaign) {
+      const m = this.campMissionNum();
+      const reward = 400 + m * 150 + Math.round((this.players[0].minerals || 0) * 0.1);
+      this.campaign.credits += reward;
+      if (this.campaign.mission === m) this.campaign.mission = Math.min(MISSIONS.length, m + 1);
+      saveCampaign(this.campaign);
+      this.lastReward = reward;
+    }
     this.events.emit('hud:gameover', result);
+  }
+
+  campMissionNum() { return (this.mission && this.mission.n) || 1; }
+
+  aiProfileFallback() {
+    return { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
   }
 
   findNearestEnemy(x, y, range, forAir, forGround) {
