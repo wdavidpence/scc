@@ -12,7 +12,9 @@ export function teamColorHex(team) {
 export function effectiveDamage(attacker, target) {
   const mult = SIZE_MULT[attacker.def.attackType]?.[target.def.size] ?? 1;
   const armor = target.def.armor + (target.bonusArmor || 0);
-  const dmg = (attacker.def.damage + (attacker.bonusDamage || 0)) * mult - armor;
+  let dmg = (attacker.def.damage + (attacker.bonusDamage || 0)) * mult - armor;
+  // SC1 high ground: attacker standing on higher terrain gets +2 damage bonus
+  if (attacker.world?.elevAt && attacker.team === 0 && attacker.world.elevAt(attacker.x, attacker.y) > attacker.world.elevAt(target.x, target.y)) dmg += 2;
   return Math.max(1, Math.round(dmg));
 }
 
@@ -127,6 +129,7 @@ export class Unit {
       case 'harvestGas': this.updateHarvestGas(dt); break;
       case 'returnCargo': this.updateReturnCargo(dt); break;
       case 'build': this.updateBuild(dt); break;
+      case 'repair': this.updateRepair(dt); break;
       case 'patrol': this.updatePatrol(dt); break;
       case 'training': break; // held inside structure
       default:
@@ -162,13 +165,28 @@ export class Unit {
     const wp = this.path[this.pathIndex];
     const dx = wp.x - this.x, dy = wp.y - this.y;
     const d = Math.hypot(dx, dy);
-    const step = this.speed * dt;
+    // SC1: zerg ground units surge faster on their creep
+    let effSpeed = this.speed;
+    if (!this.flying && this.def.race === 'zerg' && this.world.creepSpeedAt && this.world.creepSpeedAt(this.team, this.x, this.y)) effSpeed *= 1.45;
+    const step = effSpeed * dt;
     if (d <= step) {
       this.setPos(wp.x, wp.y);
       this.pathIndex++;
       if (this.pathIndex >= this.path.length) return true;
     } else {
-      this.setPos(this.x + (dx / d) * step, this.y + (dy / d) * step);
+      let mx = this.x + (dx / d) * step, my = this.y + (dy / d) * step;
+      // SC1 crowd feel: local separation even on individual paths (ground units only)
+      if (!this.flying && this.world.separationVector) {
+        const sep = this.world.separationVector(this);
+        mx += sep.x * step * 1.1; my += sep.y * step * 1.1;
+      }
+      // SC1 cliffs: ground units may enter high ground only via ramps (or while already on it)
+      if (!this.flying && this.world.groundBlocked && this.world.groundBlocked(this, mx, my)) {
+        if (!this.world.groundBlocked(this, mx, this.y)) { mx = mx; }
+        else if (!this.world.groundBlocked(this, this.x, my)) { mx = this.x; }
+        else { mx = this.x; my = this.y; this.repathTimer = Math.min(this.repathTimer, 0.25); }
+      }
+      this.setPos(mx, my);
       this.face(dx, dy);
       this.moving = true;
     }
@@ -499,6 +517,28 @@ export class Unit {
     this.setOrder(this.gasTarget && wasGas ? { type: 'harvestGas' } : { type: 'harvest' });
   }
 
+  // SC1: SCV repair — right-click your own damaged structure
+  updateRepair(dt) {
+    const b = this.order?.repairTarget;
+    if (!b || b.dead || b.hp >= b.maxHp) { this.order = null; this.setOrder({ type: 'harvest' }); return; }
+    const d = Math.hypot(b.x - this.x, b.y - this.y);
+    if (d > (b.def.w * TILE) / 2 + 18) {
+      if (this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(b.x, b.y + (b.def.h * TILE) / 2); }
+      this.stepAlongPath(dt);
+      return;
+    }
+    this._repairT = (this._repairT || 0) - dt;
+    if (this._repairT <= 0) {
+      this._repairT = 0.6;
+      b.hp = Math.min(b.maxHp, b.hp + 8);
+      if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+        const sp = this.world.add.rectangle(b.x + (Math.random() * 24 - 12), b.y - 6, 2, 4, 0x7dffd9, 0.9).setDepth(25).setRotation(Math.random() * 6.28);
+        this.world.tweens.add({ targets: sp, y: sp.y + 10, alpha: 0, duration: 300, onComplete: () => sp.destroy() });
+      }
+      this.world.audio?.harvest?.();
+    }
+  }
+
   updateBuild(dt) {
     const b = this.order?.building;
     if (!b || b.dead) { this.order = null; this.state = this.def.worker ? 'harvest' : 'idle'; if (this.def.worker) this.setOrder({ type: 'harvest' }); return; }
@@ -727,6 +767,9 @@ export class Building {
   queueResearch(techId) {
     const t = TECHS[techId];
     if (!t || !this.built) return false;
+    if (t.at && t.at !== this.buildId && this.morphedTo !== t.at) return false;
+    if (t.requiresTech && !this.world.techResearched(this.team, t.requiresTech)) return false;
+    if (this.queue.some(q => q.research === techId)) return false;
     if (this.world.techResearched(this.team, techId)) return false;
     if (!this.world.canAfford(this.team, t.minerals, t.gas)) return false;
     this.world.spend(this.team, t.minerals, t.gas);

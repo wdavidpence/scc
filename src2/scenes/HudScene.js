@@ -151,6 +151,10 @@ export class HudScene extends Phaser.Scene {
       const sel = info.building;
       this.cardTitle.setText(sel.name.toUpperCase());
       this.selText.setText(`HP ${sel.hp}/${sel.maxHp}`);
+      // SC1: live production queue readout above the card
+      if (!this.queueText) this.queueText = this.add.text(12, this.H - 112, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#8fa3c8' }).setScrollFactor(0);
+      const q = (sel.queue || []).map(it => it.research ? (TECHS[it.research]?.name || it.research).slice(0, 12) : (UNITS[it.kind]?.name || it.kind).split(' ')[0]);
+      this.queueText.setText(q.length ? `QUEUE: ${q.join(' > ')}` : '');
       // queue display + train buttons
       const def = BUILDINGS[sel.buildId];
       let i = 0;
@@ -162,7 +166,9 @@ export class HudScene extends Phaser.Scene {
       for (const tId of def.tech || []) {
         const t = TECHS[tId];
         if (!t) continue;
-        rows.push({ label: t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : '') });
+        if (t.requiresTech && !b.techResearched(0, t.requiresTech)) continue;
+        const done = b.techResearched(0, tId);
+        rows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : '') });
       }
       rows.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
@@ -191,7 +197,10 @@ export class HudScene extends Phaser.Scene {
         if (kinds.has('tank')) rows.push('__siege');
         if (kinds.has('lurker')) rows.push('__burrow');
         if (kinds.has('marine')) rows.push('__stim');
+        if (kinds.has('darkTemplar')) rows.push('__cloak');
+        if (kinds.has('htemplar')) rows.push('__storm');
         rows.push('__patrol');
+        rows.push('__hold');
         if (b.hasBuilding('scienceFacility', 0)) rows.push('__scan');
       }
       let i = 0;
@@ -199,8 +208,11 @@ export class HudScene extends Phaser.Scene {
       const abil = {
         __siege: ['SIEGE [S]', () => b.events.emit('hud:siege')],
         __burrow: ['BURROW [B]', () => b.events.emit('hud:burrow')],
-        __stim: ['STIM', () => b.events.emit('hud:stim')],
+        __stim: ['STIM [F]', () => b.events.emit('hud:stim')],
+        __cloak: ['CLOAK [K]', () => b.events.emit('hud:cloak')],
+        __storm: ['PSI STORM [V]', () => b.events.emit('hud:castStorm')],
         __patrol: ['PATROL [P]', () => b.events.emit('hud:patrol')],
+        __hold: ['HOLD [H]', () => b.events.emit('hud:command', 'hold')],
         __scan: ['SCAN [T]', () => b.events.emit('hud:scan')]
       };
       const btnDefs = rows.map(bid => {
@@ -337,6 +349,15 @@ export class HudScene extends Phaser.Scene {
       if (this._holdUntilTxt && b._holdUntil != null) { /* noop */ }
     }
     if (this.objText && b.objectives) this.renderObjectives(b.objectives);
+    // live production queue refresh for the selected building
+    if (this.queueText) {
+      const sb = b.selectedBuilding;
+      if (sb && !sb.dead) {
+        const q = (sb.queue || []).map(it => it.research ? (TECHS[it.research]?.name || it.research).slice(0, 12) : (UNITS[it.kind]?.name || it.kind).split(' ')[0]);
+        const prog = sb.queue[0] ? ` ${Math.floor((1 - sb.queue[0].remaining / (sb.queue[0].total || 1)) * 100)}%` : '';
+        this.queueText.setText(q.length ? `QUEUE: ${q.join(' > ')}${prog}` : '');
+      }
+    }
     this.drawMinimap(b);
     // alert when enemy visible near base
     if (!b._alertShown) {

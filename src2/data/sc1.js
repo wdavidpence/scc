@@ -71,11 +71,10 @@ export const UNITS = {
     supply: 8, minerals: 300, gas: 200, buildTime: 80, build: 'starport', tech: 'controlTower',
     sight: 12, icon: 'bc'
   },
-  ghost: {
-    race: 'terran', name: 'Ghost', hp: 45, armor: 0, size: 'small',
+  ghost: {    race: 'terran', name: 'Ghost', hp: 45, armor: 0, size: 'small',
     speed: 0.66, targets: 'both', attackType: 'normal', damage: 10, cooldown: 0.92, range: 6,
     supply: 1, minerals: 25, gas: 75, buildTime: 25, build: 'academy', tech: 'caduceusReactor',
-    sight: 11, icon: 'ghost'
+    sight: 11, detect: true, icon: 'ghost'
   },
 
   // ---------------- ZERG ----------------
@@ -223,7 +222,7 @@ export const BUILDINGS = {
   missileTurret: {
     race: 'terran', name: 'Missile Turret', hp: 200, armor: 1, size: 'large',
     minerals: 50, gas: 50, buildTime: 24, w: 2, h: 2, sight: 8,
-    defense: { damage: 18, cooldown: 1.0, range: 7, attackType: 'explosive', targets: 'air' }
+    defense: { damage: 18, cooldown: 1.0, range: 7, attackType: 'explosive', targets: 'air' }, detect: true
   },
   engineeringBay: {
     race: 'terran', name: 'Engineering Bay', hp: 300, armor: 1, size: 'large',
@@ -291,7 +290,7 @@ export const BUILDINGS = {
   sporeColony: {
     race: 'zerg', name: 'Spore Colony', hp: 350, armor: 1, size: 'large',
     minerals: 100, gas: 50, creep: true, buildTime: 24, w: 2, h: 2, sight: 9,
-    defense: { damage: 9, cooldown: 0.96, range: 8, attackType: 'normal', targets: 'air' },
+    defense: { damage: 9, cooldown: 0.96, range: 8, attackType: 'normal', targets: 'air' }, detect: true,
     transformFrom: 'creepColony'
   },
   extractor: {
@@ -372,7 +371,12 @@ export const BUILDINGS = {
 // Simplified tech research: key -> {minerals, gas, time, at: buildingId}
 export const TECHS = {
   terranInfantryWeapons1: { name: 'Infantry Weapons 1', minerals: 100, gas: 100, time: 32, at: 'engineeringBay', affects: 'terranInfantryWeapons', level: 1 },
+  terranInfantryWeapons2: { name: 'Infantry Weapons 2', minerals: 175, gas: 175, time: 38, at: 'engineeringBay', affects: 'terranInfantryWeapons', level: 2, requiresTech: 'terranInfantryWeapons1' },
+  terranInfantryWeapons3: { name: 'Infantry Weapons 3', minerals: 250, gas: 250, time: 44, at: 'engineeringBay', affects: 'terranInfantryWeapons', level: 3, requiresTech: 'terranInfantryWeapons2' },
   terranInfantryArmor1: { name: 'Infantry Armor 1', minerals: 100, gas: 100, time: 32, at: 'engineeringBay', affects: 'terranInfantryArmor', level: 1 },
+  terranInfantryArmor2: { name: 'Infantry Armor 2', minerals: 175, gas: 175, time: 38, at: 'engineeringBay', affects: 'terranInfantryArmor', level: 2, requiresTech: 'terranInfantryArmor1' },
+  terranInfantryArmor3: { name: 'Infantry Armor 3', minerals: 250, gas: 250, time: 44, at: 'engineeringBay', affects: 'terranInfantryArmor', level: 3, requiresTech: 'terranInfantryArmor2' },
+  vehiclePlating1: { name: 'Vehicle Plating', minerals: 150, gas: 150, time: 36, at: 'machineShop', affects: 'vehiclePlating', level: 1 },
   radar: { name: 'Scanner Sweep', minerals: 200, gas: 200, time: 48, at: 'scienceFacility', ability: true },
   zergMeleeAttacks1: { name: 'Metabolic Boost', minerals: 100, gas: 100, time: 32, at: 'evolutionChamber', affects: 'zergMeleeAttacks', level: 1 },
   zergCarapace1: { name: 'Piercing Claw', minerals: 100, gas: 100, time: 32, at: 'evolutionChamber', affects: 'zergArmor', level: 1 },

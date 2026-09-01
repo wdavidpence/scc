@@ -626,6 +626,48 @@ export class BattleScene extends Phaser.Scene {
       const c = placeCluster(sx | 0, sy | 0, 14 + ((rnd() * 10) | 0));
       this.rockTiles.push(...c);
     }
+    // SC1 destructible rocks: mid-map cluster rocks crack under fire, clearing new paths
+    this.destructibles = [];
+    for (const r of this.rockTiles) {
+      if (rnd() < 0.45 && r.tx > 8 && r.ty > 8 && r.tx < MAP_W - 8 && r.ty < MAP_H - 8) {
+        r.hp = 300; r.destructible = true;
+        this.destructibles.push(r);
+      }
+    }
+    // SC1 high ground: two plateaus with ramp access, +dmg and vision edge
+    this.elev = new Uint8Array(MAP_W * MAP_H);
+    this.ramp = new Uint8Array(MAP_W * MAP_H);
+    const plateau = (cx0, cy0, rw, rh) => {
+      const cx = Math.round(cx0), cy = Math.round(cy0);
+      for (let ty = cy - rh; ty <= cy + rh; ty++) for (let tx = cx - rw; tx <= cx + rw; tx++) {
+        if (tx < 2 || ty < 2 || tx >= MAP_W - 2 || ty >= MAP_H - 2) continue;
+        if (Math.abs(tx - cx) + Math.abs(ty - cy) > rw + rh) continue;
+        this.elev[ty * MAP_W + tx] = 1;
+      }
+      // carve a 2-tile ramp on the SW face
+      for (let k = 0; k < 3; k++) {
+        const rx = cx - rw + k, ry = cy + rh;
+        this.ramp[ry * MAP_W + rx] = 1;
+      }
+    };
+    plateau(MAP_W * 0.5, MAP_H * 0.2, 6, 3);
+    plateau(MAP_W * 0.5, MAP_H * 0.8, 6, 3);
+    plateau(MAP_W * 0.24, MAP_H * 0.5, 4, 3);
+    // paint elevation + destructible cracks into the terrain texture
+    gx2: {
+      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+        const i = ty * MAP_W + tx;
+        if (this.elev[i]) {
+          gx.fillStyle = 'rgba(190,205,225,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+          if (!this.elev[i - MAP_W]) { gx.fillStyle = 'rgba(0,0,0,0.45)'; gx.fillRect(tx * TILE, ty * TILE, TILE, 3); }
+          if (!this.elev[i + MAP_W]) { gx.fillStyle = 'rgba(255,255,255,0.10)'; gx.fillRect(tx * TILE, (ty + 1) * TILE - 2, TILE, 2); }
+        }
+        if (this.ramp[i]) { gx.fillStyle = 'rgba(160,175,195,0.16)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
+      }
+      // rock clusters: block pathing for ground (rockTiles already blocked); some destructible stay until destroyed
+      this.terrainCtx = gx; this.terrainCanvas = gc;
+      this.textures.get('terrain').refresh();
+    }
 
     // mineral lines near each base
     const mineralLine = (bx, by, dir) => {
@@ -709,7 +751,8 @@ export class BattleScene extends Phaser.Scene {
       }
     };
     // visible: cut holes in fog (seen texture) & make vis layer transparent — soft radial edges
-    for (const u of this.units) { if (!u.dead) stamp(u.x, u.y, (u.burrowed && u.team !== 0) ? 1 : (u.burrowed ? 2 : u.def.sight)); }
+    // SC1: cloaked/burrowed hostiles contribute NO vision to the shared seen-map
+    for (const u of this.units) { if (!u.dead && !(u.team !== 0 && (u.cloaked || u.burrowed))) stamp(u.x, u.y, (u.burrowed && u.team !== 0) ? 1 : (u.burrowed ? 2 : u.def.sight)); }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
     const softCut = (ctx, cx, cy, r) => {
       const rr = Math.max(1.5, r);
@@ -743,9 +786,101 @@ export class BattleScene extends Phaser.Scene {
 
   currentlyVisible(x, y) {
     for (const rv of (this._tempReveals || [])) { if (this.gameTime < rv.until && Math.hypot(x - rv.x, y - rv.y) < rv.r) return true; }
-    for (const u of this.units) { if (!u.dead && Math.hypot(u.x - x, u.y - y) < u.def.sight * TILE) return true; }
-    for (const b of this.buildings) { if (!b.dead && Math.hypot(b.x - x, b.y - y) < (b.def.sight || 5) * TILE) return true; }
+    for (const u of this.units) { if (!u.dead && u.team === 0 && Math.hypot(u.x - x, u.y - y) < u.def.sight * TILE) return true; }
+    for (const b of this.buildings) { if (!b.dead && b.team === 0 && Math.hypot(b.x - x, b.y - y) < (b.def.sight || 5) * TILE) return true; }
     return false;
+  }
+
+  // SC1: cloak/burrow detection net — missile turrets, spore colonies, ghosts see through it
+  detectedAt(x, y) {
+    for (const b of this.buildings) {
+      if (b.team !== 0 || b.dead || !b.built || !b.def.detect) continue;
+      if (Math.hypot(b.x - x, b.y - y) < TILE * 9) return true;
+    }
+    for (const u of this.units) {
+      if (u.team !== 0 || u.dead || !u.def.detect) continue;
+      if (Math.hypot(u.x - x, u.y - y) < TILE * 9) return true;
+    }
+    return false;
+  }
+
+  // per-fog-tick: enemy stealth sprites — cloaked/burrowed hostiles invisible unless detected
+  updateStealthVisibility() {
+    for (const u of this.units) {
+      if (u.dead || u.team === 0) continue;
+      const detected = this.detectedAt(u.x, u.y);
+      if (u.cloaked || u.burrowed) {
+        if (detected && this.currentlyVisible(u.x, u.y)) { u.sprite.setVisible(true); u.sprite.setAlpha(u.burrowed ? 0.38 : 0.3); }
+        else u.sprite.setVisible(false);
+      } else {
+        u.sprite.setVisible(true);
+        if (!u.def.cloak) u.sprite.setAlpha(u.burrowed ? 0.35 : 1);
+        else if (u.state === 'attackTarget' || u.state === 'move' || u.state === 'attackMove') u.sprite.setAlpha(1);
+      }
+    }
+  }
+
+  // SC1: zerg ground units sprint across their own creep
+  creepSpeedAt(team, x, y) {
+    const cc = this.creepCanvases && this.creepCanvases[team];
+    if (!cc) return false;
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+    return !!cc.cells[ty * MAP_W + tx];
+  }
+
+  // SC1: cliff wall check — ground units only enter high ground via ramps
+  elevAt(x, y) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 0;
+    return this.elev ? this.elev[ty * MAP_W + tx] : 0;
+  }
+
+  groundBlocked(unit, x, y) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+    const i = ty * MAP_W + tx;
+    if (!this.elev) return false;
+    const onCliff = this.elev[i] === 1;
+    const fromCliff = this.elevAt(unit.x, unit.y) === 1;
+    if (onCliff && !fromCliff) return !this.ramp[i];   // entering cliff wall unless ramp
+    if (!onCliff && fromCliff) return !this.ramp[i];     // leaving cliff anywhere except ramp
+    return false;
+  }
+
+  // SC1: destructible rocks crack and shatter under fire, opening new paths
+  hitRocksNear(x, y, dmg, splash) {
+    if (!this.destructibles || !this.destructibles.length) return;
+    const r = Math.max(22, (splash || 0) + 14);
+    for (const rk of [...this.destructibles]) {
+      const rx = rk.tx * TILE + 8, ry = rk.ty * TILE + 8;
+      if (Math.hypot(rx - x, ry - y) > r + 8) continue;
+      rk.hp -= Math.max(5, (dmg || 6) * 0.6);
+      if (rk.hp <= 0) this.destroyRock(rk);
+    }
+  }
+
+  destroyRock(rk) {
+    const tx = rk.tx, ty = rk.ty;
+    const i = this.nav.idx(tx, ty);
+    if (this.nav.blockedBy[i] === -2) { this.nav.blocked[i] = 0; this.nav.blockedBy[i] = -1; }
+    for (const c of [...this.children.list]) {
+      if (c.type === 'Image' && c.texture && (c.texture.key === 'rock' || c.texture.key === 'rock2') &&
+          Math.abs(c.x - (tx * TILE + 8)) < 9 && Math.abs(c.y - (ty * TILE + 8)) < 9) c.destroy();
+    }
+    this.rockTiles = this.rockTiles.filter(r => r !== rk);
+    this.destructibles = this.destructibles.filter(r => r !== rk);
+    this.shake(3, 0.15);
+    if (this.camNear(tx * TILE, ty * TILE)) {
+      const puff = this.add.circle(tx * TILE + 8, ty * TILE + 8, 10, 0x9aa4b0, 0.7).setDepth(44);
+      this.tweens.add({ targets: puff, scale: 2.4, alpha: 0, duration: 420, onComplete: () => puff.destroy() });
+      for (let k = 0; k < 5; k++) {
+        const d = this.add.image(tx * TILE + 8, ty * TILE + 8, 'spark').setDepth(46);
+        this.tweens.add({ targets: d, x: d.x + (Math.random() * 30 - 15), y: d.y + 16, alpha: 0, duration: 400, onComplete: () => d.destroy() });
+      }
+      this.audio?.death(false);
+    }
+    this.events.emit('hud:alert', 'ROCK DESTROYED — PATH OPEN');
   }
 
   // ---------------- creep ----------------
@@ -833,6 +968,8 @@ export class BattleScene extends Phaser.Scene {
     // apply weapon upgrades
     u.bonusDamage = this.getWeaponLevel(team) * (def.targets !== 'air' ? 2 : 0);
     u.bonusArmor = this.getArmorLevel(team);
+    if (this.techResearched(team, 'vehiclePlating1') && ['tank', 'vulture', 'goliath', 'wraith', 'battlecruiser', 'carrier', 'reaver', 'devourer'].includes(kind)) u.bonusArmor += 2;
+    if (this.techResearched(team, 'zealotSpeed') && kind === 'zealot') u.speed *= 1.18;
     // F7 perks + F2 upgrade visuals on birth
     if (team === 0) {
       if (this.perks?.flag && !def.worker) this.veteranFlag(u);
@@ -879,6 +1016,7 @@ export class BattleScene extends Phaser.Scene {
     if (target.dead) return;
     target.takeDamage(damage, attacker);
     const tx = target.x, ty = target.y;
+    this.hitRocksNear(tx, ty, damage, splash);
     if (splash > 0) {
       if (splash >= 20) this.shake(6, 0.35);
       const boom = this.add.circle(tx, ty, splash, 0xff9c3c, 0.25).setDepth(46);
@@ -1208,6 +1346,20 @@ export class BattleScene extends Phaser.Scene {
     this.players[team].techs[techId] = true;
     if (t?.affects === 'weapons' || t?.affects?.includes('Weapons')) this.players[team].upgrades.weapons++;
     if (t?.affects === 'armor' || t?.affects?.includes('Armor') || t?.affects?.includes('Carapace') || t?.affects?.includes('Plating')) this.players[team].upgrades.armor++;
+    // SC1 tiered army-wide upgrades: retro-apply to every live unit of the branch
+    if (/InfantryWeapons/.test(techId)) {
+      const lvl = t?.level || this.players[team].upgrades.weapons;
+      this.players[team].upgrades.weapons = lvl;
+      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'firebat', 'ghost', 'zereling', 'hydralisk', 'mutalisk', 'ultralisk', 'zealot', 'darkTemplar', 'htemplar'].includes(u.kind)) u.bonusDamage = Math.max(u.bonusDamage || 0, lvl * 2);
+    }
+    if (/InfantryArmor/.test(techId)) {
+      const lvl = t?.level || this.players[team].upgrades.armor;
+      this.players[team].upgrades.armor = lvl;
+      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'firebat', 'ghost', 'zereling', 'hydralisk', 'mutalisk', 'ultralisk', 'zealot', 'darkTemplar', 'htemplar'].includes(u.kind)) u.bonusArmor = Math.max(u.bonusArmor || 0, lvl);
+    }
+    if (techId === 'vehiclePlating1') for (const u of this.units) if (!u.dead && u.team === team && ['tank', 'vulture', 'goliath', 'wraith', 'battlecruiser', 'carrier', 'reaver', 'devourer'].includes(u.kind)) u.bonusArmor += 2;
+    if (techId === 'zealotSpeed') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'zealot') u.speed *= 1.18;
+    if (techId === 'dragoonRange') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'dragoon') u.def = { ...u.def, range: u.def.range + 1 };
     if (techId === 'lair' || techId === 'hive') {
       const b = this.buildings.find(b => b.team === team && (b.buildId === 'hatchery' || b.buildId === 'lair') && b.def.morphTo !== false);
     }
@@ -1339,7 +1491,12 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', (e) => { if (e.preventDefault) e.preventDefault(); this.togglePause(); });
     this.input.keyboard.on('keydown-Z', () => this.setStance('aggressive'));
     this.input.keyboard.on('keydown-X', () => this.setStance('defensive'));
-    this.input.keyboard.on('keydown-C', () => this.setStance('hold'));
+    this.input.keyboard.on('keydown-C', () => {
+      // context: cloakers selected -> cloak toggle, otherwise hold-fire stance
+      if ([...this.selection].some(u => u.def.cloak)) { this.toggleCloakSelected(); return; }
+      this.setStance('hold');
+    });
+    this.input.keyboard.on('keydown-H', () => this.setStance('hold'));
     this.input.keyboard.on('keydown-S', (e) => {
       // SC1: S = stop; if any siege tank is selected, S = toggle siege mode
       const tanks = [...this.selection].filter(u => u.def.siege);
@@ -1349,6 +1506,8 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-T', () => this.armScan());
     this.input.keyboard.on('keydown-P', () => this.armPatrol());
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
+    this.input.keyboard.on('keydown-F', () => this.stimSelected());
+    this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
     this.input.keyboard.on('keydown-F8', () => this.restoreBookmark());
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
@@ -1368,6 +1527,14 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:burrow', () => this.toggleBurrowSelected());
     this.events.on('hud:patrol', () => this.armPatrol());
     this.events.on('hud:scan', () => this.armScan());
+    this.events.on('hud:cloak', () => this.toggleCloakSelected());
+    this.events.on('hud:castStorm', () => {
+      const casters = [...this.selection].filter(u => u.def.castAbility === 'storm' && u.energy >= 75);
+      if (!casters.length) { this.events.emit('hud:alert', 'PSI STORM: NEED 75 ENERGY'); this.audio?.error(); return; }
+      const cx = [...this.selection].reduce((a, u) => a + u.x, 0) / this.selection.size;
+      const cy = [...this.selection].reduce((a, u) => a + u.y, 0) / this.selection.size;
+      this.castUnitPsiStorm(casters[0], cx, cy);
+    });
   }
 
   wp(p) { return { x: p.worldX, y: p.worldY }; }
@@ -1493,6 +1660,8 @@ export class BattleScene extends Phaser.Scene {
       const b = this.buildingAt(wp.x, wp.y);
       if (b && b.team === 0 && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; w.setOrder({ type: 'harvestGas' }); } }); this.audio?.move(); return; }
       if (b && b.team === 0 && !b.built) { workers.forEach(w => w.setOrder({ type: 'build', building: b })); return; }
+      // SC1 repair: own damaged completed structure
+      if (b && b.team === 0 && b.built && b.hp < b.maxHp) { workers.forEach(w => w.setOrder({ type: 'repair', repairTarget: b })); this.audio?.orderPing?.(); this.events.emit('hud:alert', 'SCVs REPAIRING'); return; }
       workers.forEach(w => w.issueMove(wp.x, wp.y, false));
       this.audio?.move();
       return;
@@ -1607,6 +1776,20 @@ export class BattleScene extends Phaser.Scene {
     }
     if (!did) { this.events.emit('hud:alert', 'SIEGE: SELECT SIEGE TANKS'); return; }
     this.audio?.orderPing?.();
+  }
+
+  // SC1: manual cloak toggle for dark templar etc.
+  toggleCloakSelected() {
+    let did = false;
+    for (const u of this.selection) {
+      if (!u.def.cloak) continue;
+      did = true;
+      u.cloaked = !u.cloaked;
+      u.sprite.setAlpha(u.cloaked ? 0.22 : 1);
+      u._uncloakT = u.cloaked ? 0 : 2;
+    }
+    if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT DARK TEMPLARS'); this.audio?.error(); return; }
+    this.audio?.psiCast?.() ; this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.cloaked) ? 'CLOAKED' : 'DECLOAKED');
   }
 
   toggleBurrowSelected() {
@@ -1845,7 +2028,7 @@ export class BattleScene extends Phaser.Scene {
 
     // fog update throttled
     this.fogTimer -= dt;
-    if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); }
+    if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); }
 
     // camera shake (decays)
     if (this._shake.t > 0) {
@@ -1938,6 +2121,8 @@ export class BattleScene extends Phaser.Scene {
     const p = this.players[1];
     const prof = this.aiProfile || this.aiProfileFallback();
     p.minerals += dt * prof.income;
+    const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'extractor' || b.buildId === 'assimilator' || b.buildId === 'refinery'));
+    p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
 
     s.lastThink -= dt;
     if (s.lastThink > 0) return;
@@ -1964,10 +2149,13 @@ export class BattleScene extends Phaser.Scene {
       if (!this.canAfford(team, def.minerals, def.gas)) return;
       if (def.requires && !def.requires.every(r => this.hasBuilding(r, team))) return;
       if (def.race !== race) return;
-      // placement near base
+      // placement near base (geyser rigs snap to actual geysers)
       const base = this.buildings.find(b => b.team === team && b.def.primary);
       if (!base) return;
-      for (const [ox, oy] of [[-4, 3], [3, -4], [-5, -2], [2, 5], [-2, -5], [5, 2], [-6, 4], [4, -6], [0, 6], [-7, 0]]) {
+      const spots = def.onGeyser
+        ? this.geysers.filter(g => !g.building && Math.hypot(g.x - base.x, g.y - base.y) < TILE * 30).map(g => [Math.round((g.x - base.x) / TILE), Math.round((g.y - base.y) / TILE)])
+        : [[-4, 3], [3, -4], [-5, -2], [2, 5], [-2, -5], [5, 2], [-6, 4], [4, -6], [0, 6], [-7, 0]];
+      for (const [ox, oy] of spots) {
         const x = base.x + ox * TILE, y = base.y + oy * TILE;
         if (this.placementValidAI(bid, x, y, team)) {
           this.spend(team, def.minerals, def.gas);
@@ -2011,7 +2199,8 @@ export class BattleScene extends Phaser.Scene {
     if (race === 'zerg') {
       if (!this.hasBuilding('evolutionChamber', team)) buildIfPossible('evolutionChamber');
       if (this.hasBuilding('hatchery', team)) {
-        if (!this.hasBuilding('extractor', team)) buildIfPossible('extractor');
+        if (!this.hasBuilding('spawningPool', team)) buildIfPossible('spawningPool');
+        if (!this.hasBuilding('extractor', team) && this.gameTime > 35) buildIfPossible('extractor');
         if (!this.hasBuilding('hydraliskDen', team) && this.gameTime > 40) buildIfPossible('hydraliskDen');
         if (!this.hasBuilding('spire', team) && this.gameTime > 80) buildIfPossible('spire');
       }
@@ -2026,9 +2215,43 @@ export class BattleScene extends Phaser.Scene {
       if (!this.hasBuilding('supplyDepot', team) && p.supplyCap - p.supplyUsed < 4) buildIfPossible('supplyDepot');
       if (!this.hasBuilding('refinery', team)) buildIfPossible('refinery');
       if (!this.hasBuilding('academy', team) && this.gameTime > 45) buildIfPossible('academy');
+      if (!this.hasBuilding('engineeringBay', team) && this.gameTime > 55) buildIfPossible('engineeringBay');
       if (!this.hasBuilding('factory', team) && this.gameTime > 70) buildIfPossible('factory');
       if (!this.hasBuilding('starport', team) && this.gameTime > 130) buildIfPossible('starport');
       if (!this.hasBuilding('missileTurret', team) && this.gameTime > 60) buildIfPossible('missileTurret');
+    }
+
+    // ---- SC1-style natural expansion at 3:00 when economy allows ----
+    if (!s.expanded && this.gameTime > 170 && p.minerals > 400) {
+      const prim = RACE_INFO[race].primary;
+      const primaries = this.buildings.filter(b => b.team === team && !b.dead && b.buildId === prim);
+      if (primaries.length < 2) {
+        const nat = { x: PXW * (team === 1 ? 0.66 : 0.34), y: PXH * (team === 1 ? 0.62 : 0.38) };
+        if (this.placementValidAI(prim, nat.x, nat.y, team)) {
+          s.expanded = true;
+          this.spend(team, BUILDINGS[prim].minerals, BUILDINGS[prim].gas || 0);
+          const xb = new Building(this, team, prim, nat.x, nat.y, { instant: race !== 'terran' });
+          this.buildings.push(xb);
+          if (race === 'zerg') this.addCreep(team, nat.x, nat.y, 8);
+          this.players[team].supplyCap = this.computeSupplyCap(team);
+          const idleW = this.units.filter(u => !u.dead && u.team === team && u.def.worker);
+          idleW.slice(0, 4).forEach(w => { w.harvestTarget = null; w.setOrder({ type: 'harvest' }); });
+          this.events.emit('hud:alert', 'SCOUT REPORT: ENEMY EXPANDING');
+        }
+      }
+    }
+
+    // ---- SC1-style research agenda: labs continuously upgrade the army ----
+    const agenda = race === 'terran'
+      ? ['terranInfantryWeapons1', 'terranInfantryArmor1', 'terranInfantryWeapons2', 'vehiclePlating1', 'terranInfantryArmor2', 'terranInfantryWeapons3']
+      : race === 'zerg'
+        ? ['zergMeleeAttacks1', 'zergCarapace1', 'lurkerEgg', 'greaterSpire']
+        : ['protossGroundWeapons1', 'protossGroundPlating1', 'zealotSpeed', 'dragoonRange'];
+    for (const tid of agenda) {
+      const t = TECHS[tid];
+      if (!t || this.techResearched(team, tid)) continue;
+      const lab = eb.find(b => b.buildId === t.at && b.queue.length === 0);
+      if (lab && this.canAfford(team, t.minerals, t.gas) && (!t.requiresTech || this.techResearched(team, t.requiresTech))) { lab.queueResearch(tid); break; }
     }
 
     // ---- hill-climbing: evaluate army value vs player ----
