@@ -156,7 +156,7 @@ export class HudScene extends Phaser.Scene {
       let i = 0;
       const cols = Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84)));
       const rows = [];
-      const prods = (def.produces || []).filter(k => UNITS[k] && UNITS[k].race === race && b.hasBuilding ? true : UNITS[k]);
+      const prods = Object.keys(UNITS).filter(k => (def.produces?.includes(k) || UNITS[k].build === sel.buildId) && UNITS[k].race === race && !UNITS[k].summon);
       for (const k of prods) rows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : '') });
       // research
       for (const tId of def.tech || []) {
@@ -181,11 +181,32 @@ export class HudScene extends Phaser.Scene {
       this.cardTitle.setText(`${n} UNITS${workers ? ' (WORKERS)' : ''}`);
       const names = info.units.slice(0, 3).map(u => `${u.name} ${u.hp}/${u.maxHp}${u.cargo ? ' +' + u.cargo : ''}`).join('  ');
       this.selText.setText(names);
+      // SC1 unit-status portraits (hp/shield/energy bars + level chevrons)
+      if (!this.portraitG) this.portraitG = this.add.graphics().setScrollFactor(0);
+      this.drawPortraits(info.units, b);
       const order = RACE_INFO[race].buildingOrder.filter(bid => BUILDINGS[bid].race === race);
       const rows = workers ? order : [];
+      const kinds = new Set((info.units || []).map(u => u.kind));
+      if (!workers) {
+        if (kinds.has('tank')) rows.push('__siege');
+        if (kinds.has('lurker')) rows.push('__burrow');
+        if (kinds.has('marine')) rows.push('__stim');
+        rows.push('__patrol');
+        if (b.hasBuilding('scienceFacility', 0)) rows.push('__scan');
+      }
       let i = 0;
       const cols = Math.max(1, Math.min(5, Math.floor((this.W - 24) / 74)));
-      const btnDefs = rows.map(bid => ({ label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid) }));
+      const abil = {
+        __siege: ['SIEGE [S]', () => b.events.emit('hud:siege')],
+        __burrow: ['BURROW [B]', () => b.events.emit('hud:burrow')],
+        __stim: ['STIM', () => b.events.emit('hud:stim')],
+        __patrol: ['PATROL [P]', () => b.events.emit('hud:patrol')],
+        __scan: ['SCAN [T]', () => b.events.emit('hud:scan')]
+      };
+      const btnDefs = rows.map(bid => {
+        if (abil[bid]) return { label: abil[bid][0], cb: abil[bid][1] };
+        return { label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid) };
+      });
       btnDefs.unshift({ label: 'STOP', cb: () => b.events.emit('hud:command', 'stop') });
       btnDefs.unshift({ label: 'ATTACK\nMOVE', cb: () => b.events.emit('hud:attackMode') });
       btnDefs.slice(0, cols * 2).forEach((r) => {
@@ -198,6 +219,40 @@ export class HudScene extends Phaser.Scene {
     this.cardTitle.setText('NO SELECTION');
     this.selText.setText('drag to select · right-click to order · A then click = attack-move');
     this.mkBtn(12, this.H - 96, 68, 38, 'HELP', () => this.showHelp());
+  }
+
+  drawPortraits(units, b) {
+    const g = this.portraitG; if (!g) return;
+    g.clear();
+    const x0 = 12, y0 = this.H - 142;
+    const max = Math.min(6, (units || []).length);
+    // frame
+    if (max > 0) {
+      g.fillStyle(0x0a1220, 0.85); g.fillRect(x0 - 2, y0 - 2, max * 40 + 4, 30);
+      g.lineStyle(1, 0x3f4a5a, 0.8); g.strokeRect(x0 - 2, y0 - 2, max * 40 + 4, 30);
+    }
+    for (let i = 0; i < max; i++) {
+      const u = units[i];
+      const x = x0 + i * 40, y = y0;
+      g.fillStyle(0x101826, 1); g.fillRect(x, y, 36, 26);
+      // unit icon block tinted by race/team
+      g.fillStyle(0x4ea1ff, 0.9); g.fillRect(x + 12, y + 4, 12, 12);
+      // hp bar
+      const hr = Math.max(0, Math.min(1, u.hp / (u.maxHp || 1)));
+      g.fillStyle(0x000000, 0.6); g.fillRect(x + 2, y + 18, 32, 3);
+      g.fillStyle(hr > 0.5 ? 0x3ddc6a : hr > 0.25 ? 0xffd23f : 0xff4444); g.fillRect(x + 2, y + 19, 32 * hr, 1);
+      if (u.shield > 0) {
+        const sr = Math.max(0, Math.min(1, u.shield / (u.maxShield || 1)));
+        g.fillStyle(0x4ea1ff); g.fillRect(x + 2, y + 21, 32 * sr, 1);
+      }
+      if (u.energy !== undefined && u.energy !== null) {
+        const er = Math.max(0, Math.min(1, u.energy / (u.maxEnergy || 100)));
+        g.fillStyle(0xffd23f); g.fillRect(x + 2, y + 23, 32 * er, 1);
+      }
+      // level chevrons
+      const lv = u.level || 0;
+      for (let c = 0; c < lv; c++) { g.fillStyle(0xffd23f, 0.95); g.fillRect(x + 3 + c * 4, y + 2, 3, 2); }
+    }
   }
 
   banner(msg) {
@@ -324,6 +379,12 @@ export class HudScene extends Phaser.Scene {
       if (u.team !== 0 && !b.isVisible(u.x, u.y)) continue;
       g.fillStyle(u.team === 0 ? 0x9fe0b0 : 0xff9c5c, 1);
       g.fillRect(this.mmX + u.x * s - 1, this.mmY + u.y * s - 1, 2, 2);
+    }
+    // SC1: spider mines on minimap (own only)
+    for (const m of (b.spiderMines || [])) {
+      if (m.team !== 0) continue;
+      g.fillStyle(0xffd23f, m.armed ? 0.9 : 0.4);
+      g.fillCircle(this.mmX + m.x * s, this.mmY + m.y * s, 1.2);
     }
     // camera view rect
     const cam = b.cameras.main;

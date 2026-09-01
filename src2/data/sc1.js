@@ -50,7 +50,7 @@ export const UNITS = {
     race: 'terran', name: 'Vulture', hp: 70, armor: 0, size: 'small',
     speed: 1.44, targets: 'ground', attackType: 'explosive', damage: 12, cooldown: 0.86, range: 5.4,
     supply: 1, minerals: 75, gas: 25, buildTime: 22, build: 'factory',
-    sight: 11, icon: 'vulture'
+    sight: 11, spiderMine: true, patrol: true, icon: 'vulture'
   },
   goliath: {
     race: 'terran', name: 'Goliath', hp: 120, armor: 1, size: 'large',
@@ -153,13 +153,13 @@ export const UNITS = {
     speed: 0.62, targets: 'both', attackType: 'normal', damage: 6, cooldown: 1.0, range: 5.4,
     supply: 2, minerals: 50, gas: 150, buildTime: 32, build: 'council',
     sight: 10, psiStorm: { damage: 4, cooldown: 0.5, radius: 2.0, duration: 4.0, energy: 75 },
-    icon: 'htemplar'
+    energy: 100, castAbility: 'storm', icon: 'htemplar'
   },
   darkTemplar: {
     race: 'protoss', name: 'Dark Templar', hp: 50, shield: 50, armor: 1, size: 'medium',
     speed: 0.84, targets: 'ground', attackType: 'normal', damage: 20, cooldown: 1.2, range: 0.8,
     supply: 2, minerals: 125, gas: 125, buildTime: 40, build: 'council', tech: 'darkTemplar',
-    sight: 10, icon: 'dtemplar'
+    sight: 10, cloak: true, icon: 'dtemplar'
   },
   archon: {
     race: 'protoss', name: 'Archon', hp: 150, shield: 150, armor: 0, size: 'large',

@@ -69,6 +69,10 @@ export class BattleScene extends Phaser.Scene {
     this.paused = false;          // F8 tactical pause
     this.threats = [];            // F3 incoming-wave pings {x,y,t}
     this._threatTimer = 0;
+    this.spiderMines = [];        // SC1 vulture mines
+    this.patrolMode = false;      // P two-click patrol
+    this._patrolAnchor = null;
+    this._scanCd = 0;             // scanner sweep cooldown
     this.perks = {};             // F7 cosmetic meta perks
     this.ambient = null;         // F4 weather
     this.tut = null;             // F10 tutorial state
@@ -705,7 +709,7 @@ export class BattleScene extends Phaser.Scene {
       }
     };
     // visible: cut holes in fog (seen texture) & make vis layer transparent — soft radial edges
-    for (const u of this.units) { if (!u.dead) stamp(u.x, u.y, u.def.sight); }
+    for (const u of this.units) { if (!u.dead) stamp(u.x, u.y, (u.burrowed && u.team !== 0) ? 1 : (u.burrowed ? 2 : u.def.sight)); }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
     const softCut = (ctx, cx, cy, r) => {
       const rr = Math.max(1.5, r);
@@ -738,6 +742,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   currentlyVisible(x, y) {
+    for (const rv of (this._tempReveals || [])) { if (this.gameTime < rv.until && Math.hypot(x - rv.x, y - rv.y) < rv.r) return true; }
     for (const u of this.units) { if (!u.dead && Math.hypot(u.x - x, u.y - y) < u.def.sight * TILE) return true; }
     for (const b of this.buildings) { if (!b.dead && Math.hypot(b.x - x, b.y - y) < (b.def.sight || 5) * TILE) return true; }
     return false;
@@ -838,7 +843,7 @@ export class BattleScene extends Phaser.Scene {
     return u;
   }
 
-  spawnProjectile({ from, target, damage, splash, team, kind, speed }) {
+  spawnProjectile({ from, target, damage, splash, team, kind, speed, attacker }) {
     this.projectiles.push({ x: from.x, y: from.y, target, damage, splash, team, kind, speed, dead: false });
     const col = team === 0 ? '#bfe0ff' : '#ffc28a';
     if (kind === 'tank' || kind === 'turret') {
@@ -866,13 +871,13 @@ export class BattleScene extends Phaser.Scene {
         sp.destroy();
         return;
       }
-      sp._proj = { target, damage, splash, speed, team };
+      sp._proj = { target, damage, splash, speed, team, attacker };
     }
   }
 
-  applyHit(target, damage, splash) {
+  applyHit(target, damage, splash, attacker) {
     if (target.dead) return;
-    target.takeDamage(damage);
+    target.takeDamage(damage, attacker);
     const tx = target.x, ty = target.y;
     if (splash > 0) {
       if (splash >= 20) this.shake(6, 0.35);
@@ -880,16 +885,113 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: boom, scale: 1.6, alpha: 0, duration: 200, onComplete: () => boom.destroy() });
       for (const u of this.units) {
         if (u.dead || u.team === undefined) continue;
-        if (u !== target && Math.hypot(u.x - tx, u.y - ty) <= splash + u.radius) u.takeDamage(Math.ceil(damage * 0.6));
+        if (u !== target && Math.hypot(u.x - tx, u.y - ty) <= splash + u.radius) u.takeDamage(Math.ceil(damage * 0.6), attacker);
       }
       for (const b of this.buildings) {
         if (b.dead || b.team === target.team) continue;
-        if (Math.hypot(b.x - tx, b.y - ty) <= splash + 16) b.takeDamage(Math.ceil(damage * 0.5));
+        if (Math.hypot(b.x - tx, b.y - ty) <= splash + 16) b.takeDamage(Math.ceil(damage * 0.5), attacker);
       }
     }
   }
 
-  onProjectileHit(p) { if (!p.target?.dead) { this.applyHit(p.target, p.damage, p.splash); } }
+  onProjectileHit(p) { if (!p.target?.dead) { this.applyHit(p.target, p.damage, p.splash, p.attacker); } }
+
+  // ---------------- SC1: spider mines ----------------
+  placeSpiderMine(x, y, team) {
+    const mine = { x, y, team, arming: 1.2, armed: false, radius: 46, dead: false };
+    this.spiderMines.push(mine);
+    const spr = this.add.graphics().setDepth(24);
+    mine.spr = spr;
+    // enemy mines only visible if visible by player vision
+    this.updateSpiderMineSprite(mine);
+    if (this.camNear(x, y)) {
+      const pop = this.add.circle(x, y, 3, 0xffd23f, 0.9).setDepth(47);
+      this.tweens.add({ targets: pop, scale: 3, alpha: 0, duration: 400, onComplete: () => pop.destroy() });
+    }
+  }
+
+  updateSpiderMineSprite(mine) {
+    const g = mine.spr; if (!g || mine.dead) return;
+    const enemy = mine.team !== 0;
+    const seen = !enemy || this.isVisible(mine.x, mine.y);
+    g.setVisible(seen);
+    if (!seen) return;
+    g.clear();
+    g.fillStyle(enemy ? 0x8a3b1e : 0x4a5462, 1); g.fillCircle(mine.x, mine.y, 3.5);
+    g.lineStyle(1, enemy ? 0xff7b2e : 0x9fc8ff, mine.armed ? 0.9 : 0.4); g.strokeCircle(mine.x, mine.y, 5);
+    if (mine.armed && Math.sin(this.time.now / 200) > 0) { g.fillStyle(0xff4040, 1); g.fillCircle(mine.x, mine.y - 4, 1.2); }
+  }
+
+  updateSpiderMines(dt) {
+    for (const mine of this.spiderMines) {
+      if (mine.dead) continue;
+      if (!mine.armed) { mine.arming -= dt; if (mine.arming <= 0) { mine.armed = true; this.updateSpiderMineSprite(mine); } continue; }
+      this.updateSpiderMineSprite(mine);
+      for (const u of this.units) {
+        if (u.dead || u.team === mine.team || u.flying) continue;
+        if (Math.hypot(u.x - mine.x, u.y - mine.y) <= mine.radius) {
+          mine.dead = true;
+          this.shake(5, 0.3);
+          this.audio?.nukeImpact?.();
+          const boom = this.add.circle(mine.x, mine.y, 30, 0xff9c3c, 0.8).setDepth(60);
+          this.tweens.add({ targets: boom, scale: 2.2, alpha: 0, duration: 380, onComplete: () => boom.destroy() });
+          const ring = this.add.circle(mine.x, mine.y, 20, 0xff5c2e, 0).setStrokeStyle(4, 0xffd27a, 0.9).setDepth(60);
+          this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 450, onComplete: () => ring.destroy() });
+          this.add.image(mine.x, mine.y, 'scorch').setDepth(6).setAlpha(0.5).setScale(1.6);
+          for (const v of this.units) { if (!v.dead && v.team !== mine.team && !v.flying && Math.hypot(v.x - mine.x, v.y - mine.y) <= mine.radius) v.takeDamage(125, null); }
+          break;
+        }
+      }
+    }
+    this.spiderMines = this.spiderMines.filter(m => { if (m.dead) { m.spr?.destroy(); } return !m.dead; });
+  }
+
+  // ---------------- SC1: high templar psionic storm (unit cast) ----------------
+  castUnitPsiStorm(caster, x, y) {
+    caster.energy -= 75;
+    this.audio?.psiCast?.();
+    const r = 55;
+    const storm = this.add.circle(x, y, r, 0xc060ff, 0.16).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
+    this.tweens.add({ targets: storm, alpha: 0, duration: 3800, onComplete: () => storm.destroy() });
+    const iv = this.time.addEvent({ delay: 500, repeat: 6, callback: () => {
+      for (let i = 0; i < 4; i++) {
+        const a = Math.random() * Math.PI * 2, rr = Math.random() * r;
+        const bx = x + Math.cos(a) * rr, by = y + Math.sin(a) * rr;
+        const zap = this.add.graphics().setDepth(50);
+        zap.lineStyle(2, 0xe0a0ff, 0.9);
+        zap.lineBetween(bx, by - 20, bx + (Math.random() * 12 - 6), by + (Math.random() * 12 - 6));
+        this.tweens.add({ targets: zap, alpha: 0, duration: 170, onComplete: () => zap.destroy() });
+      }
+      for (const u of this.units) { if (!u.dead && u.team !== caster.team && Math.hypot(u.x - x, u.y - y) <= r) u.takeDamage(18, caster); }
+    } });
+    this.time.delayedCall(4000, () => iv.remove());
+    this.events.emit('hud:alert', 'PSIONIC STORM');
+  }
+
+  // ---------------- SC1: scanner sweep (T + click) ----------------
+  scannerSweep(x, y) {
+    if (this._scanCd > 0) { this.events.emit('hud:alert', `SCANNER RECHARGING ${Math.ceil(this._scanCd)}s`); this.audio?.error(); return false; }
+    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.error(); return false; }
+    this._scanCd = 30;
+    this.audio?.psiCast?.();
+    // reveal a radius for 8 seconds via a temp stamp on `seen` + temp vision marker
+    const TEMP = 11; // tiles
+    const reveal = { x, y, r: TEMP * TILE, until: this.gameTime + 8, seenCells: [] };
+    const tx0 = Math.max(0, Math.floor((x - TEMP * TILE) / TILE)), tx1 = Math.min(MAP_W - 1, Math.floor((x + TEMP * TILE) / TILE));
+    const ty0 = Math.max(0, Math.floor((y - TEMP * TILE) / TILE)), ty1 = Math.min(MAP_H - 1, Math.floor((y + TEMP * TILE) / TILE));
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      if ((tx * TILE + 8 - x) ** 2 + (ty * TILE + 8 - y) ** 2 <= (TEMP * TILE) ** 2) {
+        const i = this.nav.idx(tx, ty);
+        if (!this.seen[i]) { this.seen[i] = 2; reveal.seenCells.push(i); }
+      }
+    }
+    this._tempReveals = (this._tempReveals || []).concat(reveal);
+    const ring = this.add.circle(x, y, 20, 0x7dffd9, 0.12).setStrokeStyle(3, 0x7dffd9, 0.9).setDepth(508);
+    this.tweens.add({ targets: ring, radius: TEMP * TILE, alpha: 0, duration: 700, onComplete: () => ring.destroy() });
+    this.cameras.main.centerOn(x, y);
+    this.events.emit('hud:alert', 'SCANNER SWEEP');
+    return true;
+  }
 
   onUnitDeath(u) {
     const p = this.players[u.team];
@@ -965,7 +1067,7 @@ export class BattleScene extends Phaser.Scene {
       if (!g.workers.includes(w)) {
         g.workers.push(w);
         w.gasTarget = g;
-        w.setOrder({ type: 'harvest' });
+        w.setOrder({ type: 'harvestGas' });
       }
     }
   }
@@ -1161,6 +1263,12 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerdown', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
       if (this.ultMode) { this.castUltimate(p.worldX, p.worldY); return; }
+      if (this.scanMode) { this.scannerSweep(p.worldX, p.worldY); this.cancelScan(); return; }
+      if (this.patrolMode) {
+        if (!this._patrolAnchor) { this._patrolAnchor = { x: p.worldX, y: p.worldY }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); }
+        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: p.worldX, y: p.worldY }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); }
+        return;
+      }
       if (p.button === 2) return;
       if (this.placing) {
         this.tryPlace(p.worldX, p.worldY);
@@ -1193,7 +1301,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on('pointerup', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['up', p.button, Math.round(p.x), Math.round(p.y), !!this.dragStart, !!this.dragMoved]);
-      if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }); return; }
+      if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }, p.shiftKey); return; }
       if (!this.dragStart) return;
       const wpt = { x: p.worldX, y: p.worldY };
       if (this.dragMoved) {
@@ -1224,7 +1332,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-F4', () => this.assignGroup(3));
     this.input.keyboard.on('keydown-CTRL', () => { this.ctrlHeld = true; });
     this.input.keyboard.on('keyup-CTRL', () => { this.ctrlHeld = false; });
-    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
@@ -1232,7 +1340,17 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-Z', () => this.setStance('aggressive'));
     this.input.keyboard.on('keydown-X', () => this.setStance('defensive'));
     this.input.keyboard.on('keydown-C', () => this.setStance('hold'));
-    this.input.keyboard.on('keydown-P', () => { /* reserved */ });
+    this.input.keyboard.on('keydown-S', (e) => {
+      // SC1: S = stop; if any siege tank is selected, S = toggle siege mode
+      const tanks = [...this.selection].filter(u => u.def.siege);
+      if (tanks.length) { this.toggleSiegeSelected(); return; }
+      if (this.selection.size) { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } this.audio?.orderPing?.(); }
+    });
+    this.input.keyboard.on('keydown-T', () => this.armScan());
+    this.input.keyboard.on('keydown-P', () => this.armPatrol());
+    this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
+    this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
+    this.input.keyboard.on('keydown-F8', () => this.restoreBookmark());
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
     window.addEventListener('keydown', (e) => { if (e.shiftKey && /^[1-8]$/.test(e.key)) this.ctrlHeldWas = false; });
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key) && e.shiftKey) this.assignGroup(parseInt(e.key, 10)); });
@@ -1246,6 +1364,10 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:attackMode', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.events.on('hud:cancelPlace', () => this.cancelPlacing());
     this.events.on('hud:stim', () => this.stimSelected());
+    this.events.on('hud:siege', () => this.toggleSiegeSelected());
+    this.events.on('hud:burrow', () => this.toggleBurrowSelected());
+    this.events.on('hud:patrol', () => this.armPatrol());
+    this.events.on('hud:scan', () => this.armScan());
   }
 
   wp(p) { return { x: p.worldX, y: p.worldY }; }
@@ -1321,7 +1443,7 @@ export class BattleScene extends Phaser.Scene {
   selectionInfo() {
     return {
       count: this.selection.size,
-      units: [...this.selection].map(u => ({ kind: u.kind, name: u.def.name, hp: Math.ceil(u.hp), maxHp: u.maxHp, shield: Math.ceil(u.shield), cargo: u.cargo }))
+      units: [...this.selection].map(u => ({ kind: u.kind, name: u.def.name, hp: Math.ceil(u.hp), maxHp: u.maxHp, shield: Math.ceil(u.shield), maxShield: u.maxShield, energy: u.maxEnergy ? Math.ceil(u.energy) : null, maxEnergy: u.maxEnergy || null, level: u.level || 0, cargo: u.cargo, sieged: !!u.sieged, burrowed: !!u.burrowed }))
     };
   }
 
@@ -1331,9 +1453,20 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:selection', { building: b ? { buildId: b.buildId, name: b.def.name, hp: Math.ceil(b.hp), maxHp: b.maxHp, queue: b.queue.map(q => ({ kind: q.kind || q.research, remaining: Math.ceil(q.remaining), label: UNITS[q.kind]?.name || TECHS[q.research]?.name })), canProduce: Object.keys(UNITS).filter(k => UNITS[k].build === b.buildId && b.canProduce(k)) } : null });
   }
 
-  rightClickOrder(wp) {
+  rightClickOrder(wp, shift) {
     this.cmdCount++;
     this.showOrderMarker(wp.x, wp.y);
+    // SC1 shift-queue: append move/attack-move waypoints to current selection
+    if (shift && this.selection.size && !this.attackMoveMode) {
+      for (const u of this.selection) {
+        u.waypoints = u.waypoints || [];
+        u.waypoints.push({ x: wp.x, y: wp.y });
+        if (u.waypoints.length > 7) u.waypoints.shift();
+        if (!u.order || u.state === 'idle') u.issueMove(wp.x, wp.y, false);
+      }
+      this.audio?.move();
+      return;
+    }
     // rally point placement when a production building is selected
     if (this.selectedBuilding && this.selectedBuilding.built && this.selectedBuilding.def.rally) {
       const sb = this.selectedBuilding;
@@ -1358,7 +1491,7 @@ export class BattleScene extends Phaser.Scene {
       const foe = this.enemyUnitAt(wp.x, wp.y);
       if (foe) { workers.forEach(w => w.setOrder({ type: 'attackTarget', target: foe })); return; }
       const b = this.buildingAt(wp.x, wp.y);
-      if (b && b.team === 0 && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; } }); return; }
+      if (b && b.team === 0 && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; w.setOrder({ type: 'harvestGas' }); } }); this.audio?.move(); return; }
       if (b && b.team === 0 && !b.built) { workers.forEach(w => w.setOrder({ type: 'build', building: b })); return; }
       workers.forEach(w => w.issueMove(wp.x, wp.y, false));
       this.audio?.move();
@@ -1457,11 +1590,69 @@ export class BattleScene extends Phaser.Scene {
       if (u.kind === 'marine' && u.hp > 20) {
         u.speed *= 1.5; u.bonusDamage += 6;
         u.hp -= 10;
-        this.tweens.add({ targets: u.sprite, alpha: 0.6, duration: 200, yoyo: true, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; u.sprite.setAlpha(1); } });
+        this.tweens.add({ targets: u.sprite, alpha: 0.6, duration: 200, yoyo: true, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; u.sprite.setAlpha(u.burrowed ? 0.35 : (u.cloaked ? 0.22 : 1)); } });
         this.tweens.add({ targets: u, duration: 14000, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; } });
         this.audio?.attack('stim');
       }
     }
+  }
+
+  // ---------------- SC1: siege / burrow / patrol / scan / bookmarks ----------------
+  toggleSiegeSelected() {
+    let did = false;
+    for (const u of this.selection) {
+      if (!u.def.siege) continue;
+      did = true;
+      if (u.sieged) u.unsiege(); else u.siegeUp();
+    }
+    if (!did) { this.events.emit('hud:alert', 'SIEGE: SELECT SIEGE TANKS'); return; }
+    this.audio?.orderPing?.();
+  }
+
+  toggleBurrowSelected() {
+    let did = false;
+    for (const u of this.selection) {
+      if (!u.def.burrow) continue;
+      did = true;
+      u.burrowed = !u.burrowed;
+      u.sprite.setAlpha(u.burrowed ? 0.3 : 1);
+      u.container.setScale(u.burrowed ? 0.8 : 1);
+      if (u.burrowed) { u.order = null; u.path = []; u.state = 'idle'; }
+    }
+    if (did) { this.audio?.orderPing?.(); this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.burrowed) ? 'BURROWED — IMMOBILE, UNSEEN' : 'UNBURROWED'); }
+  }
+
+  armScan() {
+    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.error(); return; }
+    this.scanMode = true;
+    this.input.setDefaultCursor('crosshair');
+    this.events.emit('hud:alert', 'SCANNER: CLICK TARGET AREA');
+  }
+
+  cancelScan() {
+    this.scanMode = false;
+    this.input.setDefaultCursor('default');
+  }
+
+  armPatrol() {
+    const list = [...this.selection].filter(u => !u.def.worker && u.def.damage > 0);
+    if (!list.length) { this.events.emit('hud:alert', 'PATROL: SELECT COMBAT UNITS'); this.audio?.error(); return; }
+    this.patrolMode = true;
+    this._patrolAnchor = null;
+    this.input.setDefaultCursor('crosshair');
+    this.events.emit('hud:alert', 'PATROL: CLICK START POINT');
+  }
+
+  saveBookmark() {
+    this.cameraBookmark = { x: this.cameras.main.midPoint.x, y: this.cameras.main.midPoint.y };
+    this.audio?.orderPing?.();
+    this.events.emit('hud:alert', 'CAMERA BOOKMARK SAVED');
+  }
+
+  restoreBookmark() {
+    if (!this.cameraBookmark) { this.events.emit('hud:alert', 'NO BOOKMARK — F9 TO SAVE'); return; }
+    this.cameras.main.centerOn(this.cameraBookmark.x, this.cameraBookmark.y);
+    this.audio?.select?.();
   }
 
   // ---------------- placing ----------------
@@ -1564,7 +1755,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   handleHudCommand(action) {
-    if (action === 'stop') { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; } }
+    if (action === 'stop') { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } }
     if (action === 'hold') { for (const u of this.selection) { u.state = 'idle'; u.order = null; } }
   }
 
@@ -1638,8 +1829,18 @@ export class BattleScene extends Phaser.Scene {
       const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
       const d = Math.hypot(dx, dy);
       const step = pr.speed * dt;
-      if (d <= step + pr.target.radius) { this.applyHit(pr.target, pr.damage, pr.splash); sp.destroy(); continue; }
+      if (d <= step + pr.target.radius) { this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker); sp.destroy(); continue; }
       sp.x += (dx / d) * step; sp.y += (dy / d) * step;
+    }
+
+    // SC1 spider mines + scanner cooldown + temp reveal expiry
+    this.updateSpiderMines(dt);
+    if (this._scanCd > 0) this._scanCd -= dt;
+    if (this._tempReveals?.length) {
+      this._tempReveals = this._tempReveals.filter(rv => {
+        if (this.gameTime >= rv.until) { for (const i of rv.seenCells) if (this.seen[i] === 2) this.seen[i] = 1; return false; }
+        return true;
+      });
     }
 
     // fog update throttled

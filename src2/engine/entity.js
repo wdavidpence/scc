@@ -56,6 +56,18 @@ export class Unit {
     this.dead = false;
     this.animT = Math.random() * 10;
     this.moving = false;
+    // SC1 feature state
+    this.energy = this.def.energy || 0;
+    this.maxEnergy = this.def.energy || 0;
+    this.kills = 0;
+    this.level = 0;
+    this.burrowed = false;
+    this.sieged = false;
+    this.cloaked = !!this.def.cloak;
+    this.patrolPoints = null; // [A,B] ping-pong
+    this.waypoints = null;    // queued move points (shift-click)
+    this.interceptors = null; // carrier orbs
+    this._chevrons = [];
     if (this.def.worker) {
       // find nearest mineral patch automatically (starting harvest)
       this.setOrder({ type: 'harvest' });
@@ -70,6 +82,7 @@ export class Unit {
     this.order = order;
     this.path = [];
     this.pathIndex = 0;
+    if (this.sieged && ['move', 'attackMove', 'attackTarget', 'patrol'].includes(order.type)) this.unsiege();
     if (order.type === 'attackTarget') this.target = order.target;
     if (order.type === 'attackMove') this.attackMovePoint = order.point;
     if (order.type === 'move' || order.type === 'attackMove' || order.type === 'harvest' || order.type === 'build') this.target = null;
@@ -92,12 +105,29 @@ export class Unit {
     }
     this.attackTimer -= dt;
 
+    // energy regen for casters (SC1: slow passive recharge)
+    if (this.maxEnergy > 0 && this.energy < this.maxEnergy) this.energy = Math.min(this.maxEnergy, this.energy + dt * 0.8);
+
+    // cloak maintenance (dark templar): re-cloak 2s after last attack
+    if (this.def.cloak) {
+      this._uncloakT = (this._uncloakT || 0) - dt;
+      if (this._uncloakT <= 0 && !this.cloaked && this.state !== 'attackTarget') {
+        this.cloaked = true;
+        this.sprite.setAlpha(0.22);
+      }
+    }
+
+    // carrier interceptors orbit + auto-swarms
+    if (this.def.interceptor) this.updateInterceptors(dt);
+
     switch (this.state) {
       case 'move': case 'attackMove': this.updateMove(dt); break;
       case 'attackTarget': this.updateAttackTarget(dt); break;
       case 'harvest': this.updateHarvest(dt); break;
+      case 'harvestGas': this.updateHarvestGas(dt); break;
       case 'returnCargo': this.updateReturnCargo(dt); break;
       case 'build': this.updateBuild(dt); break;
+      case 'patrol': this.updatePatrol(dt); break;
       case 'training': break; // held inside structure
       default:
         if (this.def.worker || this.def.weaponless) { if (!this.order) this.setOrder({ type: 'harvest' }); }
@@ -202,6 +232,11 @@ export class Unit {
       if (stillBlocked) this.repath(this.order.point.x, this.order.point.y);
     }
     if (arrived) {
+      if (this.waypoints && this.waypoints.length) {
+        const nxt = this.waypoints.shift();
+        this.issueMove(nxt.x, nxt.y, this.state === 'attackMove');
+        return;
+      }
       this.order = null;
       this.state = 'idle';
     }
@@ -214,8 +249,58 @@ export class Unit {
   }
 
   inWeaponRange(target) {
-    const r = (this.def.range * TILE) + this.radius + target.radius;
+    const bonus = this.sieged ? (this.def.siege ? this.def.siege.range : 0) - this.def.range : 0;
+    const r = (this.def.range * TILE) + bonus * TILE + this.radius + target.radius;
     return Math.hypot(target.x - this.x, target.y - this.y) <= r;
+  }
+
+  // SC1 patrol: ping-pong between two points, firing at anything in sight
+  updatePatrol(dt) {
+    const pts = this.patrolPoints;
+    if (!pts || pts.length < 2) { this.state = 'idle'; this.order = null; return; }
+    const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 1.4, this.flying, !this.flying);
+    if (foe && this.def.damage > 0) { this._patrolResume = pts; this.setOrder({ type: 'attackTarget', target: foe }); return; }
+    const tgt = pts[this._patrolIdx = (this._patrolIdx ?? 0)] || pts[0];
+    if (!this.path.length || this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(tgt.x, tgt.y); }
+    if (this.stepAlongPath(dt)) {
+      this._patrolIdx = this._patrolIdx === 0 ? 1 : 0;
+      this.repath(pts[this._patrolIdx].x, pts[this._patrolIdx].y);
+    }
+  }
+
+  // SC1 carriers launch interceptors that orbit and auto-strike nearby foes
+  updateInterceptors(dt) {
+    if (!this.interceptors) {
+      this.interceptors = [];
+      for (let i = 0; i < 4; i++) {
+        const g = this.world.add.graphics().setDepth(42);
+        g.fillStyle(0xcfe0ff, 0.95); g.fillRect(-2, -1.2, 4, 2.4);
+        this.interceptors.push({ g, a: (i / 4) * Math.PI * 2, cd: 0, dive: null });
+      }
+    }
+    const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 1.3, false, true);
+    for (const it of this.interceptors) {
+      it.cd -= dt;
+      if (it.dive && (it.dive.dead || Math.hypot(it.x - it.dive.x, it.y - it.dive.y) < 8)) {
+        if (it.dive && !it.dive.dead) this.world.applyHit(it.dive, this.def.damage, 0);
+        it.dive = null; it.cd = 1.4 + Math.random();
+      }
+      let tx, ty;
+      if (it.dive && !it.dive.dead) {
+        tx = it.dive.x; ty = it.dive.y;
+      } else {
+        if (foe && it.cd <= 0 && !this.cloaked) { it.dive = foe; }
+        const orbitR = 26;
+        it.a += dt * 2.4;
+        tx = this.x + Math.cos(it.a) * orbitR; ty = this.y + Math.sin(it.a) * orbitR * 0.55 + 6;
+      }
+      const speed = it.dive ? 260 : 120;
+      const d = Math.hypot(tx - (it.x ?? this.x), ty - (it.y ?? this.y)) || 1;
+      if (it.x === undefined) { it.x = this.x; it.y = this.y; }
+      it.x += ((tx - it.x) / d) * Math.min(speed * dt, d);
+      it.y += ((ty - it.y) / d) * Math.min(speed * dt, d);
+      it.g.setPosition(it.x, it.y);
+    }
   }
 
   updateAttackTarget(dt) {
@@ -224,6 +309,7 @@ export class Unit {
       // acquire next
       const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 2, this.flying, !this.flying);
       if (foe) { this.target = foe; return; }
+      if (this._patrolResume && this.def.patrol) { const pts = this._patrolResume; this._patrolResume = null; this.patrolPoints = pts; this.order = { type: 'patrol' }; this.state = 'patrol'; return; }
       if (this.state !== 'attackMove') { this.order = null; this.state = 'idle'; }
       return;
     }
@@ -232,9 +318,10 @@ export class Unit {
       this.sprite.setFlipX(target.x < this.x);
       if (this.attackTimer <= 0 && !this.firingVolley) {
         this.fireAt(target);
-        this.attackTimer = this.def.cooldown;
+        this.attackTimer = this.def.cooldown * (this.sieged ? (this.def.siege ? this.def.siege.cooldown / this.def.cooldown : 1) : 1);
       }
     } else {
+      if (this.sieged) { this.unsiege(); return; } // must unsiege to move
       this.repathTimer -= dt;
       if (this.repathTimer <= 0 || this.path.length === 0 || this.pathIndex >= this.path.length) {
         this.repathTimer = 0.5;
@@ -244,35 +331,118 @@ export class Unit {
     }
   }
 
+  // SC1 siege mode — tank anchors, longer range, bigger splash, slower firing
+  siegeUp() {
+    if (!this.def.siege || this.sieged) return false;
+    this.sieged = true;
+    this.order = null; this.path = [];
+    this.sprite.setScale((this.baseScale || 1) * 1.18);
+    this.sprite.setTint(0xd8c8a0);
+    const leg = this.world.add.rectangle(this.x, this.y + this.radius + 2, 14, 4, 0x3c434c, 1).setDepth(29);
+    this._siegeLegs = leg;
+    this.world.audio?.siege?.();
+    return true;
+  }
+
+  unsiege() {
+    if (!this.sieged) return false;
+    this.sieged = false;
+    this.sprite.setScale(this.baseScale || 1);
+    this.sprite.clearTint();
+    if (this._siegeLegs) { this._siegeLegs.destroy(); this._siegeLegs = null; }
+    return true;
+  }
+
+  addKill() {
+    this.kills++;
+    const lv = Math.min(3, (this.kills / 6) | 0);
+    if (lv > this.level) {
+      this.level = lv;
+      this.bonusDamage += 1; this.bonusArmor += 1;
+      for (let i = 0; i <= lv; i++) {
+        const ch = this.world.add.triangle(-6 + i * 5, -this.radius - 12, 0, 4, 4, 0, 2, 0, 0xffd23f, 0.95).setDepth(31);
+        this.container.add(ch);
+        this._chevrons.push(ch);
+      }
+      if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+        const t = this.world.add.text(this.x, this.y - 24, 'PROMOTED', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#ffd23f', fontStyle: 'bold' }).setOrigin(0.5).setDepth(75);
+        this.world.tweens.add({ targets: t, y: this.y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+      }
+    }
+  }
+
   fireAt(target) {
+    if (this.cloaked) { this.cloaked = false; this.sprite.setAlpha(1); this._uncloakT = 2; }
     const dmg = effectiveDamage(this, target);
+    // SC1: unit-level veterancy damage aura
+    const lvl = this.level || 0;
+    const volley = this.def.attacksPerVolley || 1;
+    for (let v = 0; v < volley; v++) {
+      const off = volley > 1 ? { x: (Math.random() * 24 - 12), y: (Math.random() * 16 - 8) } : { x: 0, y: 0 };
+      const from = { x: this.x + off.x * 0.2, y: this.y + off.y * 0.2 };
+      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying) || target);
+      this.world.spawnProjectile({
+        from,
+        target: tgt,
+        damage: dmg + lvl * 2,
+        splash: this.def.splash ? (this.sieged ? this.def.siege.splash : this.def.splash.radius) * TILE : 0,
+        team: this.team,
+        kind: this.kind,
+        speed: this.kind === 'tank' ? (this.sieged ? 1100 : 900) : 620,
+        attacker: this
+      });
+    }
     // muzzle flash + attack windup feel
     if (this.world.camNear && this.world.camNear(this.x, this.y)) {
-      const m = this.world.add.image(this.x + (target.x > this.x ? 10 : -10), this.y - 2, 'spark').setDepth(55).setScale(1.3);
+      const m = this.world.add.image(this.x + (target.x > this.x ? 10 : -10), this.y - 2, 'spark').setDepth(55).setScale(this.sieged ? 2.4 : 1.3);
       this.world.tweens.add({ targets: m, scale: 0.2, alpha: 0, duration: 130, onComplete: () => m.destroy() });
       if (this.world.flash) {
         const psionic = this.race === 'protoss' || ['zealot', 'dragoon', 'htemplar', 'dtemplar', 'highTemplar', 'darkTemplar', 'archon', 'carrier', 'reaver'].includes(this.kind);
         this.world.flash(this.x + (target.x > this.x ? 12 : -12), this.y - 2, psionic ? 0x8fd0ff : (this.def.size === 'large' ? 0xffc24a : 0xffe9a0), this.def.size === 'large' ? 2.2 : 1.2);
       }
+      if (this.sieged) this.world.shake?.(2.5, 0.15);
     }
-    this.sprite.setScale(1, 0.92);
+    this.sprite.setScale((this.baseScale || 1) * (this.sieged ? 1.18 : 1), (this.sieged ? 1.18 : 1) * 0.92);
     this.world.time.delayedCall(90, () => { if (this.sprite && !this.dead) this.sprite.setScale(this.baseScale || (this.flying ? 1.06 : 1)); });
-    this.world.spawnProjectile({
-      from: { x: this.x, y: this.y },
-      target,
-      damage: dmg,
-      splash: this.def.splash ? this.def.splash.radius * TILE : 0,
-      team: this.team,
-      kind: this.kind,
-      speed: this.kind === 'tank' ? 900 : 620,
-      attacker: this
-    });
+    if (this.def.castAbility === 'storm' && this.energy >= 75 && this.target === target) {
+      // high templar auto-casts psi storm at clustered foes
+      const cluster = this.world.units.filter(u => !u.dead && u.team !== this.team && Math.hypot(u.x - target.x, u.y - target.y) < 60).length;
+      if (cluster >= 3) { this.world.castUnitPsiStorm(this, target.x, target.y); }
+    }
+    if (this.def.spiderMine && this.spiderCharges === undefined) this.spiderCharges = 3;
+    if (this.def.spiderMine && this.spiderCharges > 0 && Math.hypot(target.x - this.x, target.y - this.y) < TILE * 2) {
+      this.spiderCharges--;
+      this.world.placeSpiderMine(this.x - (target.x > this.x ? 20 : -20), this.y - (target.y > this.y ? 20 : -20), this.team);
+      this.world.events.emit('hud:alert', 'SPIDER MINE PLACED');
+    }
     this.world.audio?.attack(this.kind);
   }
 
   // ---------- harvesting ----------
   findNearestPatch() { return this.world.nearestMineralPatch(this, 9999); }
   findNearestGeyser() { return this.world.nearestGeyser(this); }
+
+  // SC1 gas harvest cycle: geyser -> refinery, 8 per trip
+  updateHarvestGas(dt) {
+    const g = this.gasTarget;
+    if (!g || g.gas <= 0 || g.building?.dead) { this.gasTarget = null; this.setOrder({ type: 'harvest' }); return; }
+    if (this.cargo >= 8) { this.setOrder({ type: 'returnCargo' }); return; }
+    const d = Math.hypot(g.x - this.x, g.y - this.y);
+    if (d > TILE * 1.2) {
+      if (this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(g.x, g.y); }
+      this.stepAlongPath(dt);
+      return;
+    }
+    this.harvestTimer -= dt;
+    if (this.harvestTimer <= 0) {
+      this.harvestTimer = 2.2;
+      const amt = Math.min(8 - this.cargo, g.gas);
+      this.cargo += amt; this.cargoGas = true; g.gas -= amt;
+      this.world.audio?.harvest?.();
+      const cp = this.world.add.circle(this.x, this.y - 10, 2.5, 0x7dffd9, 0.95).setDepth(47);
+      this.world.tweens.add({ targets: cp, y: this.y - 18, alpha: 0, duration: 500, onComplete: () => cp.destroy() });
+    }
+  }
 
   updateHarvest(dt) {
     if (this.cargo >= 8) { this.setOrder({ type: 'returnCargo' }); return; }
@@ -290,12 +460,25 @@ export class Unit {
       return;
     }
     this.harvestTimer -= dt;
+    // SC1 tractor beam while mining
+    if (!this._beam) {
+      this._beam = this.world.add.graphics().setDepth(26);
+    }
+    if (d < TILE * 1.1) {
+      this._beam.clear();
+      this._beam.lineStyle(1.5, 0x7dffd9, 0.5 + Math.sin(this.world.time.now / 90) * 0.2);
+      this._beam.lineBetween(this.x, this.y, t.x, t.y);
+    }
     if (this.harvestTimer <= 0) {
       this.harvestTimer = 2.6;
       const amt = Math.min(8 - this.cargo, t.amount);
       this.cargo += amt; t.amount -= amt;
       this.world.onMineralDug(this, t, amt);
+      // cargo pop above worker
+      const cp = this.world.add.circle(this.x, this.y - 10, 2.5, 0x7db4ff, 0.95).setDepth(47);
+      this.world.tweens.add({ targets: cp, y: this.y - 18, alpha: 0, duration: 500, onComplete: () => cp.destroy() });
       if (t.amount <= 0) { this.harvestTarget = null; this.world.depleteMineral(t); }
+      if (this._beam) this._beam.clear();
     }
   }
 
@@ -310,8 +493,10 @@ export class Unit {
     }
     this.world.onCargoDeposited(this);
     this.cargo = 0;
+    const wasGas = this.cargoGas;
+    this.cargoGas = false;
     this.harvestTarget = null;
-    this.setOrder({ type: 'harvest' });
+    this.setOrder(this.gasTarget && wasGas ? { type: 'harvestGas' } : { type: 'harvest' });
   }
 
   updateBuild(dt) {
@@ -371,12 +556,18 @@ export class Unit {
       }
     }
     this.world.time.delayedCall(60, () => { if (this.sprite && !this.dead) this.sprite.clearTint(); });
-    if (this.hp <= 0) this.die();
+    if (this.hp <= 0) {
+      if (attacker && attacker.addKill && attacker.team === 0) attacker.addKill();
+      this.die();
+    }
   }
 
   die() {
     if (this.dead) return;
     this.dead = true;
+    if (this.interceptors) { for (const it of this.interceptors) it.g.destroy(); this.interceptors = null; }
+    if (this._beam) { this._beam.destroy(); this._beam = null; }
+    if (this._siegeLegs) { this._siegeLegs.destroy(); this._siegeLegs = null; }
     this.world.onUnitDeath(this);
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
