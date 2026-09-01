@@ -112,7 +112,7 @@ export class BattleScene extends Phaser.Scene {
       for (const u of this.units) if (u.team === 0) this.veteranFlag(u);
     }
     // F10: tutorial mode
-    if (this.tutorialMode) this.startTutorial();
+    if (this.tutorialMode) { this.players[0].minerals += 1200; this.players[0].gas += 800; this.startTutorial(); }
   }
 
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
@@ -370,6 +370,12 @@ export class BattleScene extends Phaser.Scene {
       { text: 'RIGHT-CLICK a MINERAL to harvest', check: () => [...this.selection].some(u => u.order?.type === 'harvest' || u.harvestTarget) },
       { text: 'Open the BUILD menu (B) and place a BARRACKS near your base', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'barracks') },
       { text: 'Select the BARRACKS and train a MARINE', check: () => this.units.some(u => u.team === 0 && (u.kind === 'marine' || u.kind === 'firebat')) },
+      { text: 'Build a BUNKER (B menu) — your infantry fortress', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'bunker') },
+      { text: 'Select Marines and RIGHT-CLICK the BUNKER to garrison them — they fire from inside, invisible and healed', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'bunker' && b.garrison?.length) },
+      { text: 'Select your BUNKER and press U to unload your marines', check: () => this.units.some(u => u.team === 0 && u.kind === 'marine' && !u.loaded && !u.dead && u.state !== 'training') },
+      { text: 'Build an ACADEMY, research COMBAT MEDICS, train a MEDIC — idle medics auto-heal nearby troops', check: () => this.units.some(u => u.team === 0 && u.kind === 'medic') },
+      { text: 'STARGATE + dropship incoming! Build a STARPORT and train a DROPSHIP to airlift troops over terrain', check: () => this.units.some(u => u.team === 0 && u.kind === 'dropship') },
+      { text: 'Right-click Marines to LOAD the dropship, click it + press U over enemy ground to DROP them behind lines!', check: () => (this.units.find(u => u.team === 0 && u.kind === 'dropship')?.carry?.length || 0) > 0 || this._droppedOnce },
       { text: 'Select your Marine and right-click an enemy to attack!', check: () => !this.gameOver && this.units.some(u => u.team === 0 && u.target && !u.target.dead) }
     ];
     this.tut = { steps, i: 0, text: this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '15px', color: '#ffd23f', backgroundColor: '#050a14d0', padding: { x: 10, y: 6 } }).setDepth(950).setScrollFactor(0).setOrigin(0.5, 1), marker: null };
@@ -396,10 +402,16 @@ export class BattleScene extends Phaser.Scene {
       }
       this.tut.text.setText('TUTORIAL — ' + this.tut.steps[this.tut.i].text);
       // move marker to context of next step
+      const i = this.tut.i;
+      const bunker = this.buildings.find(x => x.team === 0 && x.buildId === 'bunker');
+      const starport = this.buildings.find(x => x.team === 0 && x.buildId === 'starport');
+      const academy = this.buildings.find(x => x.team === 0 && x.buildId === 'academy');
+      const dropship = this.units.find(x => x.team === 0 && x.kind === 'dropship');
+      const medic = this.units.find(x => x.team === 0 && x.kind === 'medic');
       const b = this.buildings.find(x => x.team === 0 && x.buildId === 'barracks' && !x.built) || this.buildings.find(x => x.team === 0 && x.buildId === 'barracks');
       const u = this.units.find(x => x.team === 0 && (x.kind === 'marine' || x.kind === 'firebat'));
       const foe = this.units.find(x => x.team === 1 && !x.dead);
-      const tgt = b || u || foe;
+      const tgt = (i >= 8 && dropship) ? dropship : (i >= 7 && medic) ? medic : (i >= 4 && bunker) ? bunker : (i >= 4 && starport) ? starport : (i >= 4 && academy) ? academy : b || u || foe;
       if (tgt) { this.cameras.main.centerOn(tgt.x, tgt.y); this.events.emit('tutorial:pos', tgt.x, tgt.y); }
     }
     // keep marker glued to current hint target
@@ -1161,6 +1173,7 @@ export class BattleScene extends Phaser.Scene {
       i++;
     }
     tr.carry = [];
+    this._droppedOnce = true;
     this.showOrderMarker?.(drop.x, drop.y, 0xffb04a);
     this.events.emit('hud:alert', 'UNLOADING', 0xffb04a);
   }
@@ -2449,6 +2462,35 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // SC1 drop ops (terran): load idle dropships with infantry, fly behind lines, unload into the fight with fighter escort
+    if (race === 'terran') {
+      const dss = army.filter(u => u.def.transport && !u.dead && (!u.carry || !u.carry.length) && !u.order);
+      const medicUnits = army.filter(u => u.def.heal && !u.dead);
+      if (dss.length && this.gameTime > 150) {
+        const targets = this.units.filter(u => u.team === 0 && u.def.worker && this.isVisible(u.x, u.y)).slice(0, 4);
+        const dropTgt = targets.length ? { x: targets[0].x, y: targets[0].y } : (s.lastSeenPlayerPos ? { x: s.lastSeenPlayerPos.x + 100, y: s.lastSeenPlayerPos.y + 60 } : null);
+        if (dropTgt) {
+          // gather an infantry squad to load
+          const foot = army.filter(u => !u.dead && !u.flying && !u.def.worker && !u.def.transport && Math.hypot(u.x - dss[0].x, u.y - dss[0].y) < TILE * 14).slice(0, 8);
+          if (foot.length >= 2 || medicUnits.length) {
+            for (const ds of dss) {
+              const squad = foot.splice(0, Math.min(foot.length, ds.def.transport - (medicUnits.length ? 1 : 0)));
+              if (medicUnits.length) { const md = medicUnits.shift(); if (md) squad.push(md); }
+              if (!squad.length) break;
+              squad.forEach(m => { if (!this.loadUnitInto(ds, m)) { /* full */ } });
+              ds.setOrder({ type: 'unload', point: { x: dropTgt.x + Math.random() * 80 - 40, y: dropTgt.y + Math.random() * 60 - 30 } });
+              ds._dropAt = dropTgt;
+              // fighter escort follows the dropship to its drop zone
+              for (const esc of army.filter(u => u.flying && !u.def.transport && !u.dead)) esc.setOrder({ type: 'attackMove', point: { x: dropTgt.x, y: dropTgt.y } });
+              this.events.emit('hud:alert', '⚠ ENEMY DROP INBOUND', 0xff5c5c);
+              this.audio?.underAttackBark?.();
+              break; // one coordinated drop per think
+            }
+          }
+        }
+      }
+    }
+
     // ---- harass squad: fast units poke the player economy ----
     if (!s.harvestSquad) s.harvestSquad = [];
     s.harassAt = (s.harassAt ?? 75) - 1;
@@ -2480,7 +2522,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // ---- main attack: hill-climb on value advantage ----
-    const ready = army.filter(u => !s.harvestSquad.includes(u));
+    const ready = army.filter(u => !s.harvestSquad.includes(u) && !(u.loaded) && !(u.def.transport && u.carry?.length));
     const advantage = myValue / Math.max(1, foeValue);
     const threshold = prof.threshold;
     const aggro = s.aggroUntil > this.gameTime;

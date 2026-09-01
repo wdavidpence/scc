@@ -146,6 +146,7 @@ export class Unit {
       case 'training': break; // held inside structure
       default:
         if (this.def.transport) { /* dropship holds station until ordered */ if (!this.order) this.state = 'idle'; }
+        else if (this.def.heal) { if (!this.updateAutoHeal(dt)) this.updateAutoAcquire(dt); } // SC1 medic micro: heal first, shoot second
         else if (this.def.worker || this.def.weaponless) { if (!this.order) this.setOrder({ type: 'harvest' }); }
         else this.updateAutoAcquire(dt);
     }
@@ -300,6 +301,26 @@ export class Unit {
       this._patrolIdx = this._patrolIdx === 0 ? 1 : 0;
       this.repath(pts[this._patrolIdx].x, pts[this._patrolIdx].y);
     }
+  }
+
+  // SC1 medic micro: when idle, auto-seek the most wounded friendly nearby and heal
+  updateAutoHeal(dt) {
+    this._autoHealT = (this._autoHealT || 0) - dt;
+    if (this._autoHealT > 0) return this.order?.type === 'heal';
+    this._autoHealT = 0.6;
+    let best = null, bestScore = 0;
+    const r = TILE * 8;
+    for (const o of this.world.units) {
+      if (o.dead || o.loaded || o.team !== this.team || o === this || o.def.flying) continue;
+      const missing = 1 - o.hp / o.maxHp;
+      if (missing < 0.25) continue;
+      const d = Math.hypot(o.x - this.x, o.y - this.y);
+      if (d > r) continue;
+      const score = missing * 10 - d / TILE * 0.4;
+      if (score > bestScore) { bestScore = score; best = o; }
+    }
+    if (best) { this.setOrder({ type: 'heal', target: best }); return true; }
+    return false;
   }
 
   // SC1: dropship loads friendly ground units when adjacent
