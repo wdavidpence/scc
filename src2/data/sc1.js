@@ -76,6 +76,18 @@ export const UNITS = {
     supply: 1, minerals: 25, gas: 75, buildTime: 25, build: 'academy', tech: 'caduceusReactor',
     sight: 11, detect: true, icon: 'ghost'
   },
+  medic: {
+    race: 'terran', name: 'Medic', hp: 50, armor: 0, size: 'small',
+    speed: 0.66, targets: 'ground', attackType: 'normal', damage: 4, cooldown: 1.2, range: 4,
+    supply: 1, minerals: 50, gas: 75, buildTime: 23, build: 'academy', tech: 'combatMedics',
+    sight: 9, heal: { amount: 4, interval: 0.5, range: 3.2 }, icon: 'medic'
+  },
+  dropship: {
+    race: 'terran', name: 'Dropship', hp: 200, armor: 1, size: 'large', flying: true,
+    speed: 0.96, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
+    supply: 2, minerals: 150, gas: 100, buildTime: 40, build: 'starport',
+    sight: 10, transport: 8, icon: 'dropship', weaponless: true
+  },
 
   // ---------------- ZERG ----------------
   drone: {
@@ -206,7 +218,7 @@ export const BUILDINGS = {
   },
   starport: {
     race: 'terran', name: 'Starport', hp: 300, armor: 1, size: 'large',
-    minerals: 150, gas: 100, buildTime: 64, w: 4, h: 3, sight: 6, produces: ['wraith'],
+    minerals: 150, gas: 100, buildTime: 64, w: 4, h: 3, sight: 6, produces: ['wraith', 'dropship'],
     requires: ['factory']
   },
   controlTower: {
@@ -216,7 +228,7 @@ export const BUILDINGS = {
   },
   academy: {
     race: 'terran', name: 'Academy', hp: 300, armor: 1, size: 'large',
-    minerals: 100, gas: 50, buildTime: 32, w: 3, h: 3, sight: 6, produces: ['firebat', 'ghost'],
+    minerals: 100, gas: 50, buildTime: 32, w: 3, h: 3, sight: 6, produces: ['firebat', 'ghost', 'medic'],
     requires: ['barracks']
   },
   missileTurret: {
@@ -237,6 +249,11 @@ export const BUILDINGS = {
   caduceusReactor: {
     race: 'terran', name: 'Caduceus Reactor', hp: 300, armor: 1, addOnTo: 'scienceFacility',
     minerals: 0, gas: 0, buildTime: 0, w: 0, h: 0, sight: 0, unlocks: ['ghost']
+  },
+  bunker: {
+    race: 'terran', name: 'Bunker', hp: 350, armor: 1, size: 'large',
+    minerals: 100, gas: 0, buildTime: 26, w: 2, h: 2, sight: 7, rally: true,
+    garrison: 4, garrisonDefense: { damage: 6, cooldown: 0.9, range: 6, attackType: 'normal' }
   },
 
   // ---------------- ZERG ----------------
@@ -391,6 +408,7 @@ export const TECHS = {
   darkTemplar: { name: 'Dark Templar', minerals: 100, gas: 100, time: 34, at: 'templarArchives', unlocks: 'darkTemplar' },
   controlTower: { name: 'Control Tower', minerals: 100, gas: 50, time: 32, at: 'starport', unlocks: 'battlecruiser' },
   caduceusReactor: { name: 'CAD. Reactor', minerals: 100, gas: 100, time: 32, at: 'scienceFacility', unlocks: 'ghost' },
+  combatMedics: { name: 'Combat Medics', minerals: 100, gas: 100, time: 30, at: 'academy', unlocks: 'medic' },
   fleetBeacon: { name: 'Fleet Beacon', minerals: 150, gas: 100, time: 48, at: 'stargate', unlocks: 'carrier' },
   lair: { name: 'Lair', minerals: 150, gas: 100, time: 56, at: 'hatchery', morph: 'lair' },
   hive: { name: 'Hive', minerals: 200, gas: 150, time: 80, at: 'lair', morph: 'hive' },
@@ -407,7 +425,7 @@ export const RACES = {
 export const RACE_INFO = {
   terran: {
     id: 'terran', name: 'Terran', primary: 'commandCenter', workers: ['scv'],
-    accent: 0x4ea1ff, buildingOrder: ['supplyDepot', 'barracks', 'refinery', 'academy', 'factory', 'missileTurret', 'starport', 'machineShop', 'engineeringBay']
+    accent: 0x4ea1ff, buildingOrder: ['supplyDepot', 'barracks', 'refinery', 'academy', 'factory', 'missileTurret', 'bunker', 'starport', 'machineShop', 'engineeringBay']
   },
   zerg: {
     id: 'zerg', name: 'Zerg', primary: 'hatchery', workers: ['drone'],

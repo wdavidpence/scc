@@ -1023,11 +1023,18 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: boom, scale: 1.6, alpha: 0, duration: 200, onComplete: () => boom.destroy() });
       for (const u of this.units) {
         if (u.dead || u.team === undefined) continue;
-        if (u !== target && Math.hypot(u.x - tx, u.y - ty) <= splash + u.radius) u.takeDamage(Math.ceil(damage * 0.6), attacker);
+        if (u === target) continue;
+        const sd = Math.hypot(u.x - tx, u.y - ty);
+        if (sd <= splash + u.radius) {
+          // SC1-style falloff: full damage at center -> ~40% at blast edge
+          const falloff = Math.max(0.4, 1 - 0.6 * Math.min(1, sd / Math.max(1, splash)));
+          u.takeDamage(Math.ceil(damage * falloff), attacker);
+        }
       }
       for (const b of this.buildings) {
         if (b.dead || b.team === target.team) continue;
-        if (Math.hypot(b.x - tx, b.y - ty) <= splash + 16) b.takeDamage(Math.ceil(damage * 0.5), attacker);
+        const sd = Math.hypot(b.x - tx, b.y - ty);
+        if (sd <= splash + 16) b.takeDamage(Math.ceil(damage * Math.max(0.3, 0.5 * (1 - 0.5 * Math.min(1, sd / Math.max(1, splash))))), attacker);
       }
     }
   }
@@ -1129,6 +1136,63 @@ export class BattleScene extends Phaser.Scene {
     this.cameras.main.centerOn(x, y);
     this.events.emit('hud:alert', 'SCANNER SWEEP');
     return true;
+  }
+
+  // ---- transports & garrison (SC1 drop play) ----
+  loadUnitInto(tr, u) {
+    if (!tr.def.transport || tr.dead || u.dead || u.loaded) return false;
+    if (tr.carry.length + (u.def.supply || 1) > tr.def.transport) return false;
+    tr.carry.push(u);
+    u.intoTransport();
+    if (this.selection) this.selection.delete(u);
+    if (this.selectedUnits) this.selectedUnits.delete(u);
+    return true;
+  }
+
+  unloadAll(tr) {
+    if (!tr.carry || !tr.carry.length) return;
+    const drop = { x: tr.x, y: tr.y + TILE * 0.7 };
+    let i = 0;
+    for (const p of tr.carry) {
+      if (!p || p.dead) continue;
+      const px = drop.x + ((i % 3) - 1) * TILE * 0.8;
+      const py = drop.y + Math.floor(i / 3) * TILE * 0.6;
+      p.outOfTransport(px, py);
+      i++;
+    }
+    tr.carry = [];
+    this.showOrderMarker?.(drop.x, drop.y, 0xffb04a);
+    this.events.emit('hud:alert', 'UNLOADING', 0xffb04a);
+  }
+
+  garrisonInto(b, u) {
+    if (!b.def.garrison || b.dead || !b.built || u.dead || u.loaded) return false;
+    if (b.garrison.length >= b.def.garrison) return false;
+    if (['scv', 'drone', 'probe'].includes(u.kind)) return false;
+    b.garrison.push(u);
+    u.garrison(b);
+    if (this.selection) this.selection.delete(u);
+    if (this.selectedUnits) this.selectedUnits.delete(u);
+    return true;
+  }
+
+  emergeAll(b) {
+    if (!b.garrison || !b.garrison.length) return;
+    for (const g of b.garrison) { if (!g.dead) g.emerge(b.x, b.y + TILE * 0.8); }
+    b.garrison = [];
+    this.events.emit('hud:alert', 'UNLOADING', 0xffb04a);
+  }
+
+  findTransportNear(x, y, team) {
+    let best = null, bestD = TILE * 2;
+    for (const o of this.units) { if (o.dead || o.team !== team || !o.def.transport) continue; const d = Math.hypot(o.x - x, o.y - y); if (d < bestD) { bestD = d; best = o; } }
+    return best;
+  }
+
+  findBunkerNear(x, y, team) {
+    let best = null, bestD = TILE * 2.5;
+    for (const b of this.buildings) { if (b.dead || !b.built || b.team !== team || !b.def.garrison) continue; const d = Math.hypot(b.x - x, b.y - y); if (d < bestD) { bestD = d; best = b; } }
+    return best;
   }
 
   onUnitDeath(u) {
@@ -1472,6 +1536,8 @@ export class BattleScene extends Phaser.Scene {
       this.cameras.main.setZoom(nz);
     });
 
+    // pointer world pos tracked for unload-at-cursor
+    this.input.on('pointermove', (p) => { this.pointerPos = { x: p.worldX, y: p.worldY }; });
     // pinch zoom (touch)
     let pinch0 = 0, zoom0 = 1.6;
     this.input.on('pointerdown', (p) => { if (this.input.manager.pointersActive?.size > 1) { /* noop */ } });
@@ -1484,6 +1550,13 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-F4', () => this.assignGroup(3));
     this.input.keyboard.on('keydown-CTRL', () => { this.ctrlHeld = true; });
     this.input.keyboard.on('keyup-CTRL', () => { this.ctrlHeld = false; });
+    // SC1 unload/eject: U = dropship unload at cursor position; works on selected bunker too
+    this.input.keyboard.on('keydown-U', () => {
+      const t = [...(this.selection || [])].find(u => u.def.transport && u.carry?.length);
+      if (t) { t.unloadAt = { x: t.x, y: t.y }; t.setOrder({ type: 'unload', point: { x: this.pointerPos?.x ?? t.x + 160, y: this.pointerPos?.y ?? t.y + 120 } }); return; }
+      const b = this.selectedBuilding;
+      if (b && b.def.garrison && b.garrison?.length) this.emergeAll(b);
+    });
     this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
@@ -1666,6 +1739,24 @@ export class BattleScene extends Phaser.Scene {
       this.audio?.move();
       return;
     }
+    // SC1 friendly-target routing: dropship loads, bunker garrisons, medic heals
+    {
+      const ally = this.allyUnitAt(wp.x, wp.y);
+      const ab = this.allyBuildingAt(wp.x, wp.y);
+      const list = [...this.selection];
+      if (ally && ally.def.transport && list.length) {
+        let loaded = 0;
+        for (const u of list) { if (u !== ally && !u.def.flying && this.loadUnitInto(ally, u)) loaded++; }
+        if (loaded) { this.audio?.move(); this.events.emit('hud:alert', `LOADED ${ally.carry.length}/${ally.def.transport}`); return; }
+      }
+      if (ab && ab.def.garrison && list.length) {
+        let g = 0;
+        for (const u of [...list].sort((a, b) => Math.hypot(a.x - wp.x, a.y - wp.y) - Math.hypot(b.x - wp.x, b.y - wp.y))) if (this.garrisonInto(ab, u)) g++;
+        if (g) { this.audio?.move(); this.events.emit('hud:alert', `GARRISONED ${ab.garrison.length}/${ab.def.garrison}`); return; }
+      }
+      const medics = list.filter(u => u.def.heal);
+      if (ally && medics.length && medics.length === list.length) { medics.forEach(m => m.setOrder({ type: 'heal', target: ally })); this.audio?.orderPing?.(); this.events.emit('hud:alert', 'HEALING'); return; }
+    }
     // combat units
     const foe = this.enemyUnitAt(wp.x, wp.y);
     const fb = this.enemyBuildingAt(wp.x, wp.y);
@@ -1712,6 +1803,24 @@ export class BattleScene extends Phaser.Scene {
       if (d < bd) { bd = d; best = u; }
     }
     return best;
+  }
+
+  allyUnitAt(x, y) {
+    let best = null, bd = 20;
+    for (const u of this.units) {
+      if (u.team !== 0 || u.dead || u.loaded) continue;
+      const d = Math.hypot(u.x - x, u.y - y);
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  }
+
+  allyBuildingAt(x, y) {
+    for (const b of this.buildings) {
+      if (b.team !== 0 || b.dead) continue;
+      if (Math.abs(x - b.x) < (b.def.w * TILE) / 2 + 8 && Math.abs(y - b.y) < (b.def.h * TILE) / 2 + 8) return b;
+    }
+    return null;
   }
 
   enemyBuildingAt(x, y) {
@@ -1953,31 +2062,57 @@ export class BattleScene extends Phaser.Scene {
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
     this.gameTime += dt;
 
-    // edge pan + WASD
+    // edge pan + WASD with SC-feel acceleration/inertia
     const cam = this.cameras.main;
-    const pan = 620 * dt / cam.zoom;
+    const maxPan = 620 / cam.zoom;
     const k = this.keys || {};
+    this.panVX = this.panVX || 0; this.panVY = this.panVY || 0;
+    let tx = 0, ty = 0;
     if (k.W?.isDown || k.A?.isDown || k.S?.isDown || k.D?.isDown) {
-      if (k.A.isDown) cam.scrollX -= pan;
-      if (k.D.isDown) cam.scrollX += pan;
-      if (k.W.isDown) cam.scrollY -= pan;
-      if (k.S.isDown) cam.scrollY += pan;
+      if (k.A.isDown) tx -= maxPan;
+      if (k.D.isDown) tx += maxPan;
+      if (k.W.isDown) ty -= maxPan;
+      if (k.S.isDown) ty += maxPan;
     }
     if (this.edgePan && this.input.activePointer?.isDown === false) {
       const p = this.input.activePointer;
       const m = 24;
       if (p) {
-        if (p.x < m) cam.scrollX -= pan;
-        if (p.y < m) cam.scrollY -= pan;
-        if (p.x > this.scale.width - m) cam.scrollX += pan;
-        if (p.y > this.scale.height - m) cam.scrollY += pan;
+        if (p.x < m) tx -= maxPan;
+        if (p.y < m) ty -= maxPan;
+        if (p.x > this.scale.width - m) tx += maxPan;
+        if (p.y > this.scale.height - m) ty += maxPan;
       }
     }
+    const acc = 1 - Math.pow(0.0025, dt);   // ramp up over ~0.35s
+    const dec = Math.pow(0.004, dt);        // glide to stop over ~0.5s
+    this.panVX += (tx - this.panVX) * (tx !== 0 ? acc : (1 - dec));
+    this.panVY += (ty - this.panVY) * (ty !== 0 ? acc : (1 - dec));
+    if (Math.abs(this.panVX) < 4) this.panVX = 0;
+    if (Math.abs(this.panVY) < 4) this.panVY = 0;
+    cam.scrollX += this.panVX * dt;
+    cam.scrollY += this.panVY * dt;
     // autoscroll to selection back (Q handled elsewhere)
 
     // spatial hash rebuild (separation + neighbor queries)
     this.spatial.clear();
     for (const u of this.units) if (!u.dead && !u.flying) this.spatial.insert(u);
+
+    // SC1: warn the player when an enemy spy first penetrates toward their base
+    if (!this._scoutWarned && (this.gameTime % 2) < dt) {
+      const pb = this.buildings.find(b => b.team === 0 && !b.dead && b.def.primary);
+      if (pb) {
+        for (const u of this.units) {
+          if (u.dead || u.team === 0) continue;
+          if (Math.hypot(u.x - pb.x, u.y - pb.y) < TILE * 14) {
+            this._scoutWarned = true;
+            this.events.emit('hud:alert', '⚠ YOU ARE BEING SCOUTED', 0xffd23f);
+            this.audio?.orderPing?.();
+            break;
+          }
+        }
+      }
+    }
 
     // flow cohorts refresh (throttled; only goal keys still in use)
     this.flowRefreshTimer = (this.flowRefreshTimer ?? 0) - dt;
@@ -2243,7 +2378,7 @@ export class BattleScene extends Phaser.Scene {
 
     // ---- SC1-style research agenda: labs continuously upgrade the army ----
     const agenda = race === 'terran'
-      ? ['terranInfantryWeapons1', 'terranInfantryArmor1', 'terranInfantryWeapons2', 'vehiclePlating1', 'terranInfantryArmor2', 'terranInfantryWeapons3']
+      ? ['terranInfantryWeapons1', 'terranInfantryArmor1', 'combatMedics', 'terranInfantryWeapons2', 'vehiclePlating1', 'terranInfantryArmor2', 'terranInfantryWeapons3']
       : race === 'zerg'
         ? ['zergMeleeAttacks1', 'zergCarapace1', 'lurkerEgg', 'greaterSpire']
         : ['protossGroundWeapons1', 'protossGroundPlating1', 'zealotSpeed', 'dragoonRange'];

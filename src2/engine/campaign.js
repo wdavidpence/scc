@@ -10,7 +10,9 @@ export const MISSIONS = [
   { n: 5, name: 'SWARM', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'A full brood nest. Survive 4 minutes of constant assault, then break them.', mods: { holdTime: 240 } },
   { n: 6, name: 'IRON WALL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 0, brief: 'Heavily fortified Terran position with a battlecruiser champion. Bring siege.', mods: { boss: 'battlecruiser' } },
   { n: 7, name: 'JUDGEMENT', enemy: 'protoss', difficulty: 'hard', bonusMinerals: 0, brief: 'A Fleet assault led by a champion carrier. Their carriers will blot out the sun.', mods: { boss: 'carrier' } },
-  { n: 8, name: 'FINAL RECKONING', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The Overmind itself focuses on you. Hold 3 minutes, then slay the Ultralisk champion.', mods: { holdTime: 180, boss: 'ultralisk' } }
+  { n: 8, name: 'FINAL RECKONING', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The Overmind itself focuses on you. Hold 3 minutes, then slay the Ultralisk champion.', mods: { holdTime: 180, boss: 'ultralisk' } },
+  { n: 9, name: 'GHOST PROTOCOL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 100, brief: 'Ghost operatives and dropships hit your supply lines. Hold 3 minutes and purge the sector.', mods: { holdTime: 180, boss: 'ghost' } },
+  { n: 10, name: 'OVERMIND ASCENDANT', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: an Ultralisk champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'ultralisk' } }
 ];
 
 export const UPGRADES = [

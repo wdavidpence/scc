@@ -70,6 +70,11 @@ export class Unit {
     this.waypoints = null;    // queued move points (shift-click)
     this.interceptors = null; // carrier orbs
     this._chevrons = [];
+    // transports / garrison / medic state
+    this.carry = [];          // units loaded into a transport
+    this.unloadAt = null;     // pending unload destination
+    this.healTarget = null;   // medic heal order
+    this.garrisonedIn = null; // bunker this unit hides in
     if (this.def.worker) {
       // find nearest mineral patch automatically (starting harvest)
       this.setOrder({ type: 'harvest' });
@@ -88,6 +93,9 @@ export class Unit {
     if (order.type === 'attackTarget') this.target = order.target;
     if (order.type === 'attackMove') this.attackMovePoint = order.point;
     if (order.type === 'move' || order.type === 'attackMove' || order.type === 'harvest' || order.type === 'build') this.target = null;
+    if (order.type === 'heal') this.healTarget = order.target;
+    if (order.type === 'loadUnit') this.loadTarget = order.target;
+    if (order.type === 'unload') this.unloadAt = order.point;
     this.state = order.type;
     this.needsPath = true;
   }
@@ -98,6 +106,7 @@ export class Unit {
 
   update(dt) {
     if (this.dead) return;
+    if (this.loaded || this.state === 'garrisoned' || this.state === 'loaded' || this.garrisonedIn) { this.moving = false; this.drawHp(); return; } // sits inside bunker/transport; container fires
     this.moving = false;
     if (this.stunTimer > 0) { this.stunTimer -= dt; this.drawHp(); this.moving = false; this.animate(dt); return; }
     // shield regen
@@ -131,9 +140,13 @@ export class Unit {
       case 'build': this.updateBuild(dt); break;
       case 'repair': this.updateRepair(dt); break;
       case 'patrol': this.updatePatrol(dt); break;
+      case 'loadUnit': this.updateLoadUnit(dt); break;
+      case 'unload': this.updateUnload(dt); break;
+      case 'heal': this.updateHeal(dt); break;
       case 'training': break; // held inside structure
       default:
-        if (this.def.worker || this.def.weaponless) { if (!this.order) this.setOrder({ type: 'harvest' }); }
+        if (this.def.transport) { /* dropship holds station until ordered */ if (!this.order) this.state = 'idle'; }
+        else if (this.def.worker || this.def.weaponless) { if (!this.order) this.setOrder({ type: 'harvest' }); }
         else this.updateAutoAcquire(dt);
     }
     this.animate(dt);
@@ -154,6 +167,9 @@ export class Unit {
   }
 
   repath(toX, toY) {
+    if (this.flying) { // air units fly straight lines — terrain is irrelevant
+      this.path = [{ x: toX, y: toY }]; this.pathIndex = 0; return;
+    }
     const clearance = this.def.size === 'large' ? 1 : 0;
     const p = this.world.nav.findPath(this.x, this.y, toX, toY, clearance, this.id);
     if (p && p.length > 1) { this.path = p; this.pathIndex = 1; }
@@ -212,7 +228,7 @@ export class Unit {
   // rotate/facing: full rotation toward movement/attack vector + squash so troops look oriented
   face(dx, dy) {
     if (dx === 0 && dy === 0) return;
-    if (this.def.flying || this.def.size === 'large' || ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath'].includes(this.kind)) {
+    if (this.def.flying || this.def.size === 'large' || ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath', 'dropship'].includes(this.kind)) {
       const a = Math.atan2(dy, dx);
       this.sprite.setFlipX(false);
       this.sprite.setRotation(Math.abs(a) > Math.PI / 2 ? a + Math.PI : a);
@@ -283,6 +299,67 @@ export class Unit {
     if (this.stepAlongPath(dt)) {
       this._patrolIdx = this._patrolIdx === 0 ? 1 : 0;
       this.repath(pts[this._patrolIdx].x, pts[this._patrolIdx].y);
+    }
+  }
+
+  // SC1: dropship loads friendly ground units when adjacent
+  updateLoadUnit(dt) {
+    const t = this.loadTarget;
+    if (!t || t.dead || t.loaded || !this.def.transport) { this.loadTarget = null; this.order = null; this.state = 'idle'; return; }
+    const d = Math.hypot(t.x - this.x, t.y - this.y);
+    if (d > TILE * 1.6) {
+      if (this.needsPath || this.pathIndex >= this.path.length) { this.needsPath = false; this.repath(t.x, t.y); }
+      this.stepAlongPath(dt);
+      return;
+    }
+    if (this.carry.length + (t.def.supply || 1) <= this.def.transport) {
+      this.world.loadUnitInto(this, t);
+      this.world.audio?.orderPing?.();
+    }
+    this.loadTarget = null; this.order = null; this.state = 'idle';
+  }
+
+  // SC1: dropship unloads all passengers at destination
+  updateUnload(dt) {
+    const p = this.unloadAt;
+    if (!p) { this.order = null; this.state = 'idle'; return; }
+    const d = Math.hypot(p.x - this.x, p.y - this.y);
+    if (d > TILE * 1.2) {
+      if (this.needsPath || this.pathIndex >= this.path.length) { this.needsPath = false; this.repath(p.x, p.y); }
+      this.stepAlongPath(dt);
+      return;
+    }
+    this.world.unloadAll(this);
+    this.unloadAt = null; this.order = null; this.state = 'idle';
+  }
+
+  // SC1: medic heals friendly target in range (restores hp, green link)
+  updateHeal(dt) {
+    const t = this.healTarget;
+    if (!t || t.dead || t.hp >= t.maxHp) { this.healTarget = null; this.order = null; this.state = 'idle'; if (this.def.worker) this.setOrder({ type: 'harvest' }); return; }
+    const r = (this.def.heal?.range || 3) * TILE;
+    const d = Math.hypot(t.x - this.x, t.y - this.y);
+    if (d > r) {
+      if (this.needsPath || this.pathIndex >= this.path.length) { this.needsPath = false; this.repath(t.x, t.y); }
+      this.stepAlongPath(dt);
+      return;
+    }
+    if (this.path.length) { this.path = []; } // stand still while healing
+    this._healT = (this._healT || 0) - dt;
+    if (this._healT <= 0) {
+      this._healT = this.def.heal?.interval || 0.5;
+      const amt = Math.min(this.def.heal?.amount || 4, t.maxHp - t.hp);
+      t.hp += amt;
+      if (t.shield !== undefined && t.maxShield > 0 && t.shield < t.maxShield) { /* SC1 heal only hp */ }
+      if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+        if (!this._healBeam) this._healBeam = this.world.add.graphics().setDepth(26);
+        this._healBeam.clear();
+        this._healBeam.lineStyle(1.5, 0x6ee7a0, 0.6 + Math.sin(this.world.time.now / 100) * 0.25);
+        this._healBeam.lineBetween(this.x, this.y, t.x, t.y);
+        const cp = this.world.add.circle(t.x, t.y - 12, 2, 0x6ee7a0, 0.9).setDepth(47);
+        this.world.tweens.add({ targets: cp, y: t.y - 22, alpha: 0, duration: 450, onComplete: () => cp.destroy() });
+      }
+      this.world.audio?.harvest?.();
     }
   }
 
@@ -565,6 +642,38 @@ export class Unit {
     }
   }
 
+  // SC1: infantry garrison into a bunker — invisible, bunker fires for them
+  garrison(b) {
+    this.garrisonedIn = b;
+    this.loaded = true;
+    this.state = 'garrisoned';
+    this.order = null; this.path = [];
+    this.container.setVisible(false);
+  }
+
+  emerge(x, y) {
+    this.garrisonedIn = null;
+    this.loaded = false;
+    this.container.setVisible(true);
+    this.container.setPosition(x ?? this.x, y ?? this.y);
+    this.setOrder({ type: 'attackMove', point: { x: (x ?? this.x) + 40, y: (y ?? this.y) + 40 } });
+  }
+
+  // transport loading: hide unit inside the transport
+  intoTransport() {
+    this.loaded = true;
+    this.state = 'loaded';
+    this.order = null; this.path = [];
+    this.container.setVisible(false);
+  }
+
+  outOfTransport(x, y) {
+    this.loaded = false;
+    this.container.setVisible(true);
+    this.container.setPosition(x, y);
+    this.setOrder({ type: 'attackMove', point: { x, y } });
+  }
+
   takeDamage(amount, attacker) {
     if (this.dead) return;
     if (this.shield > 0) {
@@ -608,6 +717,14 @@ export class Unit {
     if (this.interceptors) { for (const it of this.interceptors) it.g.destroy(); this.interceptors = null; }
     if (this._beam) { this._beam.destroy(); this._beam = null; }
     if (this._siegeLegs) { this._siegeLegs.destroy(); this._siegeLegs = null; }
+    if (this._healBeam) { this._healBeam.destroy(); this._healBeam = null; }
+    // transport destroyed: passengers die with it (SC1)
+    if (this.carry && this.carry.length) {
+      for (const p of this.carry) { if (p && !p.dead) { p.loaded = false; p.container.setVisible(true); p.takeDamage(9999, null); } }
+      this.carry = [];
+    }
+    // garrisoned in a bunker that died: emerge automatically
+    if (this.garrisonedIn) { const b = this.garrisonedIn; this.garrisonedIn = null; this.loaded = false; this.container.setVisible(true); if (!b.dead) b.garrison = (b.garrison || []).filter(x => x !== this); this.issueMove(this.x + 30, this.y + 30, true); }
     this.world.onUnitDeath(this);
     const boom = this.world.add.image(this.x, this.y, 'explosion');
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
@@ -666,6 +783,7 @@ export class Building {
     this.workers = [];
     this.queue = []; // {kind, remaining, worker?}
     this.rallyPoint = null;
+    this.garrison = []; // units loaded into bunker
     this.dead = false;
     this.attackTimer = 0;
     this.container = world.add.container(x, y);
@@ -679,7 +797,7 @@ export class Building {
       this.sprite.setAlpha(0.6);
       if (!opts.noBlock) world.nav.blockRect(this.id, this.tileX0(), this.tileY0(), this.tileX1(), this.tileY1());
     }
-    if (this.built) this.onBuilt();
+    if (this.built) { this.onBuilt(); this.world.nav.blockRect(this.id, this.tileX0(), this.tileY0(), this.tileX1(), this.tileY1()); }
     this.supplyProvided = this.def.supply || 0;
   }
 
@@ -701,6 +819,7 @@ export class Building {
     if (this.built) return;
     this.built = true;
     this.sprite.setAlpha(1);
+    this.world.nav.blockRect(this.id, this.tileX0(), this.tileY0(), this.tileX1(), this.tileY1()); // SC1: completed structures block ground paths
     this.workers.forEach(w => { if (w.order?.building === this) { w.order = null; if (w.def.worker) w.setOrder({ type: 'harvest' }); } });
     this.workers = [];
     if (this.buildId === 'nexus') this.def.supply = 15;
@@ -811,6 +930,28 @@ export class Building {
           this.world.audio?.attack('turret');
         }
       }
+    }
+    // SC1 bunker: each garrisoned infantry fires its own shot from the slit
+    if (this.def.garrisonDefense && this.built && this.garrison.length) {
+      this.attackTimer -= dt;
+      if (this.attackTimer <= 0) {
+        const gd = this.def.garrisonDefense;
+        const foe = this.world.findNearestEnemy(this.x, this.y, gd.range * TILE, false, true);
+        if (foe) {
+          for (const g of this.garrison.slice(0, 4)) {
+            if (g.dead) continue;
+            const mult = SIZE_MULT[g.def.attackType || gd.attackType]?.[foe.def.size] ?? 1;
+            const dmg = Math.max(1, Math.round((g.def.damage || gd.damage) * mult - foe.def.armor));
+            this.world.spawnProjectile({ from: { x: this.x + (Math.random() * 20 - 10), y: this.y - 8 }, target: foe, damage: dmg, splash: 0, team: this.team, kind: 'marine', speed: 640, attacker: g });
+            g._bunkerShot = true;
+          }
+          this.attackTimer = gd.cooldown;
+          this.world.audio?.attack('marine');
+        }
+      }
+      // garrisoned troops slowly heal behind the plating
+      for (const g of this.garrison) if (!g.dead && g.hp < g.maxHp) g.hp = Math.min(g.maxHp, g.hp + dt * 2);
+      this.garrison = this.garrison.filter(g => !g.dead);
     }
     this.drawHp();
   }

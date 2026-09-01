@@ -244,6 +244,19 @@ function createUnitTextures(scene) {
       px(ctx, 9, 16, 2, 3, '#ff9c3c'); // thruster
       px(ctx, 8, 10, 4, 2, '#8fd0ff');
     },
+    dropship: (ctx, col) => {
+      ctx.fillStyle = '#525c6a'; ctx.beginPath(); ctx.moveTo(3, 8); ctx.lineTo(17, 8); ctx.lineTo(20, 13); ctx.lineTo(0, 13); ctx.closePath(); ctx.fill();
+      px(ctx, 6, 5, 8, 4, '#67727f'); px(ctx, 7, 6, 6, 2, col); // canopy
+      px(ctx, 2, 13, 5, 2, '#39424e'); px(ctx, 13, 13, 5, 2, '#39424e'); // landing skids
+      px(ctx, 8, 10, 4, 3, col); // side ramp light
+      px(ctx, 17, 6, 3, 2, '#8fd0ff');
+    },
+    medic: (ctx, col) => {
+      px(ctx, 6, 4, 8, 12, '#d8dde6'); px(ctx, 7, 5, 6, 3, col); // white armor
+      px(ctx, 3, 8, 2, 5, '#c2c9d4'); px(ctx, 15, 8, 2, 5, '#c2c9d4');
+      px(ctx, 8, 9, 4, 1, '#ff5a5a'); px(ctx, 9, 8, 2, 3, '#ff5a5a'); // red cross
+      px(ctx, 15, 6, 4, 2, '#6ee7a0'); // med-injector
+    },
     bc: (ctx, col) => {
       ctx.fillStyle = '#4b5563'; ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(16, 2); ctx.lineTo(18, 10); ctx.lineTo(14, 16); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
       px(ctx, 6, 4, 8, 3, col); px(ctx, 14, 4, 6, 2, '#2c333d'); px(ctx, 14, 8, 6, 2, '#2c333d');
@@ -413,7 +426,7 @@ function createBuildingTextures(scene) {
     });
 
     // generic sized buildings per race/size
-    const sizes = { supplyDepot: [2, 2], refinery: [4, 3], barracks: [4, 3], factory: [4, 3], starport: [4, 3], academy: [3, 3], missileTurret: [2, 2], engineeringBay: [2, 2], scienceFacility: [4, 3], machineShop: [2, 2],
+    const sizes = { supplyDepot: [2, 2], refinery: [4, 3], barracks: [4, 3], factory: [4, 3], starport: [4, 3], academy: [3, 3], missileTurret: [2, 2], engineeringBay: [2, 2], scienceFacility: [4, 3], machineShop: [2, 2], bunker: [2, 2],
       evolutionChamber: [3, 3], spawningPool: [3, 3], hydraliskDen: [3, 3], spire: [3, 3], ultraliskCavern: [3, 3], sporeColony: [2, 2], extractor: [4, 3], lair: [4, 4], hive: [4, 4], creepColony: [2, 2],
       pylon: [2, 2], gateway: [3, 3], roboticsFacility: [4, 3], cyberneticsCore: [3, 3], roboticsTechFacility: [3, 3], templarArchives: [3, 3], council: [3, 3], stargate: [4, 3], photonCannon: [2, 2], forge: [2, 2], assimulator: [4, 3], fleetBeacon: [3, 3], controlTower: [2, 2] };
 
