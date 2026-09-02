@@ -366,12 +366,48 @@ function createUnitTextures(scene) {
       px(ctx, 6, 12, 8, 2, '#4a586b'); // flight deck
       px(ctx, 8, 14, 4, 1, '#9fc8ff');
       ctx.fillStyle = '#55657a'; ctx.fillRect(14, 2, 5, 3);
+    },
+    corsair: (ctx, col) => {
+      // sleek protoss hunter: swept wings, glowing void emitter
+      ctx.fillStyle = '#5d6f8f'; ctx.beginPath(); ctx.moveTo(10, 2); ctx.lineTo(16, 10); ctx.lineTo(10, 18); ctx.lineTo(4, 10); ctx.closePath(); ctx.fill();
+      px(ctx, 8, 7, 5, 6, col); // hull core
+      px(ctx, 9, 9, 3, 2, '#bfe0ff'); // void lens
+      px(ctx, 2, 9, 3, 2, '#7186a8'); px(ctx, 15, 9, 3, 2, '#7186a8'); // wing tips
+      px(ctx, 10, 4, 1, 2, '#e6f2ff');
+    },
+    darkArchon: (ctx, col) => {
+      // twin dark flame bodies merged at the base
+      px(ctx, 5, 3, 4, 9, '#241a3a'); px(ctx, 11, 3, 4, 9, '#241a3a');
+      px(ctx, 4, 12, 12, 5, '#1a1230'); // merged skirt
+      px(ctx, 6, 5, 2, 3, col); px(ctx, 12, 5, 2, 3, col); // void eyes
+      px(ctx, 5, 13, 10, 2, '#7a4fd0'); // convergence band
+      px(ctx, 9, 15, 2, 2, '#c9a0ff');
+      px(ctx, 6, 1, 2, 2, '#3a2a5a'); px(ctx, 12, 1, 2, 2, '#3a2a5a'); // flame tips
+    },
+    guardian: (ctx, col) => {
+      // bloated spore-carrying flyer with long neck
+      ctx.fillStyle = '#8a9a4a'; ctx.beginPath(); ctx.ellipse(10, 11, 7, 5, 0, 0, 7); ctx.fill();
+      px(ctx, 3, 8, 14, 2, '#6b7a38'); // wing membrane
+      px(ctx, 8, 4, 5, 4, '#9fae58'); // neck/head hump
+      px(ctx, 9, 5, 2, 2, col); // eye
+      px(ctx, 7, 13, 2, 3, '#4d5a28'); px(ctx, 11, 13, 2, 3, '#4d5a28'); // spore pods
+      px(ctx, 6, 10, 1, 1, col);
+    },
+    devourer: (ctx, col) => {
+      // caustic flyer: hunched body dripping corrosion sacs
+      ctx.fillStyle = '#5f8a6a'; ctx.beginPath(); ctx.ellipse(10, 10, 6.5, 5.5, 0, 0, 7); ctx.fill();
+      px(ctx, 4, 7, 12, 2, '#48684f');
+      px(ctx, 9, 4, 3, 3, '#77a884'); // head
+      px(ctx, 10, 5, 1, 1, col); // eye
+      px(ctx, 5, 13, 2, 4, '#8fbf6a'); px(ctx, 9, 14, 2, 4, '#8fbf6a'); px(ctx, 13, 13, 2, 4, '#8fbf6a'); // acid droplets
+      px(ctx, 6, 16, 1, 2, '#b0e08a'); px(ctx, 13, 16, 1, 2, '#b0e08a');
     }
   };
 
   const raceOf = { scv: 'terran', marine: 'terran', firebat: 'terran', tank: 'terran', vulture: 'terran', goliath: 'terran', wraith: 'terran', bc: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran',
     drone: 'zerg', zergling: 'zerg', zereling: 'zerg', hydra: 'zerg', hydralisk: 'zerg', muta: 'zerg', mutalisk: 'zerg', ultra: 'zerg', ultralisk: 'zerg', overlord: 'zerg', scourge: 'zerg', lurker: 'zerg', queen: 'zerg', broodling: 'zerg',
-    probe: 'protoss', zealot: 'protoss', dragoon: 'protoss', htemplar: 'protoss', highTemplar: 'protoss', dtemplar: 'protoss', darkTemplar: 'protoss', archon: 'protoss', carrier: 'protoss', reaver: 'protoss', shuttle: 'protoss', corsair: 'protoss' };
+    probe: 'protoss', zealot: 'protoss', dragoon: 'protoss', htemplar: 'protoss', highTemplar: 'protoss', dtemplar: 'protoss', darkTemplar: 'protoss', archon: 'protoss', carrier: 'protoss', reaver: 'protoss', shuttle: 'protoss', corsair: 'protoss', darkArchon: 'protoss',
+    guardian: 'zerg', devourer: 'zerg' };
   const largeKinds = ['tank', 'bc', 'ultra', 'carrier', 'goliath', 'overlord', 'lurker', 'dragoon', 'reaver', 'battleship', 'battlecruiser'];
   for (const [kind, fn] of Object.entries(defs)) {
     for (let team = 0; team < 3; team++) {
@@ -499,6 +535,46 @@ function createFx(scene) {
   makeTex(scene, 'blood', 10, 10, (ctx) => {
     ctx.fillStyle = '#b3372e'; ctx.beginPath(); ctx.arc(5, 5, 3, 0, 7); ctx.fill();
     ctx.fillStyle = '#8f2b24'; ctx.fillRect(2, 4, 2, 2); ctx.fillRect(7, 6, 2, 1);
+  });
+  // SC1 persistent per-race gore/carnage decals
+  makeTex(scene, 'gore-zerg', 28, 28, (ctx) => {
+    ctx.fillStyle = 'rgba(70,120,40,0.65)'; ctx.beginPath(); ctx.ellipse(14, 14, 12, 9, 0.4, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(150,60,80,0.55)'; ctx.beginPath(); ctx.ellipse(10, 12, 5, 4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(190,220,120,0.5)'; ctx.fillRect(16, 16, 3, 2); ctx.fillRect(8, 18, 2, 2); ctx.fillRect(18, 8, 2, 2);
+    ctx.fillStyle = 'rgba(120,40,55,0.6)'; ctx.fillRect(12, 6, 2, 3);
+  });
+  makeTex(scene, 'gore-terran', 26, 26, (ctx) => {
+    ctx.fillStyle = 'rgba(140,30,28,0.6)'; ctx.beginPath(); ctx.ellipse(13, 13, 11, 8, 0.7, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(90,20,18,0.5)'; ctx.beginPath(); ctx.ellipse(16, 15, 5, 3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(60,60,64,0.55)'; ctx.fillRect(6, 8, 3, 2); ctx.fillRect(17, 7, 2, 2); // oil/soot
+    ctx.fillStyle = 'rgba(200,190,180,0.4)'; ctx.fillRect(10, 18, 2, 2); // shrapnel
+  });
+  makeTex(scene, 'gore-protoss', 26, 26, (ctx) => {
+    ctx.fillStyle = 'rgba(70,140,220,0.45)'; ctx.beginPath(); ctx.ellipse(13, 13, 11, 7, 0.2, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(140,200,255,0.5)'; ctx.fillRect(8, 10, 2, 2); ctx.fillRect(15, 14, 2, 2); ctx.fillRect(12, 17, 3, 1); // ionized residue
+    ctx.fillStyle = 'rgba(30,40,60,0.5)'; ctx.beginPath(); ctx.ellipse(13, 12, 5, 3, 0.9, 0, 7); ctx.fill();
+  });
+  // burning wreckage for dead structures
+  makeTex(scene, 'rubble', 40, 40, (ctx) => {
+    ctx.fillStyle = 'rgba(24,22,20,0.85)';
+    ctx.beginPath(); ctx.moveTo(4, 30); ctx.lineTo(12, 12); ctx.lineTo(20, 22); ctx.lineTo(28, 8); ctx.lineTo(36, 28); ctx.lineTo(30, 34); ctx.lineTo(10, 34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(50,44,38,0.8)'; ctx.fillRect(9, 22, 8, 6); ctx.fillRect(22, 18, 9, 8);
+    ctx.fillStyle = 'rgba(255,140,60,0.7)'; ctx.fillRect(13, 20, 3, 3); ctx.fillRect(26, 16, 2, 3);
+    ctx.fillStyle = 'rgba(255,210,120,0.8)'; ctx.fillRect(14, 21, 1, 1); ctx.fillRect(26, 17, 1, 1);
+  });
+  // power-up crate (SC1 pickups)
+  makeTex(scene, 'crate', 14, 14, (ctx) => {
+    px(ctx, 1, 2, 12, 10, '#3d4a5c'); px(ctx, 2, 3, 10, 8, '#55677f');
+    px(ctx, 1, 6, 12, 2, '#ffd23f'); // hazard band
+    px(ctx, 6, 4, 2, 6, '#9fc8ff'); // glow core
+    ctx.fillStyle = 'rgba(255,210,63,0.35)'; ctx.fillRect(0, 1, 14, 12);
+  });
+  // critter (scratch-like scavenger)
+  makeTex(scene, 'critter', 12, 12, (ctx) => {
+    px(ctx, 4, 4, 5, 4, '#a88b5c'); px(ctx, 2, 5, 2, 2, '#8f774d'); // body + snout
+    px(ctx, 5, 2, 1, 2, '#8f774d'); px(ctx, 7, 2, 1, 2, '#8f774d'); // ears
+    px(ctx, 8, 5, 1, 1, '#ffdf9e'); // eye
+    px(ctx, 9, 7, 2, 1, '#8f774d'); px(ctx, 3, 8, 1, 2, '#6e5a3a'); px(ctx, 7, 8, 1, 2, '#6e5a3a'); // legs
   });
 }
 

@@ -49,6 +49,7 @@ export class HudScene extends Phaser.Scene {
     this.top = this.add.graphics();
     this.topBG = this.add.rectangle(0, 0, this.W, 34, 0x05080e, 0.92).setOrigin(0, 0).setScrollFactor(0);
     this.resText = this.add.text(12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#dbe7ff' }).setScrollFactor(0);
+    this.tickTxt = this.add.text(200, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#7db4ff', fontStyle: 'bold' }).setScrollFactor(0).setAlpha(0);
     this.timeText = this.add.text(this.W / 2, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#8fa3c8' }).setOrigin(0.5, 0).setScrollFactor(0);
     this.selCount = this.add.text(this.W - 12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#6ee7a0' }).setOrigin(1, 0).setScrollFactor(0);
     this.apmText = this.add.text(this.W - 150, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fb3d8' }).setOrigin(0.5, 0).setScrollFactor(0);
@@ -90,13 +91,16 @@ export class HudScene extends Phaser.Scene {
     this.mmFrame = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x2b313a, 1).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3b444f);
     this.mmG = this.add.graphics().setScrollFactor(0);
     const zone = this.add.zone(this.mmX, this.mmY, this.mmSize, this.mmSize).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
-    zone.on('pointerdown', (p) => this.mmClick(p.x, p.y));
-    zone.on('pointerdrag', (p) => this.mmClick(p.x, p.y));
+    zone.on('pointerdown', (p) => this.mmClick(p.x, p.y, p.button));
+    zone.on('pointerdrag', (p) => this.mmClick(p.x, p.y, 0));
+    this.input.on('pointerdown', (p) => { if (p.button === 2 && this.input.mouse) this.input.mouse.disableContextMenu?.(); });
+    if (this.input.mouse) this.input.mouse.disableContextMenu();
   }
 
-  mmClick(px, py) {
+  mmClick(px, py, button) {
     const wx = ((px - this.mmX) / this.mmSize) * 96 * TILE;
     const wy = ((py - this.mmY) / this.mmSize) * 96 * TILE;
+    if (button === 2) { this.scene.get('Battle').placeBeacon(wx, wy); return; }
     this.scene.get('Battle').events.emit('hud:camera', { x: wx, y: wy });
   }
 
@@ -139,6 +143,12 @@ export class HudScene extends Phaser.Scene {
   }
 
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
+
+  incomeTick(txt, col) {
+    if (!this.tickTxt) return;
+    this.tickTxt.setText(txt).setColor(col).setAlpha(1).setPosition(this.resText.width + 20, 8);
+    this.tweens.add({ targets: this.tickTxt, alpha: 0, y: 2, duration: 650, ease: 'Quad.easeOut' });
+  }
 
   clearButtons() {
     for (const b of this.buttons) { b.bg.destroy(); b.brd.destroy(); b.txt.destroy(); b.hit.destroy(); }
@@ -200,6 +210,11 @@ export class HudScene extends Phaser.Scene {
         if (kinds.has('lurker')) rows.push('__burrow');
         if (kinds.has('marine')) rows.push('__stim');
         if (kinds.has('darkTemplar')) rows.push('__cloak');
+        if (kinds.has('darkTemplar') && kinds.size === 1) { rows.push('__merge'); if (b.techResearched(0, 'darkArchonMerge')) rows.push('__mergeDark'); }
+        if (kinds.has('corsair')) rows.push('__mael');
+        if (kinds.has('darkArchon')) rows.push('__mael');
+        if (kinds.has('mutalisk')) { rows.push('__morphG'); rows.push('__morphD'); }
+        if (kinds.has('devourer')) rows.push('__caustic');
         if (kinds.has('htemplar')) rows.push('__storm');
         rows.push('__patrol');
         rows.push('__hold');
@@ -212,6 +227,12 @@ export class HudScene extends Phaser.Scene {
         __burrow: ['BURROW [B]', () => b.events.emit('hud:burrow')],
         __stim: ['STIM [F]', () => b.events.emit('hud:stim')],
         __cloak: ['CLOAK [K]', () => b.events.emit('hud:cloak')],
+        __merge: ['MERGE [M]', () => b.events.emit('hud:mergeArchon')],
+        __mergeDark: ['DARK MERGE', () => b.events.emit('hud:mergeDarkArchon')],
+        __mael: ['MAELSTROM', () => b.events.emit('hud:maelstrom')],
+        __morphG: ['GUARDIAN', () => b.events.emit('hud:morphGuardian')],
+        __morphD: ['DEVOURER', () => b.events.emit('hud:morphDevourer')],
+        __caustic: ['CAUSTIC', () => b.events.emit('hud:caustic')],
         __storm: ['PSI STORM [V]', () => b.events.emit('hud:castStorm')],
         __patrol: ['PATROL [P]', () => b.events.emit('hud:patrol')],
         __hold: ['HOLD [H]', () => b.events.emit('hud:command', 'hold')],
@@ -360,7 +381,22 @@ export class HudScene extends Phaser.Scene {
     this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
     this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');
     const idle = p.idleWorkers || 0;
-    if (this.idleTxt) { this.idleTxt.setText(idle > 0 ? `IDLE ${idle}` : '').setVisible(idle > 0); }
+    if (this.idleTxt) { this.idleTxt.setText(idle > 0 ? `IDLE ${idle} ▶` : '').setVisible(idle > 0); }
+    // SC1 idle-worker cycle: click the IDLE chip to jump+select each idle worker in turn
+    if (idle > 0 && !this._idleInteractive) {
+      this._idleInteractive = true;
+      this.idleTxt.setInteractive({ useHandCursor: true });
+      this.idleTxt.on('pointerdown', () => this.scene.get('Battle').cycleIdleWorker());
+    } else if (idle === 0 && this._idleInteractive) {
+      this._idleInteractive = false;
+      this.idleTxt.disableInteractive();
+    }
+    // SC1 trailing income tick: flashing +N beside the counter when resources arrive
+    if (this._lastRes === undefined) this._lastRes = { m: p.minerals, g: p.gas };
+    const dm = Math.floor(p.minerals - this._lastRes.m), dg = Math.floor(p.gas - this._lastRes.g);
+    const nowMs = this.time ? this.time.now : 0;
+    if ((dm >= 5 || dg >= 5) && nowMs - (this._tickAt || 0) > 700) { this._tickAt = nowMs; if (dm >= 5) this.incomeTick(`+${dm}`, '#7db4ff'); if (dg >= 5) this.incomeTick(`+${dg}`, '#7dffd9'); }
+    this._lastRes = { m: p.minerals, g: p.gas };
     const t = Math.floor(b.gameTime);
     this.timeText.setText(`${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
     this.selCount.setText(`SEL ${b.selection.size}`);
@@ -435,6 +471,23 @@ export class HudScene extends Phaser.Scene {
       if (m.team !== 0) continue;
       g.fillStyle(0xffd23f, m.armed ? 0.9 : 0.4);
       g.fillCircle(this.mmX + m.x * s, this.mmY + m.y * s, 1.2);
+    }
+    // SC1: beacon ping (alt/right-click minimap) — expanding cyan marker
+    if (b.beacon) {
+      const k = Math.max(0, 1 - (b.gameTime - b.beacon.t) / 5);
+      if (k > 0) {
+        const bx = this.mmX + b.beacon.x * s, by = this.mmY + b.beacon.y * s;
+        g.lineStyle(1.5, 0x9fffff, k);
+        g.strokeCircle(bx, by, 3 + (1 - k) * 9);
+        g.fillStyle(0x9fffff, k * 0.7);
+        g.fillCircle(bx, by, 1.6);
+      }
+    }
+    // SC1 power-up crates on minimap (only where visible)
+    for (const cr of (b.crates || [])) {
+      if (!b.isVisible(cr.x, cr.y)) continue;
+      g.fillStyle(0xffd23f, 0.9);
+      g.fillRect(this.mmX + cr.x * s - 1.5, this.mmY + cr.y * s - 1.5, 3, 3);
     }
     // camera view rect
     const cam = b.cameras.main;

@@ -41,6 +41,11 @@ export class BattleScene extends Phaser.Scene {
     this.projectiles = [];
     this.minerals = [];
     this.geysers = [];
+    this.crates = [];              // SC1 power-up pickups (populated by map setup)
+    this.critters = [];           // SC1 roaming critters
+    this.beacon = null;           // minimap beacon ping
+    this.castMode = null;         // 'maelstrom' | 'cloud' targeting mode
+    this.powerSurgeUntil = 0;     // power-up crate buff
     this.players = [
       { team: 0, race: this.race, minerals: 300, gas: 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } },
       { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : 400, gas: this.difficulty === 'hard' ? 200 : 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
@@ -125,6 +130,7 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
   buildObjectives() {
     const objs = [{ id: 'kill', text: 'Destroy the enemy base', done: false }];
+    if (this.crates && this.crates.length) objs.push({ id: 'crates', text: 'OPTIONAL: recover 3 power-up crates (+300)', done: false });
     if (this.mission && this.mission.mods && this.mission.mods.holdTime) {
       objs.push({ id: 'hold', text: `HOLD THE LINE for ${this.mission.mods.holdTime}s`, done: false });
     }
@@ -716,6 +722,30 @@ export class BattleScene extends Phaser.Scene {
     gey(PXW * 0.5, PXH * 0.16);
     gey(PXW * 0.5, PXH * 0.84);
     this.geyserTiles = new Map();
+
+    // SC1 power-up crates: scattered pickups, random payload on claim
+    this.crates = [];
+    const crateSpots = [[0.30, 0.42], [0.68, 0.30], [0.44, 0.66], [0.58, 0.52], [0.15, 0.62], [0.86, 0.40], [0.36, 0.20], [0.62, 0.82]];
+    for (const [fx, fy] of crateSpots) {
+      const x = PXW * fx, y = PXH * fy;
+      const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+      if (this.nav && this.nav.solid[this.nav.idx(tx, ty)]) continue;
+      const kind = ['minerals', 'gas', 'power', 'spawn', 'vision'][this.crates.length % 5];
+      const spr = this.add.image(x, y, 'crate').setDepth(14).setAlpha(0.95);
+      // subtle pulsing glow to draw the eye
+      this.tweens.add({ targets: spr, alpha: 0.65, duration: 900, yoyo: true, repeat: -1 });
+      this.crates.push({ x, y, kind, spr, id: nextObjId() });
+    }
+
+    // SC1 critters: small scavengers that scamper when anything gets close
+    this.critters = [];
+    for (let i = 0; i < 7; i++) {
+      const x = PXW * (0.2 + Math.random() * 0.6), y = PXH * (0.2 + Math.random() * 0.6);
+      const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+      if (this.nav && this.nav.solid[this.nav.idx(tx, ty)]) continue;
+      const spr = this.add.image(x, y, 'critter').setDepth(16).setFlipX(Math.random() < 0.5);
+      this.critters.push({ x, y, spr, vx: 0, vy: 0, wanderT: Math.random() * 3, fleeT: 0 });
+    }
   }
 
   rng() { let s = 1234567; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
@@ -1500,6 +1530,12 @@ export class BattleScene extends Phaser.Scene {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
       if (this.ultMode) { this.castUltimate(p.worldX, p.worldY); return; }
       if (this.scanMode) { this.scannerSweep(p.worldX, p.worldY); this.cancelScan(); return; }
+      if (this.castMode) {
+        const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'devourer' && u.energy >= 75) : ((u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100)))[0];
+        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, p.worldX, p.worldY); else this.castMaelstrom(caster, p.worldX, p.worldY); }
+        this.castMode = null; this.input.setDefaultCursor('default');
+        return;
+      }
       if (this.patrolMode) {
         if (!this._patrolAnchor) { this._patrolAnchor = { x: p.worldX, y: p.worldY }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); }
         else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: p.worldX, y: p.worldY }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); }
@@ -1577,7 +1613,7 @@ export class BattleScene extends Phaser.Scene {
       const b = this.selectedBuilding;
       if (b && b.def.garrison && b.garrison?.length) this.emergeAll(b);
     });
-    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
@@ -1603,6 +1639,10 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
     this.input.keyboard.on('keydown-F8', () => this.restoreBookmark());
+    this.input.keyboard.on('keydown-M', () => this.summonArchon(this.keys.SHIFT?.isDown ? 'darkArchon' : 'archon'));
+    this.input.keyboard.on('keydown-O', () => this.morphSelected('guardian'));
+    this.input.keyboard.on('keydown-L', () => this.morphSelected('devourer'));
+    this.input.keyboard.on('keydown-I', () => this.cycleIdleWorker());
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
     window.addEventListener('keydown', (e) => { if (e.shiftKey && /^[1-8]$/.test(e.key)) this.ctrlHeldWas = false; });
     window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key) && e.shiftKey) this.assignGroup(parseInt(e.key, 10)); });
@@ -1621,6 +1661,12 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:patrol', () => this.armPatrol());
     this.events.on('hud:scan', () => this.armScan());
     this.events.on('hud:cloak', () => this.toggleCloakSelected());
+    this.events.on('hud:mergeArchon', () => this.summonArchon('archon'));
+    this.events.on('hud:mergeDarkArchon', () => this.summonArchon('darkArchon'));
+    this.events.on('hud:morphGuardian', () => this.morphSelected('guardian'));
+    this.events.on('hud:morphDevourer', () => this.morphSelected('devourer'));
+    this.events.on('hud:maelstrom', () => this.armVoidCast());
+    this.events.on('hud:caustic', () => this.armCausticCast());
     this.events.on('hud:castStorm', () => {
       const casters = [...this.selection].filter(u => u.def.castAbility === 'storm' && u.energy >= 75);
       if (!casters.length) { this.events.emit('hud:alert', 'PSI STORM: NEED 75 ENERGY'); this.audio?.error(); return; }
@@ -1934,6 +1980,180 @@ export class BattleScene extends Phaser.Scene {
     if (did) { this.audio?.orderPing?.(); this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.burrowed) ? 'BURROWED — IMMOBILE, UNSEEN' : 'UNBURROWED'); }
   }
 
+  // ---------------- SC1: archon convergence, spire morphs, void/caustic casts ----------------
+  summonArchon(darkKind = 'archon') {
+    const techGate = darkKind === 'darkArchon' ? 'darkArchonMerge' : null;
+    if (techGate && !this.techResearched(0, techGate)) { this.events.emit('hud:alert', 'REQUIRES CONVERGENCE RESEARCH'); this.audio?.error(); return; }
+    const dts = [...this.selection].filter(u => u.kind === 'darkTemplar' && !u.dead);
+    if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'archon' ? 'CONVERGENCE: SELECT 2+ DARK TEMPLARS' : 'DARK CONVERGENCE: SELECT 2+ DARK TEMPLARS'); this.audio?.error(); return; }
+    let merged = 0;
+    const pool = [...dts];
+    while (pool.length >= 2) {
+      const a = pool.shift();
+      let b = pool.find(p => Math.hypot(p.x - a.x, p.y - a.y) < TILE * 2.5);
+      if (!b) b = pool.shift();
+      pool.splice(pool.indexOf(b), 1);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      // convergence flash: two lights spiral inward
+      const g1 = this.add.circle(a.x, a.y, 10, 0x9a6bff, 0.9).setDepth(71);
+      const g2 = this.add.circle(b.x, b.y, 10, 0x9a6bff, 0.9).setDepth(71);
+      this.tweens.add({ targets: [g1, g2], x: mx, y: my, alpha: 0, scale: 2.4, duration: 380, onComplete: () => { g1.destroy(); g2.destroy(); } });
+      for (const u of [a, b]) { u.order = null; u.path = []; u.selected = false; if (u._ring) { u._ring.destroy(); u._ring = null; } this.selection.delete(u); u.takeDamage(99999, null); }
+      const arch = this.spawnUnit(0, darkKind, mx, my, { arriveReady: true });
+      if (arch) {
+        this.add.circle(mx, my, 26, 0xb388ff, 0.5).setDepth(72);
+        this.tweens.add({ targets: this.children.list.filter(c => c.depth === 72 && c.x === mx), alpha: 0, duration: 500, onComplete: (tw) => tw.targets[0]?.destroy() });
+        this.audio?.psiCast?.();
+        merged++;
+      }
+    }
+    if (merged) { this.cmdCount++; this.events.emit('hud:alert', darkKind === 'archon' ? 'ARCHON CONVERGENCE' : 'DARK ARCHON CONVERGENCE'); this.events.emit('hud:selection', this.selectionInfo()); }
+  }
+
+  morphSelected(toKind) {
+    const list = [...this.selection].filter(u => u.kind === 'mutalisk' && !u.dead);
+    if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT MUTALISKS`); this.audio?.error(); return; }
+    const t = TECHS[toKind];
+    if (!this.techResearched(0, toKind)) { this.events.emit('hud:alert', `REQUIRES ${t?.name?.toUpperCase() || toKind.toUpperCase()} RESEARCH`); this.audio?.error(); return; }
+    let done = 0;
+    for (const m of list) {
+      if (!this.canAfford(0, t.minerals, t.gas)) break;
+      this.spend(0, t.minerals, t.gas);
+      const x = m.x, y = m.y;
+      m.order = null; m.path = []; m.selected = false; if (m._ring) { m._ring.destroy(); m._ring = null; } this.selection.delete(m);
+      const sac = this.add.circle(x, y, 14, 0xa8e06c, 0.8).setDepth(71);
+      this.tweens.add({ targets: sac, scale: 2, alpha: 0, duration: 420, onComplete: () => sac.destroy() });
+      m.takeDamage(99999, null);
+      this.spawnUnit(0, toKind, x, y, { arriveReady: true });
+      done++;
+    }
+    if (done) { this.cmdCount++; this.audio?.morph?.() || this.audio?.buildStart?.(); this.events.emit('hud:alert', `MORPHED ${done} ${toKind === 'guardian' ? 'GUARDIANS' : 'DEVOURERS'}`); this.events.emit('hud:selection', this.selectionInfo()); }
+  }
+
+  armVoidCast() {
+    const list = [...this.selection].filter(u => (u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100 && !u.dead);
+    if (!list.length) { this.events.emit('hud:alert', 'MAELSTROM: NEED 100 ENERGY AIR CASTERS'); this.audio?.error(); return; }
+    this.castMode = 'maelstrom';
+    this._castArmTime = this.gameTime;
+    this.input.setDefaultCursor('crosshair');
+    this.events.emit('hud:alert', 'MAELSTROM: CLICK TARGET CLUSTER');
+  }
+
+  armCausticCast() {
+    const list = [...this.selection].filter(u => u.kind === 'devourer' && u.energy >= 75 && !u.dead);
+    if (!list.length) { this.events.emit('hud:alert', 'CAUSTIC MIST: NEED 75 ENERGY DEVOURERS'); this.audio?.error(); return; }
+    this.castMode = 'cloud';
+    this._castArmTime = this.gameTime;
+    this.input.setDefaultCursor('crosshair');
+    this.events.emit('hud:alert', 'CAUSTIC MIST: CLICK TARGET AREA');
+  }
+
+  castMaelstrom(caster, x, y) {
+    caster.energy -= 100;
+    this.audio?.psiCast?.();
+    const r = 70;
+    const ring = this.add.circle(x, y, r, 0x2b1a4a, 0.35).setStrokeStyle(2, 0x9a6bff, 0.9).setDepth(49);
+    this.tweens.add({ targets: ring, alpha: 0.15, scale: 1.15, duration: 900, yoyo: true, repeat: 4, onComplete: () => ring.destroy() });
+    let caught = 0;
+    for (const u of this.units) {
+      if (u.dead || u.team === caster.team || !u.flying) continue;
+      if (Math.hypot(u.x - x, u.y - y) <= r) {
+        u.stunTimer = Math.max(u.stunTimer || 0, 8);
+        u.order = null; u.path = [];
+        // grounded look while stunned
+        this.tweens.add({ targets: u.sprite, angle: { from: 0, to: 25 }, duration: 300, yoyo: true, repeat: 6 });
+        caught++;
+      }
+    }
+    this.events.emit('hud:alert', caught ? `MAELSTROM — ${caught} AIRBORNE GROUNDED` : 'MAELSTROM — NO TARGETS CAUGHT');
+  }
+
+  castCausticCloud(caster, x, y) {
+    caster.energy -= 75;
+    this.audio?.psiCast?.();
+    const cloud = this.add.circle(x, y, 46, 0x8bc34a, 0.22).setStrokeStyle(1.5, 0xcddc70, 0.7).setDepth(48);
+    // drifting sickly puffs
+    const puffs = [];
+    for (let i = 0; i < 6; i++) {
+      const pf = this.add.circle(x + (Math.random() * 60 - 30), y + (Math.random() * 60 - 30), 14 + Math.random() * 10, 0xaed58a, 0.16).setDepth(48);
+      puffs.push(pf);
+      this.tweens.add({ targets: pf, x: pf.x + (Math.random() * 24 - 12), y: pf.y + (Math.random() * 24 - 12), alpha: 0.05, duration: 2000, yoyo: true, repeat: 3 });
+    }
+    const iv = this.time.addEvent({ delay: 600, repeat: 9, callback: () => {
+      for (const u of this.units) { if (!u.dead && u.team !== caster.team && !u.flying && Math.hypot(u.x - x, u.y - y) <= 52) u.takeDamage(6, caster); }
+    } });
+    this.tweens.add({ targets: cloud, alpha: 0, scale: 1.4, duration: 6000, onComplete: () => cloud.destroy() });
+    this.time.delayedCall(6200, () => { iv.remove(); for (const pf of puffs) pf.destroy(); });
+    this.events.emit('hud:alert', 'CAUSTIC MIST DEPLOYED');
+  }
+
+  // ---------------- SC1: power-up crates + critters ----------------
+  updateCrates(dt) {
+    if (!this.crates?.length) return;
+    this.crates = this.crates.filter(c => {
+      for (const u of this.units) {
+        if (u.dead || u.team !== 0 || u.loaded) continue;
+        if (Math.hypot(u.x - c.x, u.y - c.y) < u.radius + 12) { this.claimCrate(c, u); return false; }
+      }
+      return true;
+    });
+  }
+
+  claimCrate(c, u) {
+    c.spr.destroy();
+    const pop = (txt, col) => {
+      const t = this.add.text(c.x, c.y - 8, txt, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: col, fontStyle: 'bold' }).setOrigin(0.5).setDepth(75);
+      this.tweens.add({ targets: t, y: c.y - 30, alpha: 0, duration: 1100, onComplete: () => t.destroy() });
+    };
+    this.audio?.orderPing?.();
+    if (c.kind === 'minerals') { const amt = 500 + ((Math.random() * 500) | 0); this.players[0].minerals += amt; pop(`+${amt} MINERALS`, '#7db4ff'); }
+    else if (c.kind === 'gas') { const amt = 250 + ((Math.random() * 250) | 0); this.players[0].gas += amt; pop(`+${amt} GAS`, '#7dffd9'); }
+    else if (c.kind === 'power') { this.powerSurgeUntil = this.gameTime + 30; pop('POWER SURGE — UNITS +1 ARMOR', '#ffd23f'); this.events.emit('hud:alert', 'POWER SURGE: +1 ARMOR 30s'); }
+    else if (c.kind === 'spawn') { const m = this.spawnUnit(0, 'marine', c.x, c.y, { arriveReady: true }); pop(m ? 'REINFORCEMENT!' : '+200 MINERALS', '#ffd23f'); if (!m) this.players[0].minerals += 200; }
+    else { this.scannerSweep(c.x, c.y); pop('DATA: AREA REVEALED', '#9fffff'); }
+    this.events.emit('hud:alert', `CRATE ACQUIRED: ${c.kind.toUpperCase()}`);
+    const fl = this.add.circle(c.x, c.y, 18, 0xffd23f, 0.6).setDepth(71);
+    this.tweens.add({ targets: fl, scale: 2.6, alpha: 0, duration: 400, onComplete: () => fl.destroy() });
+    // tick the optional objective once
+    if (!this._crateCount) this._crateCount = 0;
+    this._crateCount++;
+    const co = this.objectives?.find(o => o.id === 'crates');
+    if (co && !co.done && this._crateCount >= 3) { co.done = true; this.events.emit('hud:objectives', this.objectives); this.audio?.objective?.(); this.players[0].minerals += 300; this.events.emit('hud:alert', 'BONUS: +300 MINERALS'); }
+  }
+
+  updateCritters(dt) {
+    if (!this.critters?.length) return;
+    for (const cr of this.critters) {
+      cr.fleeT -= dt;
+      let threat = null, td = 70;
+      for (const u of this.units) {
+        if (u.dead || u.loaded || u.flying) continue;
+        const d = Math.hypot(u.x - cr.x, u.y - cr.y);
+        if (d < td) { td = d; threat = u; }
+      }
+      if (threat && cr.fleeT <= 0) {
+        const a = Math.atan2(cr.y - threat.y, cr.x - threat.x);
+        cr.vx = Math.cos(a) * 95; cr.vy = Math.sin(a) * 95; cr.fleeT = 1.4;
+        if (!cr._squeaked) { cr._squeaked = true; this.audio?.bark?.('!', 1.7, 1.4); }
+      } else if (!threat) {
+        cr._squeaked = false;
+        cr.wanderT -= dt;
+        if (cr.wanderT <= 0) {
+          cr.wanderT = 1.5 + Math.random() * 3;
+          if (Math.random() < 0.7) { const a = Math.random() * 6.28; cr.vx = Math.cos(a) * 22; cr.vy = Math.sin(a) * 22; }
+          else { cr.vx = 0; cr.vy = 0; }
+        }
+      }
+      cr.spr.setFlipX(cr.vx < 0);
+      const nx = Math.max(TILE, Math.min(PXW - TILE, cr.x + cr.vx * dt));
+      const ny = Math.max(TILE, Math.min(PXH - TILE, cr.y + cr.vy * dt));
+      const tx = Math.floor(nx / TILE), ty = Math.floor(ny / TILE);
+      if (this.nav.solid[this.nav.idx(tx, ty)]) { cr.vx = -cr.vx; cr.vy = -cr.vy; }
+      else { cr.x = nx; cr.y = ny; cr.spr.setPosition(cr.x, cr.y); }
+      if (Math.abs(cr.vx) > 1) cr.spr.y += Math.sin(this.gameTime * 18 + cr.id) * 0.6; // scamper bob
+    }
+  }
+
   armScan() {
     if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.error(); return; }
     this.scanMode = true;
@@ -1959,6 +2179,29 @@ export class BattleScene extends Phaser.Scene {
     this.cameraBookmark = { x: this.cameras.main.midPoint.x, y: this.cameras.main.midPoint.y };
     this.audio?.orderPing?.();
     this.events.emit('hud:alert', 'CAMERA BOOKMARK SAVED');
+  }
+
+  // SC1 (RoR-style): beacon ping on the minimap — world marker + chirp so allies/you can mark a spot
+  cycleIdleWorker() {
+    const idle = this.units.filter(u => !u.dead && u.team === 0 && u.def.worker && u.state === 'idle' && !u.order);
+    if (!idle.length) { this.events.emit('hud:alert', 'NO IDLE WORKERS'); return; }
+    this._idleIdx = ((this._idleIdx || 0) + 1) % idle.length;
+    const u = idle[this._idleIdx];
+    this.selection.clear(); this.addToSelection(u);
+    this.cameras.main.centerOn(u.x, u.y);
+    this.audio?.orderPing?.();
+  }
+
+  placeBeacon(x, y) {
+    this.beacon = { x, y, t: this.gameTime };
+    this.audio?.orderPing?.();
+    this.audio?.bark?.('Marked.', 1.2, 1.15);
+    // world-space pulsing marker
+    const m = this.add.circle(x, y, 10, 0x9fffff, 0.25).setStrokeStyle(2, 0x9fffff, 0.95).setDepth(509);
+    this.tweens.add({ targets: m, scale: 3.2, alpha: 0, duration: 900, onComplete: () => m.destroy() });
+    const m2 = this.add.circle(x, y, 4, 0x9fffff, 0.9).setDepth(509);
+    this.tweens.add({ targets: m2, alpha: 0, delay: 4000, duration: 1000, onComplete: () => m2.destroy() });
+    this.events.emit('hud:alert', 'BEACON PLACED');
   }
 
   restoreBookmark() {
@@ -2180,6 +2423,8 @@ export class BattleScene extends Phaser.Scene {
 
     // SC1 spider mines + scanner cooldown + temp reveal expiry
     this.updateSpiderMines(dt);
+    this.updateCrates(dt);
+    this.updateCritters(dt);
     if (this._scanCd > 0) this._scanCd -= dt;
     if (this._tempReveals?.length) {
       this._tempReveals = this._tempReveals.filter(rv => {
@@ -2208,6 +2453,14 @@ export class BattleScene extends Phaser.Scene {
     const combatNow = this.units.some(u => !u.dead && u.team === 0 && u.target && !u.target.dead) || this.units.some(u => !u.dead && u.team === 1 && Math.abs(u.x - cam.midPoint.x) < 400);
     this.audio?.setCombat(combatNow);
     this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + dt * (5 + this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker).length * 0.25));
+    // SC1 power-up crate surge: +1 armor to all own combat units while active
+    if (this.powerSurgeUntil && this.gameTime < this.powerSurgeUntil && !this._surgeApplied) {
+      this._surgeApplied = true;
+      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor += 1; u.sprite.setTint(0xfff3c4); }
+    } else if (this._surgeApplied && this.gameTime >= this.powerSurgeUntil) {
+      this._surgeApplied = false;
+      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor = Math.max(0, u.bonusArmor - 1); if (!u.burrowed && !u.cloaked) u.sprite.clearTint(); }
+    }
     this._recTimer -= dt;
     if (this._recTimer <= 0) {
       this._recTimer = 1;
@@ -2607,6 +2860,12 @@ export class BattleScene extends Phaser.Scene {
 
   aiProfileFallback() {
     return { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
+  }
+
+  // SC1 targeting rules: respect def.targets (air-only units never auto-acquire ground and vice versa)
+  acquireFor(unit, range) {
+    const t = unit.def.targets || 'both';
+    return this.findNearestEnemy(unit.x, unit.y, range, t === 'air' ? true : undefined, t === 'air' ? false : t === 'ground' ? true : undefined);
   }
 
   findNearestEnemy(x, y, range, forAir, forGround) {

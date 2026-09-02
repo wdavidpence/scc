@@ -43,12 +43,13 @@ require('fs').mkdirSync(OUT, { recursive: true });
     g.units.filter(u => u.team === 0 && u.def.worker).forEach((u, i) => { u.setPos(mid.x - 24 + (i % 2) * 48, mid.y - 16 + ((i / 2) | 0) * 32); });
   });
   await page.waitForTimeout(200);
-  const pts = await page.evaluate(() => {
+  let pts = await page.evaluate(() => {
     const g = window.__SCC2.scene.getScene('Battle'); const c = g.cameras.main;
     return g.units.filter(u => u.team === 0).map(u => ({ sx: (u.x - c.worldView.x) * c.zoom, sy: (u.y - c.worldView.y) * c.zoom }));
   });
+  if (!pts.length) { console.log('NO_UNITS_AT_LOAD — waiting for spawn'); await page.waitForTimeout(5000); pts = await page.evaluate(() => { const g = window.__SCC2.scene.getScene('Battle'); const c = g.cameras.main; return g.units.filter(u => u.team === 0).map(u => ({ sx: (u.x - c.worldView.x) * c.zoom, sy: (u.y - c.worldView.y) * c.zoom })); }); }
   const xs = pts.map(p => p.sx), ys = pts.map(p => p.sy);
-  await page.mouse.move(Math.min(...xs) - 18, Math.min(...ys) - 18);
+  await page.mouse.move(Math.max(2, Math.min(...xs) - 18), Math.max(2, Math.min(...ys) - 18));
   await page.mouse.down();
   await page.mouse.move(Math.max(...xs) + 18, Math.max(...ys) + 18, { steps: 6 });
   await page.mouse.up();

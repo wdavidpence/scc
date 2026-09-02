@@ -161,7 +161,7 @@ export class Unit {
       return;
     }
     const range = this.def.range * TILE * mult;
-    const foe = this.world.findNearestEnemy(this.x, this.y, range, this.flying, !this.flying);
+    const foe = this.world.acquireFor(this, range);
     if (foe) {
       this.setOrder({ type: 'attackTarget', target: foe });
     }
@@ -278,7 +278,7 @@ export class Unit {
     }
     if (this.state === 'attackMove') {
       const range = this.def.range * TILE * 1.5;
-      const foe = this.world.findNearestEnemy(this.x, this.y, range, this.flying, !this.flying);
+      const foe = this.world.acquireFor(this, range);
       if (foe) this.setOrder({ type: 'attackTarget', target: foe });
     }
   }
@@ -293,7 +293,7 @@ export class Unit {
   updatePatrol(dt) {
     const pts = this.patrolPoints;
     if (!pts || pts.length < 2) { this.state = 'idle'; this.order = null; return; }
-    const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 1.4, this.flying, !this.flying);
+    const foe = this.world.acquireFor(this, this.def.range * TILE * 1.4);
     if (foe && this.def.damage > 0) { this._patrolResume = pts; this.setOrder({ type: 'attackTarget', target: foe }); return; }
     const tgt = pts[this._patrolIdx = (this._patrolIdx ?? 0)] || pts[0];
     if (!this.path.length || this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(tgt.x, tgt.y); }
@@ -423,7 +423,7 @@ export class Unit {
     const target = this.target;
     if (!target || target.dead) {
       // acquire next
-      const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 2, this.flying, !this.flying);
+      const foe = this.world.acquireFor(this, this.def.range * TILE * 2);
       if (foe) { this.target = foe; return; }
       if (this._patrolResume && this.def.patrol) { const pts = this._patrolResume; this._patrolResume = null; this.patrolPoints = pts; this.order = { type: 'patrol' }; this.state = 'patrol'; return; }
       if (this.state !== 'attackMove') { this.order = null; this.state = 'idle'; }
@@ -489,6 +489,19 @@ export class Unit {
 
   fireAt(target) {
     if (this.cloaked) { this.cloaked = false; this.sprite.setAlpha(1); this._uncloakT = 2; }
+    // SC1 dark archon feedback: drain target energy, 1 dmg per missing point
+    if (this.def.feedback && target && !target.dead && target.maxEnergy > 0 && this.energy >= 45) {
+      this.energy -= 45;
+      const drained = Math.max(0, target.maxEnergy - target.energy);
+      target.energy = target.maxEnergy;
+      target.takeDamage(Math.max(5, drained), this);
+      if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+        const g = this.world.add.text(target.x, target.y - 18, 'FEEDBACK', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#c9a0ff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(75);
+        this.world.tweens.add({ targets: g, y: target.y - 30, alpha: 0, duration: 700, onComplete: () => g.destroy() });
+      }
+      this.world.audio?.psiCast?.();
+      return;
+    }
     const dmg = effectiveDamage(this, target);
     // SC1: unit-level veterancy damage aura
     const lvl = this.level || 0;
@@ -758,10 +771,19 @@ export class Unit {
         this.world.tweens.add({ targets: d, x: this.x + (Math.random() * 40 - 20), y: this.y + (Math.random() * 40 - 20) + 10, alpha: 0, duration: 420, onComplete: () => d.destroy() });
       }
     }
-    // persistent scorch decal
-    const decal = this.world.add.image(this.x, this.y, 'scorch');
-    decal.setDepth(6).setAlpha(0.55).setScale(this.def.size === 'large' ? 1.3 : 0.7);
-    this.world.tweens.add({ targets: decal, alpha: 0.18, duration: 12000 });
+    // SC1: persistent gore decal per race under the corpse
+    const goreKey = `gore-${this.def.race || 'terran'}`;
+    const gd = this.world.textures.exists(goreKey) ? goreKey : 'scorch';
+    const decal = this.world.add.image(this.x, this.y, gd);
+    decal.setDepth(6).setAlpha(0.6).setRotation(Math.random() * 6.28).setScale(this.def.size === 'large' ? 1.35 : 0.75);
+    this.world.tweens.add({ targets: decal, alpha: 0.22, duration: 30000 });
+    // fresh minor splats around the kill site
+    if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+      for (let i = 0; i < 3; i++) {
+        const s2 = this.world.add.image(this.x + (Math.random() * 30 - 15), this.y + (Math.random() * 30 - 15), gd).setDepth(5).setAlpha(0.4).setScale(0.35 + Math.random() * 0.3).setRotation(Math.random() * 6.28);
+        this.world.tweens.add({ targets: s2, alpha: 0.12, duration: 20000 });
+      }
+    }
     this.world.audio?.death(this.def.size === 'large');
     if (this.def.size === 'large') this.world.shake?.(4, 0.25);
     this.container.destroy();
@@ -879,6 +901,18 @@ export class Building {
     if (this.world.flash) this.world.flash(this.x, this.y, 0xff9c3c, s * 1.2, 420);
     this.world.tweens.add({ targets: boom, scale: s * 1.4, alpha: 0, duration: 500, onComplete: () => boom.destroy() });
     this.world.audio?.death(true);
+    // SC1: persistent burning rubble — smoldering ruin stays on the battlefield
+    const rub = this.world.add.image(this.x, this.y, 'rubble');
+    rub.setDepth(7).setScale(Math.max(1, s * 0.9)).setAlpha(0.95).setRotation(Math.random() * 6.28);
+    // flickering fires on the ruin
+    const fires = [];
+    const makeFire = () => {
+      const f = this.world.add.image(this.x + (Math.random() * s * 18 - s * 9), this.y + (Math.random() * s * 10 - s * 5), 'spark').setDepth(8).setScale(0.8 + Math.random());
+      this.world.tweens.add({ targets: f, alpha: 0, y: f.y - 14 - Math.random() * 10, scale: 0.2, duration: 500 + Math.random() * 400, onComplete: () => f.destroy() });
+    };
+    const fireIv = this.world.time.addEvent({ delay: 320, repeat: 24, callback: makeFire });
+    fires.push(fireIv);
+    this.world.tweens.add({ targets: rub, alpha: 0.55, duration: 25000 });
     this.container.destroy();
     this.world.nav.unblockBy(this.id);
   }

@@ -183,8 +183,36 @@ export const UNITS = {
     speed: 0.48, targets: 'ground', attackType: 'ignore', damage: 5, cooldown: 0.9, range: 8, attacksPerVolley: 4,
     supply: 6, minerals: 300, gas: 200, buildTime: 72, build: 'stargate', tech: 'fleetBeacon',
     sight: 11, interceptor: true, icon: 'carrier'
+  },
+  corsair: {
+    race: 'protoss', name: 'Corsair', hp: 80, shield: 80, armor: 1, size: 'medium', flying: true,
+    speed: 0.85, targets: 'air', attackType: 'normal', damage: 5, cooldown: 0.9, range: 7,
+    supply: 2, minerals: 150, gas: 150, buildTime: 48, build: 'stargate',
+    energy: 100, castAbility: 'maelstrom', sight: 10, icon: 'corsair'
+  },
+  darkArchon: {
+    race: 'protoss', name: 'Dark Archon', hp: 100, shield: 100, armor: 0, size: 'medium',
+    speed: 0.7, targets: 'both', attackType: 'normal', damage: 8, cooldown: 0.9, range: 6,
+    supply: 4, minerals: 0, gas: 0, buildTime: 0, build: null, summon: true,
+    energy: 150, feedback: true, castAbility: 'maelstrom', sight: 9, icon: 'darkArchon'
   }
 };
+
+export const SWARM_UNITS = {
+  guardian: {
+    race: 'zerg', name: 'Guardian', hp: 150, armor: 2, size: 'large', flying: true,
+    speed: 0.58, targets: 'ground', attackType: 'concussive', damage: 20, cooldown: 1.6, range: 9,
+    supply: 3, minerals: 0, gas: 0, buildTime: 0, build: null, morphFrom: 'mutalisk',
+    sight: 12, icon: 'guardian'
+  },
+  devourer: {
+    race: 'zerg', name: 'Devourer', hp: 150, armor: 2, size: 'large', flying: true,
+    speed: 0.58, targets: 'both', attackType: 'normal', damage: 6, cooldown: 1.4, range: 8,
+    supply: 3, minerals: 0, gas: 0, buildTime: 0, build: null, morphFrom: 'mutalisk',
+    energy: 100, castAbility: 'cloud', sight: 11, icon: 'devourer'
+  }
+};
+Object.assign(UNITS, SWARM_UNITS);
 
 export const BUILDINGS = {
   // ---------------- TERRAN ----------------
@@ -361,11 +389,11 @@ export const BUILDINGS = {
   council: {
     race: 'protoss', name: 'Council of the Templar', hp: 450, shield: 450, armor: 1, size: 'large',
     minerals: 150, gas: 100, buildTime: 48, w: 3, h: 3, sight: 6, power: true,
-    produces: ['highTemplar', 'darkTemplar'], requires: ['templarArchives', 'darkTemplar']
+    produces: ['highTemplar', 'darkTemplar'], tech: ['darkArchonMerge'], requires: ['templarArchives', 'darkTemplar']
   },
   stargate: {
     race: 'protoss', name: 'Stargate', hp: 450, shield: 450, armor: 1, size: 'large',
-    minerals: 150, gas: 150, buildTime: 64, w: 4, h: 3, sight: 6, power: true, produces: ['carrier'],
+    minerals: 150, gas: 150, buildTime: 64, w: 4, h: 3, sight: 6, power: true, produces: ['carrier', 'corsair'],
     requires: ['cyberneticsCore']
   },
   fleetBeacon: {
@@ -413,7 +441,10 @@ export const TECHS = {
   lair: { name: 'Lair', minerals: 150, gas: 100, time: 56, at: 'hatchery', morph: 'lair' },
   hive: { name: 'Hive', minerals: 200, gas: 150, time: 80, at: 'lair', morph: 'hive' },
   protossGroundWeapons1: { name: 'Singularity Charge', minerals: 100, gas: 100, time: 32, at: 'forge', affects: 'protossWeapons', level: 1 },
-  protossGroundPlating1: { name: 'Personal Cloaking Field', minerals: 100, gas: 100, time: 32, at: 'forge', affects: 'protossArmor', level: 1 }
+  protossGroundPlating1: { name: 'Personal Cloaking Field', minerals: 100, gas: 100, time: 32, at: 'forge', affects: 'protossArmor', level: 1 },
+  darkArchonMerge: { name: 'Convergence', minerals: 100, gas: 100, time: 30, at: 'council', unlocks: 'darkArchon' },
+  guardian: { name: 'Anima Spore', minerals: 50, gas: 100, time: 45, at: 'spire', unlocks: 'guardian', requiresTech: 'greaterSpire' },
+  devourer: { name: 'Devourer', minerals: 150, gas: 50, time: 45, at: 'spire', unlocks: 'devourer', requiresTech: 'greaterSpire' }
 };
 
 export const RACES = {
