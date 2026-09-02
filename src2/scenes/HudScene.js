@@ -29,6 +29,8 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:pause', (on) => { if (this.scene.isActive()) this.showPause(on); });
     battle.events.on('hud:cinema', (r) => { if (this.scene.isActive()) this.cinemaFlash(r); });
     battle.events.on('hud:radio', (msg, who) => { if (this.scene.isActive()) this.radio(msg, who); });
+    battle.events.on('hud:groups', (gs) => { if (this.scene.isActive()) this.renderGroupBadges(gs); });
+    battle.events.on('hud:groupcontents', (d) => { if (this.scene.isActive()) this.showGroupContents(d); });
     this.events.once('shutdown', () => {
       battle.events.off('hud:tick');
       battle.events.off('hud:selection');
@@ -37,6 +39,8 @@ export class HudScene extends Phaser.Scene {
       battle.events.off('hud:pause');
       battle.events.off('hud:cinema');
       battle.events.off('hud:radio');
+      battle.events.off('hud:groups');
+      battle.events.off('hud:groupcontents');
     });
 
     this.events.on('resize', () => this.handleResize());
@@ -342,8 +346,46 @@ export class HudScene extends Phaser.Scene {
   }
 
   showHelp() {
-    this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-3=groups  wheel=zoom').setAlpha(1);
+    this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-8=select group  Shift/Ctrl+1-8=assign  wheel=zoom').setAlpha(1);
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 3200, duration: 400 });
+  }
+
+  renderGroupBadges(gs) {
+    if (!this.groupBadgeG) this.groupBadgeG = this.add.graphics().setScrollFactor(0).setDepth(60);
+    if (!this.groupBadgeTxts) this.groupBadgeTxts = [];
+    this.groupBadgeG.clear();
+    this.groupBadgeTxts.forEach(t => t.destroy());
+    this.groupBadgeTxts = [];
+    if (!gs || !gs.length) return;
+    const battle = this.scene.get('Battle');
+    const size = 22, gap = 4;
+    const bx = this.W - this.mmSize - 8, by = this.mmY + this.mmSize + 6;
+    const sorted = [...gs].sort((a, b) => (+a.n) - (+b.n));
+    sorted.forEach((g, i) => {
+      const x = bx + i * (size + gap);
+      const alive = ((battle.controlGroups && battle.controlGroups[g.n]) || []).filter(u => !u.dead).length;
+      const empty = alive === 0;
+      this.groupBadgeG.fillStyle(0x0a1220, 0.92).fillRoundedRect(x, by, size, size, 4);
+      this.groupBadgeG.lineStyle(1, empty ? 0x3a3f48 : 0x6ee7a0, 1).strokeRoundedRect(x, by, size, size, 4);
+      this.groupBadgeTxts.push(this.add.text(x + size / 2, by + 7, String(g.n), { fontFamily: 'Menlo, monospace', fontSize: '11px', color: empty ? '#5a616c' : '#6ee7a0', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61));
+      this.groupBadgeTxts.push(this.add.text(x + size / 2, by + 17, empty ? '—' : String(alive), { fontFamily: 'Menlo, monospace', fontSize: '8px', color: '#8fa3c8' }).setOrigin(0.5).setScrollFactor(0).setDepth(61));
+    });
+  }
+
+  showGroupContents(d) {
+    if (!d || !d.tally) return;
+    if (this._grpPopT) this.tweens.killTweensOf(this._grpPopT);
+    if (this._grpPopG) this._grpPopG.destroy();
+    if (this._grpPopT) this._grpPopT.destroy();
+    const entries = Object.entries(d.tally);
+    const body = entries.map(([k, c]) => `${c}x ${k}`).join('   ');
+    const w = Math.max(120, body.length * 7.2 + 30);
+    const cx = this.W / 2, cy = this.H - 170;
+    this._grpPopG = this.add.graphics().setScrollFactor(0).setDepth(70);
+    this._grpPopG.fillStyle(0x000000, 0.78).fillRoundedRect(cx - w / 2, cy - 16, w, 34, 6);
+    this._grpPopG.lineStyle(1, 0xffd23f, 0.9).strokeRoundedRect(cx - w / 2, cy - 16, w, 34, 6);
+    this._grpPopT = this.add.text(cx, cy - 6, `[${d.n}]  ${body}`, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#ffd23f' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(71);
+    this.tweens.add({ targets: [this._grpPopG, this._grpPopT], alpha: 0, delay: 1500, duration: 400 });
   }
 
   showGameOver(r) {

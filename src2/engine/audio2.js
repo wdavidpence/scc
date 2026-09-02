@@ -275,6 +275,7 @@ export class Audio2 {
   buildBark() { const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
+  groupBark(n) { this.bark('Group ' + n, 0.95, 1.15); }
   ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Yamato, fire!'], zerg: ['The swarm descends!', 'Surge!'], protoss: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
 
   selectBark(unitKinds) {

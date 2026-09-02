@@ -1643,9 +1643,11 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-O', () => this.morphSelected('guardian'));
     this.input.keyboard.on('keydown-L', () => this.morphSelected('devourer'));
     this.input.keyboard.on('keydown-I', () => this.cycleIdleWorker());
-    window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key)) this.selectGroup(parseInt(e.key, 10)); });
-    window.addEventListener('keydown', (e) => { if (e.shiftKey && /^[1-8]$/.test(e.key)) this.ctrlHeldWas = false; });
-    window.addEventListener('keyup', (e) => { if (/^[1-8]$/.test(e.key) && e.shiftKey) this.assignGroup(parseInt(e.key, 10)); });
+    this._groupSelectH = (e) => { if (/^Digit[1-8]$/.test(e.code) && !e.shiftKey && !e.ctrlKey && !e.metaKey) this.selectGroup(parseInt(e.code.slice(5), 10)); };
+    this._groupAssignH = (e) => { if (/^Digit[1-8]$/.test(e.code) && (e.shiftKey || e.ctrlKey || e.metaKey)) this.assignGroup(parseInt(e.code.slice(5), 10)); };
+    window.addEventListener('keyup', this._groupSelectH);
+    window.addEventListener('keyup', this._groupAssignH);
+    this.events.once('shutdown', () => { window.removeEventListener('keyup', this._groupSelectH); window.removeEventListener('keyup', this._groupAssignH); });
 
     // events from HUD
     this.events.on('hud:command', (action) => this.handleHudCommand(action));
@@ -1911,6 +1913,7 @@ export class BattleScene extends Phaser.Scene {
     this.controlGroups[n] = [...this.selection];
     this.events.emit('hud:groups', Object.keys(this.controlGroups).map(k => ({ n: k, count: this.controlGroups[k].length })));
     this.audio?.select();
+    this.audio?.groupBark?.(n);
   }
 
   selectGroup(n) {
@@ -1918,6 +1921,10 @@ export class BattleScene extends Phaser.Scene {
     if (!grp.length) return;
     this.clearSelection();
     grp.forEach(u => this.addToSelection(u));
+    const tally = {};
+    for (const u of grp) tally[u.def.name] = (tally[u.def.name] || 0) + 1;
+    this.events.emit('hud:groupcontents', { n, tally });
+    this.audio?.groupBark?.(n);
     const cx = grp.reduce((a, u) => a + u.x, 0) / grp.length;
     const cy = grp.reduce((a, u) => a + u.y, 0) / grp.length;
     // double-tap: center camera on group (SC1 behavior)
