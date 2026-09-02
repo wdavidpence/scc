@@ -8,6 +8,7 @@ import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
+import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
 
 const MAP_W = 96;   // tiles
 const MAP_H = 96;
@@ -81,6 +82,7 @@ export class BattleScene extends Phaser.Scene {
     this.mods = this.applyMissionMods();
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
+    try { window.__SCC2.audio2 = this.audio; } catch (e) { /* noop */ }
     // start music after first user gesture (title already had one)
     const startMusicNow = () => this.audio.startMusic({ boss: !!(this.mods && this.mods.boss) });
     this.input.once('pointerdown', startMusicNow);
@@ -113,6 +115,11 @@ export class BattleScene extends Phaser.Scene {
     }
     // F10: tutorial mode
     if (this.tutorialMode) { this.players[0].minerals += 1200; this.players[0].gas += 800; this.startTutorial(); }
+    // SC-style in-mission radio chatter
+    if (!this.tutorialMode && this.mission) {
+      this.chatter = missionChatter(this.mission.n, this.enemyRace);
+      this._chatterIdx = 0;
+    }
   }
 
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
@@ -2075,6 +2082,13 @@ export class BattleScene extends Phaser.Scene {
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
     this.gameTime += dt;
 
+    // in-mission radio chatter beats
+    if (this.chatter && this._chatterIdx < this.chatter.length && this.gameTime >= this.chatter[this._chatterIdx].t) {
+      const c = this.chatter[this._chatterIdx++];
+      this.events.emit('hud:radio', c.msg, c.who);
+      this.audio?.bark(c.msg, 0.75, 1.0);
+    }
+
     // edge pan + WASD with SC-feel acceleration/inertia
     const cam = this.cameras.main;
     const maxPan = 620 / cam.zoom;
@@ -2583,6 +2597,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   showGameOverBoard(result) {
+    // attach debrief line for the game-over board
+    const n = this.campMissionNum();
+    this.debriefLine = (result === 'victory' ? DEBRIEFS_WIN[n] : DEBRIEFS_LOSE[n]) || null;
     this.events.emit('hud:gameover', result);
   }
 

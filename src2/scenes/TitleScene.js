@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import { RACES } from '../data/sc1.js';
 import { loadCampaign, saveCampaign, buyUpgrade, missionFor, UPKEEP, UPGRADES, MISSIONS } from '../engine/campaign.js';
+import { INTRO_SCRIPT, BRIEFS, TITLE_INTRO_SEEN_KEY } from '../engine/cutscenes.js';
 
 const RACE_ORDER = ['terran', 'zerg', 'protoss'];
 
@@ -64,6 +65,14 @@ export class TitleScene extends Phaser.Scene {
         this.replayBtn = rb;
       }
     } catch (e) { /* private mode */ }
+
+    // watch the opening transmission again
+    const ib = this.add.rectangle(this.W - 20, this.H - 28, 170, 30, 0x18202c, 1).setOrigin(1, 0.5).setStrokeStyle(1, 0x3f4a5a).setInteractive({ useHandCursor: true });
+    this.add.text(this.W - 105, this.H - 28, 'OPENING TRANSMISSION', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#bfe0ff' }).setOrigin(0.5);
+    ib.on('pointerdown', () => this.playIntro());
+
+    // cold-open intro on first-ever visit (skip once)
+    this.showIntroIfNew();
   }
 
   buildShop() {
@@ -145,10 +154,30 @@ export class TitleScene extends Phaser.Scene {
     const m = missionFor(this.camp);
     this.camp.credits = Math.max(0, this.camp.credits - UPKEEP);
     saveCampaign(this.camp);
-    this.scene.start('Battle', {
+    const args = {
       race: this.pick.race, enemyRace: this.pick.enemy, difficulty: this.pick.difficulty,
       mission: m, campaign: this.camp
-    });
+    };
+    const brief = BRIEFS[m.n];
+    if (brief) {
+      this.scene.pause('Title');
+      this.scene.launch('Cut', { script: brief.beats, title: `MISSION ${m.n} BRIEFING`, mode: 'brief', onComplete: () => this.scene.start('Battle', args) });
+    } else {
+      this.scene.start('Battle', args);
+    }
+  }
+
+  playIntro() {
+    try { localStorage.setItem(TITLE_INTRO_SEEN_KEY, '1'); } catch (e) { /* private mode */ }
+    // overlay: pause Title behind, stop Cut on close, resume Title
+    this.scene.pause('Title');
+    this.scene.launch('Cut', { script: INTRO_SCRIPT, title: 'OPENING TRANSMISSION', mode: 'intro', onComplete: () => this.scene.resume('Title') });
+  }
+
+  showIntroIfNew() {
+    let seen = false;
+    try { seen = !!localStorage.getItem(TITLE_INTRO_SEEN_KEY); } catch (e) { /* private mode */ }
+    if (!seen) this.time.delayedCall(80, () => this.playIntro());
   }
 
   launchTutorial() {

@@ -28,6 +28,7 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:alert', (msg) => { if (this.scene.isActive()) this.banner(msg); });
     battle.events.on('hud:pause', (on) => { if (this.scene.isActive()) this.showPause(on); });
     battle.events.on('hud:cinema', (r) => { if (this.scene.isActive()) this.cinemaFlash(r); });
+    battle.events.on('hud:radio', (msg, who) => { if (this.scene.isActive()) this.radio(msg, who); });
     this.events.once('shutdown', () => {
       battle.events.off('hud:tick');
       battle.events.off('hud:selection');
@@ -35,6 +36,7 @@ export class HudScene extends Phaser.Scene {
       battle.events.off('hud:alert');
       battle.events.off('hud:pause');
       battle.events.off('hud:cinema');
+      battle.events.off('hud:radio');
     });
 
     this.events.on('resize', () => this.handleResize());
@@ -272,6 +274,25 @@ export class HudScene extends Phaser.Scene {
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 2200, duration: 500 });
   }
 
+  // SC-style radio log: bottom-left message stack that fades after a few seconds
+  radio(msg, who) {
+    if (!this._radioLog) {
+      this._radioLog = this.add.container(12, this.H - 150).setScrollFactor(0).setDepth(30);
+    }
+    const label = who ? `[${String(who).toUpperCase()}] ` : '[COMMS] ';
+    const line = this.add.text(0, 0, label + msg, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#bfe0ff', backgroundColor: '#050a14d8', padding: { x: 8, y: 4 }, wordWrap: { width: Math.min(460, this.W - 40) } }).setOrigin(0, 1);
+    this._radioLog.add(line);
+    // re-stack newest at bottom
+    const kids = this._radioLog.list.filter(k => k.active !== false && typeof k.getHeight === 'function');
+    let y = 0;
+    for (let i = kids.length - 1; i >= 0; i--) {
+      const h = kids[i].getHeight();
+      kids[i].setPosition(0, y);
+      y -= h + 4;
+    }
+    this.tweens.add({ targets: line, alpha: 0, delay: 6000, duration: 800, onComplete: () => line.destroy() });
+  }
+
   showPause(on) {
     if (!this.pauseText) {
       this.pauseText = this.add.text(this.W / 2, this.H * 0.22, '', { fontFamily: 'Menlo, monospace', fontSize: '22px', color: '#bfe0ff', backgroundColor: '#050a14c0', padding: { x: 14, y: 8 } }).setOrigin(0.5).setScrollFactor(0);
@@ -319,7 +340,15 @@ export class HudScene extends Phaser.Scene {
       this.goStats.setPosition(this.W / 2, this.H / 2 - 14);
       this.goStats.setText(`TIME ${((b.gameTime / 60) | 0)}:${String(b.gameTime % 60 | 0).padStart(2, '0')}   APM ${apm}   ARMY ${b.units.filter(u => !u.dead && u.team === 0).length}${reward ? `   +${reward} CR` : ''}`);
     }
-    if (this.goSub) this.goSub.setPosition(this.W / 2, this.H / 2 + 14);
+    if (this.goSub) {
+      this.goSub.setPosition(this.W / 2, this.H / 2 + 14);
+      const dl = b.debriefLine || '';
+      const go = this.goSub;
+      const lay = () => { try { if (!go.active) return; go.setPosition(this.W / 2, this.H / 2 + 14); go.setText(dl).setColor(r === 'victory' ? '#9fe0b0' : '#e0a0a0'); } catch (e) { /* texture torn */ } };
+      try { go.setFontSize(13); go.setWordWrap({ width: Math.min(560, this.W - 80) }); go.setAlign('center'); } catch (e) { /* noop */ }
+      lay();
+      this.time.delayedCall(120, lay); // safe re-layout after any texture churn
+    }
     this.tweens.add({ targets: this.goPanel, alpha: 1, duration: 600 });
   }
 

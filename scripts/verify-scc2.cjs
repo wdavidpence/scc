@@ -15,9 +15,19 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}/01-title.png` });
 
-  // start mission (Terran vs Zerg, normal)
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(2000);
+  // enter battle through intro+briefing: deterministically skip any active cutscene
+  const skipCuts = async () => {
+    for (let i = 0; i < 6; i++) {
+      const closed = await page.evaluate(() => { try { localStorage.setItem('starfront.cutseen.v1', '1'); } catch (e) {} const sm = window.__SCC2?.scene; if (!sm) return false; const s = sm.getScene('Cut'); if (s && s.scene.isActive()) { s.close(); return true; } return false; });
+      if (!closed) return;
+      await page.waitForTimeout(800);
+    }
+  };
+  await skipCuts(); // clear any autoplay intro
+  await page.keyboard.press('Enter');            // launch mission -> briefing cutscene
+  await page.waitForTimeout(1200);
+  await skipCuts();                              // skip briefing, Battle starts
+  await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/02-base.png` });
 
   const snap = () => page.evaluate(() => {
