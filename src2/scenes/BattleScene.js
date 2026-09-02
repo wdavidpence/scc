@@ -804,7 +804,8 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.units) { if (!u.dead && !(u.team !== 0 && (u.cloaked || u.burrowed))) stamp(u.x, u.y, (u.burrowed && u.team !== 0) ? 1 : (u.burrowed ? 2 : u.def.sight)); }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
     const softCut = (ctx, cx, cy, r) => {
-      const rr = Math.max(1.5, r);
+      if (!isFinite(cx) || !isFinite(cy)) return;
+      const rr = Math.max(1.5, isFinite(r) ? r : 4);
       const grad = ctx.createRadialGradient(cx, cy, rr * 0.55, cx, cy, rr);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -1941,8 +1942,9 @@ export class BattleScene extends Phaser.Scene {
       if (u.kind === 'marine' && u.hp > 20) {
         u.speed *= 1.5; u.bonusDamage += 6;
         u.hp -= 10;
+        u._stimT = 14;
         this.tweens.add({ targets: u.sprite, alpha: 0.6, duration: 200, yoyo: true, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; u.sprite.setAlpha(u.burrowed ? 0.35 : (u.cloaked ? 0.22 : 1)); } });
-        this.tweens.add({ targets: u, duration: 14000, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; } });
+        this.tweens.add({ targets: u, duration: 14000, onComplete: () => { u.speed = u.def.speed * TILE * 5; u.bonusDamage -= 6; u._stimT = 0; } });
         this.audio?.attack('stim');
       }
     }
@@ -2073,6 +2075,34 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     this.events.emit('hud:alert', caught ? `MAELSTROM — ${caught} AIRBORNE GROUNDED` : 'MAELSTROM — NO TARGETS CAUGHT');
+  }
+
+  // SC1 lurker spike: line attack that detonates through ground units between lurker and target
+  lurkerStrike(lurker, target) {
+    const dmg = Math.max(1, effectiveDamage(lurker, target));
+    const dx = target.x - lurker.x, dy = target.y - lurker.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const nx = dx / dist, ny = dy / dist;
+    // spike visual: rising spines + fast line tracer
+    if (this.camNear && this.camNear(lurker.x, lurker.y)) {
+      for (let i = 0; i < 3; i++) {
+        const sp = this.add.rectangle(lurker.x + nx * (10 + i * 12), lurker.y + ny * (10 + i * 12), 3, 14 + i * 4, 0xc2385c).setDepth(56).setRotation(Math.atan2(ny, nx) + Math.PI / 2).setAlpha(0.9);
+        this.tweens.add({ targets: sp, scaleY: 0.2, alpha: 0, duration: 260, onComplete: () => sp.destroy() });
+      }
+      const line = this.add.rectangle(lurker.x + dx / 2, lurker.y + dy / 2, dist, 2.5, 0xff8fa3, 0.85).setDepth(55).setRotation(Math.atan2(dy, dx));
+      this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+      this.audio?.zap?.();
+    }
+    // splash along the detonation line (SC1: hits everything in the path)
+    const hitR = 14;
+    for (const u of this.units) {
+      if (u.dead || u.team === lurker.team || u.flying) continue;
+      const ux = u.x - lurker.x, uy = u.y - lurker.y;
+      const t = (ux * nx + uy * ny);
+      if (t < 0 || t > dist + hitR) continue;
+      const px = ux - nx * t, py = uy - ny * t;
+      if (Math.hypot(px, py) <= hitR) u.takeDamage(t === dist ? dmg : Math.round(dmg * 0.8), lurker);
+    }
   }
 
   castCausticCloud(caster, x, y) {
@@ -2713,6 +2743,8 @@ export class BattleScene extends Phaser.Scene {
       for (const b of eb) {
         if (b.queue.length >= 2) continue;
         let kinds = (b.def.produces || []).filter(k => b.canProduce(k));
+        // SC1: AI trains lurkers from its hydra den once the Lurker Aspect is researched
+        if (race === 'zerg' && b.buildId === 'hydraliskDen' && this.techResearched(team, 'lurkerEgg') && b.canProduce('lurker')) kinds.push('lurker');
         if (!kinds.length) continue;
         // score kinds: counter bias + supply efficiency
         kinds = kinds.sort((a, c) => {
@@ -2723,6 +2755,7 @@ export class BattleScene extends Phaser.Scene {
             if (d.targets === 'air' || d.targets === 'both') sc += s.counter.air * 2.2;
             if (d.targets !== 'air') sc += s.counter.ground * 1.4;
             if (d.splash) sc += s.counter.ground * 0.8; // anti-cluster
+            if (k === 'lurker') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + shred marine blobs
             return sc;
           };
           const effA = anti(a) / ((da.minerals + (da.gas || 0) * 1.4) + 1);

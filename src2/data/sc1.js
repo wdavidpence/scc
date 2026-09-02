@@ -137,7 +137,7 @@ export const UNITS = {
     race: 'zerg', name: 'Lurker', hp: 130, armor: 1, size: 'large',
     speed: 0.62, targets: 'ground', attackType: 'explosive', damage: 30, cooldown: 2.0, range: 6,
     supply: 2, minerals: 50, gas: 100, buildTime: 28, build: 'hydraliskDen', tech: 'lurkerEgg',
-    burrow: true, icon: 'lurker'
+    burrow: true, sight: 8, icon: 'lurker'
   },
 
   // ---------------- PROTOSS ----------------
@@ -306,7 +306,7 @@ export const BUILDINGS = {
   },
   hydraliskDen: {
     race: 'zerg', name: 'Hydralisk Den', hp: 300, armor: 1, size: 'large',
-    minerals: 100, gas: 50, creep: true, buildTime: 40, w: 3, h: 3, sight: 6, produces: ['hydralisk'],
+    minerals: 100, gas: 50, creep: true, buildTime: 40, w: 3, h: 3, sight: 6, produces: ['hydralisk', 'lurker'],
     tech: ['lurkerEgg']
   },
   spire: {

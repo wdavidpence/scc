@@ -90,6 +90,8 @@ export class Unit {
     this.path = [];
     this.pathIndex = 0;
     if (this.sieged && ['move', 'attackMove', 'attackTarget', 'patrol'].includes(order.type)) this.unsiege();
+    // SC1: any move-type order unburrows first
+    if (this.burrowed && ['move', 'attackMove', 'patrol', 'harvest', 'build', 'repair', 'loadUnit'].includes(order.type)) { this.burrowed = false; this.sprite.setAlpha(this.cloaked ? 0.22 : 1); this.container.setScale(1); }
     if (order.type === 'attackTarget') this.target = order.target;
     if (order.type === 'attackMove') this.attackMovePoint = order.point;
     if (order.type === 'move' || order.type === 'attackMove' || order.type === 'harvest' || order.type === 'build') this.target = null;
@@ -109,6 +111,16 @@ export class Unit {
     if (this.loaded || this.state === 'garrisoned' || this.state === 'loaded' || this.garrisonedIn) { this.moving = false; this.drawHp(); return; } // sits inside bunker/transport; container fires
     this.moving = false;
     if (this.stunTimer > 0) { this.stunTimer -= dt; this.drawHp(); this.moving = false; this.animate(dt); return; }
+    // SC1 lurker: while burrowed it roots and spines at ground foes in a detonation line
+    if (this.burrowed) {
+      this.moving = false;
+      this.attackTimer -= dt;
+      if (this.attackTimer <= 0 && this.def.burrowAttack !== false && this.def.targets !== 'air') {
+        const foe = this.world.acquireFor(this, (this.def.burrowRange || this.def.range + 4) * TILE);
+        if (foe) { this.attackTimer = this.def.cooldown; this.world.lurkerStrike(this, foe); }
+      }
+      this.animate(dt); this.drawHp(); return;
+    }
     // shield regen
     if (this.maxShield > 0) {
       if (this.shieldRegenDelay > 0) this.shieldRegenDelay -= dt;
@@ -793,6 +805,13 @@ export class Unit {
   drawHp() {
     const g = this.hpBar;
     g.clear();
+    // SC1 status icons above the unit: stun sparks, stim cross, burrow eye
+    if (this.stunTimer > 0) {
+      g.fillStyle(0xffe066, 0.95);
+      for (let i = 0; i < 3; i++) { const a = (this.world?.time?.now || Date.now()) / 180 + i * 2.09; g.fillCircle(Math.cos(a) * 9, -24 + Math.sin(a) * 3, 2); }
+    }
+    if (this.burrowed) { g.fillStyle(0xc2385c, 0.9); g.fillRoundedRect(-5, -20, 10, 3, 1.5); }
+    if (this._stimT > 0) { g.fillStyle(0xff5a5a, 0.9); g.fillRect(-1, -26, 2, 5); g.fillRect(-3, -24, 6, 2); }
     if (this.hp >= this.maxHp && this.shield >= this.maxShield) return;
     const w = 16;
     const ratio = Math.max(0, this.hp / this.maxHp);
