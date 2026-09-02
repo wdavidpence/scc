@@ -913,6 +913,7 @@ export class Building {
   die() {
     if (this.dead) return;
     this.dead = true;
+    if (this._rallyFlag) { this._rallyFlag.destroy(); this._rallyFlag = null; }
     this.world.onBuildingDeath(this);
     const s = Math.max(this.def.w, this.def.h);
     const boom = this.world.add.image(this.x, this.y, 'explosion');

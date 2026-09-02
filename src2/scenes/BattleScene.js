@@ -129,7 +129,9 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
   buildObjectives() {
-    const objs = [{ id: 'kill', text: 'Destroy the enemy base', done: false }];
+    const objs = [];
+    if (this.mods && this.mods.escape) objs.push({ id: 'escape', text: `EVACUATE at T-${this.mods.escape} — survive, then board the LZ`, done: false });
+    else objs.push({ id: 'kill', text: 'Destroy the enemy base', done: false });
     if (this.crates && this.crates.length) objs.push({ id: 'crates', text: 'OPTIONAL: recover 3 power-up crates (+300)', done: false });
     if (this.mission && this.mission.mods && this.mission.mods.holdTime) {
       objs.push({ id: 'hold', text: `HOLD THE LINE for ${this.mission.mods.holdTime}s`, done: false });
@@ -143,7 +145,61 @@ export class BattleScene extends Phaser.Scene {
   applyMissionMods() {
     const mods = { ...(this.mods || {}) };
     if (mods.holdTime) { this._holdUntil = this.mission.mods.holdTime; }
+    if (mods.escape) {
+      this._escapeAt = this.mission.mods.escape;
+      this._escapeBoarded = false;
+      // extraction LZ: far corner of the map from the player base
+      const base = this.buildings.find(b => b.team === 0 && b.def.primary);
+      const bx = (base && base.x < PXW / 2) ? PXW - TILE * 8 : TILE * 8;
+      const by = (base && base.y < PXH / 2) ? PXH - TILE * 8 : TILE * 8;
+      this._lz = { x: bx, y: by, r: TILE * 3 };
+      this._lzG = this.add.graphics().setDepth(45).setAlpha(0);
+      this._lzLabel = this.add.text(bx, by - TILE * 3.4, 'EXTRACTION', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#6ee7a0', fontStyle: 'bold', backgroundColor: '#00000099', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(46).setAlpha(0);
+    }
     return mods;
+  }
+
+  updateEscape(dt) {
+    if (!this._escapeAt || this.gameOver) return;
+    const remain = this._escapeAt - this.gameTime;
+    // pulsing LZ after T-30 warning, fully live at T-0
+    if (remain <= 30 && remain > 0 && !this._lzWarned) {
+      this._lzWarned = true;
+      this.events.emit('hud:alert', 'EVAC LZ ACTIVE — MOVE TO THE GREEN ZONE');
+      this.audio?.ultimateBark?.();
+    }
+    if (remain <= 0) {
+      // window open: pulse LZ + boarding check
+      if (!this._lzLive) {
+        this._lzLive = true;
+        this._lzG.setAlpha(1);
+        this._lzLabel.setText('BOARD NOW').setAlpha(1);
+        const obj = this.objectives.find(o => o.id === 'escape'); if (obj) { obj.text = 'BOARD THE EXTRACTION ZONE'; this.events.emit('hud:objectives', this.objectives); }
+        this.tweens.add({ targets: this._lzG, alpha: 0.4, duration: 500, yoyo: true, repeat: -1 });
+      }
+      const aboard = this.units.filter(u => !u.dead && u.team === 0 && !u.flying && Math.hypot(u.x - this._lz.x, u.y - this._lz.y) <= this._lz.r).length;
+      if (aboard >= 1 && !this._escapeBoarded) {
+        this._escapeBoarded = true;
+        const obj = this.objectives.find(o => o.id === 'escape'); if (obj) obj.done = true;
+        this.events.emit('hud:objectives', this.objectives);
+        this.endGame('victory');
+        return;
+      }
+      // grace period 20s, then glassing
+      if (this.gameTime > this._escapeAt + 20 && !this._escapeBoarded) {
+        this.events.emit('hud:alert', 'SECTOR GLASSED — ALL HANDS LOST');
+        this.endGame('defeat');
+      }
+    }
+    // draw LZ ring
+    if (this._lzG) {
+      const g = this._lzG; g.clear();
+      const live = this._lzLive;
+      g.lineStyle(3, live ? 0x6ee7a0 : 0x2b4a3a, live ? 0.9 : 0.4);
+      g.strokeCircle(this._lz.x, this._lz.y, this._lz.r);
+      g.fillStyle(live ? 0x6ee7a0 : 0x2b4a3a, live ? 0.12 : 0.05);
+      g.fillCircle(this._lz.x, this._lz.y, this._lz.r);
+    }
   }
 
   spawnMissionBoss() {
@@ -1285,7 +1341,9 @@ export class BattleScene extends Phaser.Scene {
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
     const info = RACE_INFO[this.players[b.team].race];
     if (b.buildId === info.primary) {
-      this.endGame(b.team === 0 ? 'defeat' : 'victory');
+      // escape missions are won by boarding the LZ, not by razing the enemy base
+      if (b.team === 0 || !(this.mods && this.mods.escape)) this.endGame(b.team === 0 ? 'defeat' : 'victory');
+      else this.events.emit('hud:alert', 'ENEMY BASE DOWN — HOLD FOR EVAC');
     }
     if (b.team === 1 && this.enemyRace) {
       this.aiState.lastSeenPlayerPos = { x: b.x, y: b.y };
@@ -1302,6 +1360,11 @@ export class BattleScene extends Phaser.Scene {
     if (b.def.creepGrowth) this.addCreep(b.team, b.x, b.y, b.def.creepRadius || 8);
     if (b.def.power) { b.powerRadius = TILE * 10; this.drawPowerField(b); }
     this.addBuildingLights(b);
+    // SC1: production buildings get a default rally flag just below the footprint
+    if (b.def.rally && b.team === 0 && !b.rallyPoint) {
+      b.rallyPoint = { x: b.x, y: b.y + (b.def.h * TILE) / 2 + TILE * 1.2 };
+      this.showRallyFlag(b);
+    }
     this.audio?.buildComplete();
   }
 
@@ -1397,8 +1460,8 @@ export class BattleScene extends Phaser.Scene {
     fl.add([pole, flag]);
     b._rallyFlag = fl;
     this.tweens.add({ targets: flag, scaleX: { from: 0.7, to: 1 }, duration: 200, yoyo: true, repeat: 1 });
-    // auto-clear flag after 6s
-    this.time.delayedCall(6000, () => { if (b._rallyFlag === fl) { fl.destroy(); b._rallyFlag = null; } });
+    // SC1: flag persists while the rally point stands; cleared with the building or a new rally
+    b._rallyFlagPoint = { x: b.rallyPoint.x, y: b.rallyPoint.y };
   }
 
   // ---------------- resources ----------------
@@ -2550,6 +2613,7 @@ export class BattleScene extends Phaser.Scene {
     // enemy AI
     this.updateAI(dt);
     this.updateThreats(dt);
+    this.updateEscape(dt);
     this.updateAmbient(dt);
     this.updateLighting(dt);
     this.updateTutorial();
@@ -2887,7 +2951,13 @@ export class BattleScene extends Phaser.Scene {
     // F9: cinematic beat — slow-mo + zoom on the kill shot
     const last = this.units.filter(u => !u.dead && u.team === (result === 'victory' ? 1 : 0))[0]
       || this.buildings.filter(b => !b.dead && b.team === (result === 'victory' ? 1 : 0))[0];
-    if (last) {
+    if (result === 'victory' && this._lz) {
+      // escape victory: pan across the field to the extraction LZ, then zoom
+      this.cameras.main.centerOn(PXW / 2, PXH / 2);
+      const pan = { x: PXW / 2, y: PXH / 2 };
+      this.tweens.add({ targets: pan, x: this._lz.x, y: this._lz.y, duration: 1400, ease: 'Sine.easeInOut', onUpdate: () => this.cameras.main.centerOn(pan.x, pan.y) });
+      this.tweens.add({ targets: this.cameras.main, zoom: this.cameras.main.zoom * 1.35, duration: 1400, ease: 'Sine.easeInOut' });
+    } else if (last) {
       this.cameras.main.centerOn(last.x, last.y);
       this.tweens.add({ targets: this.cameras.main, zoom: this.cameras.main.zoom * 1.5, duration: 900, ease: 'Sine.easeInOut' });
     }

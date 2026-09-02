@@ -12,7 +12,8 @@ export const MISSIONS = [
   { n: 7, name: 'JUDGEMENT', enemy: 'protoss', difficulty: 'hard', bonusMinerals: 0, brief: 'A Fleet assault led by a champion carrier. Their carriers will blot out the sun.', mods: { boss: 'carrier' } },
   { n: 8, name: 'FINAL RECKONING', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The Overmind itself focuses on you. Hold 3 minutes, then slay the Ultralisk champion.', mods: { holdTime: 180, boss: 'ultralisk' } },
   { n: 9, name: 'GHOST PROTOCOL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 100, brief: 'Ghost operatives and dropships hit your supply lines. Hold 3 minutes and purge the sector.', mods: { holdTime: 180, boss: 'ghost' } },
-  { n: 10, name: 'OVERMIND ASCENDANT', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: an Ultralisk champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'ultralisk' } }
+  { n: 10, name: 'OVERMIND ASCENDANT', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: an Ultralisk champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'ultralisk' } },
+  { n: 11, name: 'HELLFIRE EVAC', enemy: 'terran', difficulty: 'hard', bonusMinerals: 200, brief: 'The sector is being glassed at T-240. Survive until the evac shuttle reaches the green extraction zone, then get ANY units aboard.', mods: { escape: 240 } }
 ];
 
 export const UPGRADES = [

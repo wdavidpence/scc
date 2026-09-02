@@ -79,6 +79,61 @@ export class HudScene extends Phaser.Scene {
     b.events.on('hud:objectives', (objs) => { if (this.scene.isActive()) this.renderObjectives(objs); });
     this.events.once('shutdown', () => b.events.off('hud:objectives'));
     this.renderObjectives(b.objectives);
+    this.buildIntelPanel();
+  }
+
+  // ---------------- SC1-style intelligence panel (F10) ----------------
+  buildIntelPanel() {
+    this._intel = this.add.container(0, 0).setDepth(95).setScrollFactor(0).setVisible(false);
+    const dim = this.add.rectangle(0, 0, this.W, this.H, 0x000000, 0.72).setInteractive();
+    const W = Math.min(720, this.W - 60), H = Math.min(420, this.H - 90);
+    const cx = this.W / 2, cy = this.H / 2;
+    const bg = this.add.rectangle(cx, cy, W, H, 0x0c1420, 0.98).setStrokeStyle(2, 0xffd23f, 0.85);
+    const title = this.add.text(cx, cy - H / 2 + 22, 'S C C   I N T E L L I G E N C E', { fontFamily: 'Menlo, monospace', fontSize: '16px', color: '#ffd23f', fontStyle: 'bold' }).setOrigin(0.5);
+    const hint = this.add.text(cx, cy + H / 2 - 14, 'F10 / ESC to close', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#5f748f' }).setOrigin(0.5);
+    const colL = cx - W / 2 + 20, colR = cx + 24;
+    this._intelP = this.add.text(colL, cy - H / 2 + 46, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fe0b0', lineHeight: 18 }).setOrigin(0, 0);
+    this._intelE = this.add.text(colR, cy - H / 2 + 46, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#e0a0a0', lineHeight: 18 }).setOrigin(0, 0);
+    this._intelO = this.add.text(colL, cy + H / 2 - 96, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#9fb3d8', lineHeight: 16 }).setOrigin(0, 0);
+    this._intel.add([dim, bg, title, hint, this._intelP, this._intelE, this._intelO]);
+    this.input.keyboard.on('keydown-F10', () => { if (this.scene.isActive()) this.toggleIntel(); });
+    dim.on('pointerdown', () => this.toggleIntel(false));
+  }
+
+  toggleIntel(force) {
+    const on = force !== undefined ? force : !this._intel.visible;
+    this._intel.setVisible(on);
+    if (on) { this.refreshIntel(); if (!this._intelTimer) this._intelTimer = this.time.addEvent({ delay: 1000, loop: true, callback: () => { if (this._intel.visible) this.refreshIntel(); } }); }
+  }
+
+  refreshIntel() {
+    const b = this.scene.get('Battle');
+    if (!b || !b.players) return;
+    const fmt = (t) => {
+      const p = b.players[t];
+      const army = b.units.filter(u => !u.dead && u.team === t);
+      const blds = b.buildings.filter(x => !x.dead && x.team === t);
+      const byKind = {};
+      army.forEach(u => { byKind[u.kind] = (byKind[u.kind] || 0) + 1; });
+      const mix = Object.entries(byKind).sort((a, z) => z[1] - a[1]).slice(0, 6).map(([k, n]) => `${n}x ${(UNITS[k] && UNITS[k].name) || k}`).join('\n') || '      no contact';
+      const techs = Object.keys(p.techs || {}).filter(k => p.techs[k]);
+      const up = p.upgrades || {};
+      const lines = [];
+      lines.push(`${t === 0 ? 'YOUR FORCES' : 'HOSTILE FORCES'}`);
+      lines.push(`  minerals ${p.minerals | 0}    gas ${p.gas | 0}`);
+      lines.push(`  supply   ${p.supplyUsed}/${p.supplyCap}`);
+      lines.push(`  army ${army.length}    structures ${blds.length}    kills ${army.reduce((a, u) => a + (u.kills | 0), 0)}`);
+      lines.push(`  force mix:`);
+      lines.push(mix);
+      lines.push(`  upgrades: wpn ${up.weapons || 0}  armor ${up.armor || 0}`);
+      if (techs.length) lines.push(`  tech: ${techs.slice(0, 4).join(', ')}`);
+      return lines.join('\n');
+    };
+    this._intelP.setText(fmt(0));
+    this._intelE.setText(fmt(1));
+    const objs = (b.objectives || []).map(o => `${o.done ? '[DONE]' : '[  ]'} ${o.text}`);
+    const last = b.mission ? `MISSION ${b.mission.n}: ${b.mission.name}` : '';
+    this._intelO.setText(`OBJECTIVES\n${objs.join('\n')}\n${last}`);
   }
 
   renderObjectives(objs) {
@@ -433,6 +488,17 @@ export class HudScene extends Phaser.Scene {
       this.time.delayedCall(120, lay); // safe re-layout after any texture churn
     }
     this.tweens.add({ targets: this.goPanel, alpha: 1, duration: 600 });
+    // SC1 mission stamp: mission name slammed onto the debrief
+    if (!this._stamp && b.mission) {
+      const st = this.add.text(this.W / 2, this.H / 2 + 78, `MISSION ${b.mission.n} :: ${b.mission.name}`, { fontFamily: 'Menlo, monospace', fontSize: '15px', color: r === 'victory' ? '#ffd23f' : '#ff8a8a', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 10, y: 4 } }).setOrigin(0.5).setScrollFactor(0).setDepth(88);
+      st.setScale(2.4).setAlpha(0).setAngle(-4);
+      this.tweens.add({ targets: st, scale: 1, alpha: 1, angle: -2, duration: 260, ease: 'Back.easeOut' });
+      this._stamp = st;
+      this.events.once('shutdown', () => { if (this._stamp) { this._stamp.destroy(); this._stamp = null; } });
+    } else if (this._stamp && b.mission) {
+      this._stamp.setText(`MISSION ${b.mission.n} :: ${b.mission.name}`).setColor(r === 'victory' ? '#ffd23f' : '#ff8a8a').setScale(2.4).setAlpha(0);
+      this.tweens.add({ targets: this._stamp, scale: 1, alpha: 1, duration: 260, ease: 'Back.easeOut' });
+    }
   }
 
   refresh() {
