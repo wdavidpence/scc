@@ -133,20 +133,38 @@ export class HudScene extends Phaser.Scene {
     this.input.on('pointerdown', () => { if (!this.gameOver) return; this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title'); });
   }
 
-  mkBtn(x, y, w, h, label, cb) {
+  mkBtn(x, y, w, h, label, cb, tip) {
     const bg = this.add.rectangle(x, y, w, h, 0x18202c, 1).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     const brd = this.add.rectangle(x, y, w, h, 0x2f3a49, 0).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3f4a5a);
     const txt = this.add.text(x + w / 2, y + h / 2, label, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#dbe7ff', align: 'center' }).setOrigin(0.5).setScrollFactor(0);
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     hit.on('pointerdown', () => { this.flash(bg); cb(); });
-    hit.on('pointerover', () => bg.setFillStyle(0x22304a, 1));
-    hit.on('pointerout', () => bg.setFillStyle(0x18202c, 1));
+    hit.on('pointerover', () => { bg.setFillStyle(0x22304a, 1); if (tip) this.showTip(x + w / 2, y - 8, tip); });
+    hit.on('pointerout', () => { bg.setFillStyle(0x18202c, 1); this.hideTip(); });
     const btn = { bg, brd, txt, hit, x, y, w, h, label, setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); } };
     this.buttons.push(btn);
     return btn;
   }
 
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
+
+  // SC1-style hover tooltip (cost/time/requirements/kills)
+  showTip(cx, topY, lines) {
+    this.hideTip();
+    const arr = Array.isArray(lines) ? lines : [lines];
+    const w = Math.max(140, ...arr.map(l => l.length * 6.6)) + 16;
+    const h = arr.length * 14 + 10;
+    const x = Math.min(this.W - w - 6, Math.max(6, cx - w / 2));
+    const y = Math.max(6, topY - h);
+    this._tipG = this.add.graphics().setScrollFactor(0).setDepth(90);
+    this._tipG.fillStyle(0x05080f, 0.95).fillRoundedRect(x, y, w, h, 4);
+    this._tipG.lineStyle(1, 0xffd23f, 0.8).strokeRoundedRect(x, y, w, h, 4);
+    this._tipT = this.add.text(x + 8, y + 5, arr.join('\n'), { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#dbe7ff', lineHeight: 14 }).setScrollFactor(0).setDepth(91);
+  }
+  hideTip() {
+    if (this._tipG) { this._tipG.destroy(); this._tipG = null; }
+    if (this._tipT) { this._tipT.destroy(); this._tipT = null; }
+  }
 
   incomeTick(txt, col) {
     if (!this.tickTxt) return;
@@ -177,19 +195,21 @@ export class HudScene extends Phaser.Scene {
       const cols = Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84)));
       const rows = [];
       const prods = Object.keys(UNITS).filter(k => (def.produces?.includes(k) || UNITS[k].build === sel.buildId) && UNITS[k].race === race && !UNITS[k].summon);
-      for (const k of prods) rows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : '') });
+      for (const k of prods) rows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''),
+        tip: [UNITS[k].name, `Min ${UNITS[k].minerals}${UNITS[k].gas ? '  Gas ' + UNITS[k].gas : ''}  Sup ${UNITS[k].supply || 0}`, `HP ${UNITS[k].hp}${UNITS[k].shield ? ' +Sh ' + UNITS[k].shield : ''}  Arm ${UNITS[k].armor || 0}`, `Dmg ${UNITS[k].damage}  Rng ${UNITS[k].range}  Spd ${(UNITS[k].speed || 0).toFixed(2)}`, UNITS[k].tech ? (b.techResearched(0, UNITS[k].tech) ? '✓ ' + (TECHS[UNITS[k].tech]?.name || '') : 'REQUIRES: ' + (TECHS[UNITS[k].tech]?.name || UNITS[k].tech)) : null].filter(Boolean) });
       // research
       for (const tId of def.tech || []) {
         const t = TECHS[tId];
         if (!t) continue;
         if (t.requiresTech && !b.techResearched(0, t.requiresTech)) continue;
         const done = b.techResearched(0, tId);
-        rows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : '') });
+        rows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''),
+          tip: [t.name, `Min ${t.minerals}${t.gas ? '  Gas ' + t.gas : ''}  ${t.time}s`, t.unlocks ? ('Unlocks: ' + (UNITS[t.unlocks]?.name || t.unlocks)) : null, t.morph ? ('Morphs: ' + t.at) : null, done ? 'RESEARCHED' : null].filter(Boolean) });
       }
       rows.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
         const x = 12 + col * 82, y = this.H - 96 + row * 44;
-        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb);
+        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb, r.tip);
         i++;
       });
       if (def.rally === false && rows.length === 0) {

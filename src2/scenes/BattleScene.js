@@ -1595,6 +1595,32 @@ export class BattleScene extends Phaser.Scene {
 
     // pointer world pos tracked for unload-at-cursor
     this.input.on('pointermove', (p) => { this.pointerPos = { x: p.worldX, y: p.worldY }; });
+    // SC1 display-lifetime tooltip: hover a unit or building -> stat card
+    this._hoverTip = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#dbe7ff', backgroundColor: '#05080ff2', padding: { x: 7, y: 5 }, align: 'left' }).setOrigin(0, 1).setDepth(120).setScrollFactor(0).setAlpha(0);
+    let _hoverLast = 0;
+    this.input.on('pointermove', (p) => {
+      const now = performance.now();
+      if (now - _hoverLast < 80) return; // 12Hz probe, cheap
+      _hoverLast = now;
+      if (this.placing || this.scanMode || this.castMode || this.ultMode) { this._hoverTip.setAlpha(0); return; }
+      // don't compete with the command card or minimap panels
+      if ((p.y > this.scale.height - 100 && p.x < 350) || (p.x > this.scale.width - 200 && p.y < 250)) { this._hoverTip.setAlpha(0); return; }
+      const wx = p.worldX, wy = p.worldY;
+      let best = null, bd = 22;
+      for (const u of this.units) { if (u.dead || (u.cloaked && u.team !== 0) || (u.burrowed && u.team !== 0)) continue; const d = Math.hypot(u.x - wx, u.y - wy); if (d < bd) { bd = d; best = u; } }
+      let bb = null, bbd = 34;
+      if (!best) for (const bu of this.buildings) { if (bu.dead) continue; const d = Math.hypot(bu.x - wx, bu.y - wy); if (d < Math.max(bu.def.w, bu.def.h) * TILE * 0.6 && d < bbd) { bbd = d; bb = bu; } }
+      if (best) {
+        const u = best;
+        const lines = [`${u.def.name}  Lv${u.level || 0}`, `HP ${Math.ceil(u.hp)}/${u.maxHp}${u.maxShield ? '  Sh ' + Math.ceil(u.shield) : ''}`];
+        if ((u.kills || 0) > 0) lines.push(`Kills ${u.kills}`);
+        if (u.maxEnergy) lines.push(`Energy ${Math.round(u.energy)}/${u.maxEnergy}`);
+        if (u.burrowed) lines.push('BURROWED');
+        this._hoverTip.setText(lines).setPosition(p.x, p.y - 6).setAlpha(1);
+      } else if (bb) {
+        this._hoverTip.setText([bb.def.name, `HP ${Math.ceil(bb.hp)}/${bb.maxHp}${bb.maxShield ? '  Sh ' + Math.ceil(bb.shield) : ''}`, bb.built ? '' : `Building ${(Math.min(1, bb.constructionProgress / bb.buildTime) * 100 | 0)}%`].filter(Boolean)).setPosition(p.x, p.y - 6).setAlpha(1);
+      } else this._hoverTip.setAlpha(0);
+    });
     // pinch zoom (touch)
     let pinch0 = 0, zoom0 = 1.6;
     this.input.on('pointerdown', (p) => { if (this.input.manager.pointersActive?.size > 1) { /* noop */ } });
