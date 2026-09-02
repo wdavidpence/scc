@@ -2611,6 +2611,9 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // GAP 20: radio chatter triggers on zone entry
+    this.updateZoneChatter();
+
     // camera shake (decays)
     if (this._shake.t > 0) {
       this._shake.t -= dt;
@@ -3041,6 +3044,57 @@ export class BattleScene extends Phaser.Scene {
   }
 
   campMissionNum() { return (this.mission && this.mission.n) || 1; }
+
+  updateZoneChatter() {
+    if (this.gameOver) return;
+    this._chatter = this._chatter || {};
+    const mine = (x, y) => this.currentlyVisible(x, y);
+    // enemy base perimeter
+    if (!this._chatter.enemyBase) {
+      const eb = this.buildings.find(b => b.team === 1 && !b.dead && b.def.primary);
+      if (eb) {
+        const near = this.units.some(u => !u.dead && u.team === 0 && Math.hypot(u.x - eb.x, u.y - eb.y) < TILE * 13);
+        if (near && mine(eb.x, eb.y)) {
+          this._chatter.enemyBase = true;
+          this.events.emit('hud:radio', 'Sensors detect heavy structure ahead — that is their base. Proceed with caution.', 'SCV');
+        }
+      }
+    }
+    // geyser discovery: first worker near an unclaimed geyser
+    if (!this._chatter.geyser) {
+      for (const g of this.geysers) {
+        if (g.building) continue;
+        if (mine(g.x, g.y) && this.units.some(u => !u.dead && u.team === 0 && u.def.worker && Math.hypot(u.x - g.x, u.y - g.y) < TILE * 6)) {
+          this._chatter.geyser = true;
+          this.events.emit('hud:radio', 'Vespene geyser detected. We could tap that for gas.', 'SCV');
+          break;
+        }
+      }
+    }
+    // crate zone: worker near an unrecovered power-up crate (crates leave the array on claim)
+    if (!this._chatter.crate) {
+      for (const cr of (this.crates || [])) {
+        if (mine(cr.x, cr.y) && this.units.some(u => !u.dead && u.team === 0 && u.def.worker && Math.hypot(u.x - cr.x, u.y - cr.y) < TILE * 5)) {
+          this._chatter.crate = true;
+          this.events.emit('hud:radio', 'Unknown container on sensors — military signature. Ordering a pick-up.', 'SCV');
+          break;
+        }
+      }
+    }
+    // creep field warning: first player unit stepping onto enemy creep
+    if (!this._chatter.creep && this.creepCanvases && this.creepCanvases[1]) {
+      const cells = this.creepCanvases[1].cells;
+      const hit = this.units.some(u => {
+        if (u.dead || u.team !== 0 || u.flying) return false;
+        const tx = Math.floor(u.x / TILE), ty = Math.floor(u.y / TILE);
+        return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && cells[this.nav.idx(tx, ty)] === 1;
+      });
+      if (hit) {
+        this._chatter.creep = true;
+        this.events.emit('hud:radio', 'Organic mass underfoot... sensors are going haywire. Zerg creep.', 'MARINE');
+      }
+    }
+  }
 
   aiProfileFallback() {
     return { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };

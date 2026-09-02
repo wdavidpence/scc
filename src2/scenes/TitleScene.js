@@ -56,6 +56,7 @@ export class TitleScene extends Phaser.Scene {
     this.updateSubtitle();
 
     this.buildShop();
+    this.buildMissionSelect();
     this.replayBtn = null;
     try {
       if (localStorage.getItem('scc.replay.last')) {
@@ -178,6 +179,79 @@ export class TitleScene extends Phaser.Scene {
     let seen = false;
     try { seen = !!localStorage.getItem(TITLE_INTRO_SEEN_KEY); } catch (e) { /* private mode */ }
     if (!seen) this.time.delayedCall(80, () => this.playIntro());
+  }
+
+  buildMissionSelect() {
+    // GAP 4: episode-grouped mission select (M)
+    const EPISODES = [
+      { name: 'EPISODE I  ·  CLEANUP OPS', missions: [1, 2, 3, 4] },
+      { name: 'EPISODE II  ·  THE SWARM', missions: [5, 6, 7] },
+      { name: 'EPISODE III  ·  RECKONING', missions: [8, 9, 10, 11] },
+    ];
+    this._msel = null;
+    this.input.keyboard.on('keydown-M', () => { if (!this._msel) this.openMissionSelect(EPISODES); });
+    this.input.keyboard.on('keydown-ESC', () => this.closeMissionSelect());
+    const hint = this.add.text(this.W / 2, this.H - 10, 'M = mission select', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#54688a' }).setOrigin(0.5).setDepth(50);
+  }
+
+  openMissionSelect(EPISODES) {
+    if (this._msel) return;
+    const c = this._msel = this.add.container(0, 0).setDepth(120);
+    const dim = this.add.rectangle(0, 0, this.W, this.H, 0x000000, 0.78).setInteractive();
+    dim.on('pointerdown', () => this.closeMissionSelect());
+    c.add(dim);
+    const W = Math.min(680, this.W - 40), x = (this.W - W) / 2;
+    const bg = this.add.rectangle(this.W / 2, this.H / 2, W, 420, 0x0c1420, 0.98).setStrokeStyle(2, 0x4ea1ff);
+    c.add(bg);
+    c.add(this.add.text(this.W / 2, this.H / 2 - 192, 'CAMPAIGN  OP  SELECT', { fontFamily: 'Menlo, monospace', fontSize: '16px', color: '#ffd23f', fontStyle: 'bold' }).setOrigin(0.5));
+    let y = this.H / 2 - 158;
+    for (const ep of EPISODES) {
+      c.add(this.add.text(x + 16, y, ep.name, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#7d93ba', fontStyle: 'bold' }));
+      y += 22;
+      let xx = x + 16;
+      for (const n of ep.missions) {
+        const m = MISSIONS[n - 1];
+        const unlocked = n <= this.camp.mission;
+        const done = n < this.camp.mission;
+        const bw = 150, bh = 56;
+        if (xx + bw > x + W - 12) { xx = x + 16; y += bh + 8; }
+        const btn = this.add.rectangle(xx, y, bw, bh, unlocked ? 0x12304f : 0x0a0f18, 1).setStrokeStyle(1, unlocked ? (done ? 0x3a8f5f : 0x4ea1ff) : 0x2a3240).setInteractive({ useHandCursor: unlocked });
+        const lbl = this.add.text(xx + 6, y + 6, `${done ? '[DONE] ' : unlocked ? '' : '[LOCKED] '}${n}. ${m.name}`, { fontFamily: 'Menlo, monospace', fontSize: '10px', color: unlocked ? '#dbe7ff' : '#48566e', wordWrap: { width: bw - 12 } });
+        const sub = this.add.text(xx + 6, y + bh - 14, `${m.enemy.toUpperCase()} · ${m.difficulty.toUpperCase()}`, { fontFamily: 'Menlo, monospace', fontSize: '9px', color: unlocked ? '#8fa3c8' : '#3a4557' });
+        if (unlocked) {
+          btn.on('pointerdown', () => this.launchMissionNum(n));
+          btn.on('pointerover', () => btn.setFillStyle(0x1c5da8, 1));
+          btn.on('pointerout', () => btn.setFillStyle(0x12304f, 1));
+        }
+        c.add([btn, lbl, sub]);
+        xx += bw + 8;
+      }
+      y += 72;
+    }
+    c.add(this.add.text(this.W / 2, this.H / 2 + 190, 'cleared missions replay for half upkeep · M/Esc to close', { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#54688a' }).setOrigin(0.5));
+  }
+
+  closeMissionSelect() {
+    if (!this._msel) return;
+    this._msel.destroy();
+    this._msel = null;
+  }
+
+  launchMissionNum(n) {
+    this.closeMissionSelect();
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'zerg' ? 'terran' : 'zerg';
+    const m = MISSIONS[Math.min(MISSIONS.length, Math.max(1, n)) - 1];
+    const isReplay = n < this.camp.mission;
+    this.camp.credits = Math.max(0, this.camp.credits - (isReplay ? Math.ceil(UPKEEP / 2) : UPKEEP));
+    saveCampaign(this.camp);
+    const args = { race: this.pick.race, enemyRace: this.pick.enemy, difficulty: this.pick.difficulty, mission: m, campaign: this.camp };
+    const brief = BRIEFS[m.n];
+    if (brief) {
+      this.scene.pause('Title');
+      this.scene.launch('Cut', { script: brief.beats, title: `MISSION ${m.n} BRIEFING`, mode: 'brief', onComplete: () => this.scene.start('Battle', args) });
+    } else {
+      this.scene.start('Battle', args);
+    }
   }
 
   launchTutorial() {

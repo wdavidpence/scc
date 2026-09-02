@@ -233,12 +233,24 @@ export class HudScene extends Phaser.Scene {
     this.buttons = [];
   }
 
+  mkTab(x, y, w, label, active, cb) {
+    const bg = this.add.rectangle(x, y, w, 15, active ? 0x1c5da8 : 0x101822, 1).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
+    if (active) bg.setStrokeStyle(1, 0x4ea1ff); else bg.setStrokeStyle(1, 0x3f4a5a);
+    const txt = this.add.text(x + w / 2, y + 8, label, { fontFamily: 'Menlo, monospace', fontSize: '9px', color: active ? '#eaf4ff' : '#8fa3c8' }).setOrigin(0.5).setScrollFactor(0);
+    bg.on('pointerdown', cb);
+    bg.on('pointerover', () => { if (!active) bg.setFillStyle(0x22304a, 1); });
+    bg.on('pointerout', () => { bg.setFillStyle(active ? 0x1c5da8 : 0x101822, 1); });
+    this.buttons.push({ bg, brd: { destroy() {} }, txt, hit: { destroy() {} } });
+  }
+
   onSelection(info) {
     this.clearButtons();
     const b = this.scene.get('Battle');
     const race = this.race;
+    this._lastSelInfo = info;
     if (info?.building) {
       const sel = info.building;
+      if (this._cardTabBld !== sel.buildId) { this._cardTab = 'train'; this._cardTabBld = sel.buildId; }
       this.cardTitle.setText(sel.name.toUpperCase());
       this.selText.setText(`HP ${sel.hp}/${sel.maxHp}`);
       // SC1: live production queue readout above the card
@@ -249,18 +261,27 @@ export class HudScene extends Phaser.Scene {
       const def = BUILDINGS[sel.buildId];
       let i = 0;
       const cols = Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84)));
-      const rows = [];
+      const unitRows = [];
       const prods = Object.keys(UNITS).filter(k => (def.produces?.includes(k) || UNITS[k].build === sel.buildId) && UNITS[k].race === race && !UNITS[k].summon);
-      for (const k of prods) rows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''),
+      for (const k of prods) unitRows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''),
         tip: [UNITS[k].name, `Min ${UNITS[k].minerals}${UNITS[k].gas ? '  Gas ' + UNITS[k].gas : ''}  Sup ${UNITS[k].supply || 0}`, `HP ${UNITS[k].hp}${UNITS[k].shield ? ' +Sh ' + UNITS[k].shield : ''}  Arm ${UNITS[k].armor || 0}`, `Dmg ${UNITS[k].damage}  Rng ${UNITS[k].range}  Spd ${(UNITS[k].speed || 0).toFixed(2)}`, UNITS[k].tech ? (b.techResearched(0, UNITS[k].tech) ? '✓ ' + (TECHS[UNITS[k].tech]?.name || '') : 'REQUIRES: ' + (TECHS[UNITS[k].tech]?.name || UNITS[k].tech)) : null].filter(Boolean) });
       // research
+      const techRows = [];
       for (const tId of def.tech || []) {
         const t = TECHS[tId];
         if (!t) continue;
         if (t.requiresTech && !b.techResearched(0, t.requiresTech)) continue;
         const done = b.techResearched(0, tId);
-        rows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''),
+        techRows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''),
           tip: [t.name, `Min ${t.minerals}${t.gas ? '  Gas ' + t.gas : ''}  ${t.time}s`, t.unlocks ? ('Unlocks: ' + (UNITS[t.unlocks]?.name || t.unlocks)) : null, t.morph ? ('Morphs: ' + t.at) : null, done ? 'RESEARCHED' : null].filter(Boolean) });
+      }
+      // GAP 37: tabbed build menu — TRAIN / UPGRADE headers when a lab has both
+      let rows = unitRows;
+      if (unitRows.length && techRows.length) {
+        const tab = this._cardTab === 'up' ? 'up' : 'train';
+        this.mkTab(12, this.H - 118, 60, 'TRAIN', tab === 'train', () => { this._cardTab = 'train'; this.onSelection(this._lastSelInfo); });
+        this.mkTab(78, this.H - 118, 74, 'UPGRADE', tab === 'up', () => { this._cardTab = 'up'; this.onSelection(this._lastSelInfo); });
+        if (tab === 'up') rows = techRows;
       }
       rows.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
