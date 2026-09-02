@@ -12,6 +12,7 @@ export class HudScene extends Phaser.Scene {
     this.buttons = [];
     this.createTopBar();
     this.createMinimap();
+    this.createMsgLog();
     this.createCommandCard();
     this.createSelectionPanel();
     this.createAlert();
@@ -372,6 +373,41 @@ export class HudScene extends Phaser.Scene {
   banner(msg) {
     this.alert.setText(msg).setColor('#ffd23f').setAlpha(1);
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 2200, duration: 500 });
+    this.logMessage(msg);
+  }
+
+  // ---------------- SC1 message log (GAP 35) ----------------
+  createMsgLog() {
+    this._msgLog = [];
+    this._logText = this.add.text(this.W - 260, 44, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#b9c8e8', lineHeight: 14, align: 'right' }).setScrollFactor(0).setDepth(60).setAlpha(0.95);
+    this.events.once('shutdown', () => { this._msgLog = []; });
+  }
+
+  logMessage(msg) {
+    if (!this._logText) return;
+    const b = this.scene.get('Battle');
+    const t = b ? (b.gameTime | 0) : 0;
+    const mm = `0${Math.floor(t / 60)}`.slice(-2), ss = `0${t % 60}`.slice(-2);
+    this._msgLog.push({ line: `${mm}:${ss} ${msg}`, born: this.time.now });
+    if (this._msgLog.length > 7) this._msgLog.shift();
+    this.renderMsgLog();
+    if (!this._logFadeH) this._logFadeH = this.time.addEvent({ delay: 1000, loop: true, callback: () => this.fadeMsgLog() });
+  }
+
+  fadeMsgLog() {
+    if (!this._logText) return;
+    const now = this.time.now;
+    this._msgLog = this._msgLog.filter(m => now - m.born < 12000);
+    this.renderMsgLog();
+  }
+
+  renderMsgLog() {
+    if (!this._logText) return;
+    const now = this.time.now;
+    this._logText.setText(this._msgLog.map(m => {
+      const age = now - m.born;
+      return age > 10000 ? null : m.line;
+    }).filter(Boolean).join('\n'));
   }
 
   // SC-style radio log: bottom-left message stack that fades after a few seconds
@@ -509,6 +545,9 @@ export class HudScene extends Phaser.Scene {
     this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
     this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');
     const idle = p.idleWorkers || 0;
+    if (!this.idleTxt) {
+      this.idleTxt = this.add.text(this.W / 2 + 150, 14, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#ffd23f', backgroundColor: '#00000088', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(61);
+    }
     if (this.idleTxt) { this.idleTxt.setText(idle > 0 ? `IDLE ${idle} ▶` : '').setVisible(idle > 0); }
     // SC1 idle-worker cycle: click the IDLE chip to jump+select each idle worker in turn
     if (idle > 0 && !this._idleInteractive) {
@@ -610,6 +649,14 @@ export class HudScene extends Phaser.Scene {
         g.fillStyle(0x9fffff, k * 0.7);
         g.fillCircle(bx, by, 1.6);
       }
+    }
+    // GAP: minimap event pings (combat/contact/building loss) — expanding rings
+    for (const p of (b._eventPings || [])) {
+      const k = Math.max(0, 1 - (b.gameTime - p.t) / 4);
+      if (k <= 0) continue;
+      const px = this.mmX + p.x * s, py = this.mmY + p.y * s;
+      g.lineStyle(1.5, p.color, k * 0.9);
+      g.strokeCircle(px, py, 2 + (1 - k) * (p.big ? 14 : 8));
     }
     // SC1 power-up crates on minimap (only where visible)
     for (const cr of (b.crates || [])) {

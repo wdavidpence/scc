@@ -824,6 +824,9 @@ export class BattleScene extends Phaser.Scene {
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
     this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.72);
     this.seen = new Uint8Array(MAP_W * MAP_H);
+    this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
+    this._eventPings = []; // minimap event pings {x,y,t,color,big}
+    this.autoMine = true; // GAP 65 mining automation toggle (J)
     this.visCanvas = document.createElement('canvas');
     this.visCanvas.width = MAP_W; this.visCanvas.height = MAP_H;
     this.visCtx = this.visCanvas.getContext('2d');
@@ -843,15 +846,25 @@ export class BattleScene extends Phaser.Scene {
       if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx, ty, 1, 1); }
     }
     // explored => dim gray (seen), currently visible => transparent in vis layer
-    visCtx.fillStyle = 'rgba(108,116,134,1)';
-    visCtx.fillRect(0, 0, MAP_W, MAP_H);
+    // SC1 gradual intel: freshly-explored tiles start bright, stale intel darkens over ~40s
+    for (let ty = 0; ty < MAP_H; ty++) {
+      for (let tx = 0; tx < MAP_W; tx++) {
+        const i = tx + ty * MAP_W;
+        if (!this.seen[i]) continue;
+        const ls = this.lastSeen[i] || 0;
+        const age = Math.max(0, this.gameTime - ls);
+        const a = Math.min(1, 0.25 + (age / 40) * 0.75);
+        visCtx.fillStyle = `rgba(108,116,134,${a.toFixed(2)})`;
+        visCtx.fillRect(tx, ty, 1, 1);
+      }
+    }
     const stamp = (cx, cy, r, layer) => {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (dx * dx + dy * dy > r * r) continue;
           const tx = Math.round(cx / TILE + dx), ty = Math.round(cy / TILE + dy);
           if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
-          if (layer === 'seen') this.seen[this.nav.idx(tx, ty)] = 1;
+          if (layer === 'seen') { this.seen[this.nav.idx(tx, ty)] = 1; this.lastSeen[this.nav.idx(tx, ty)] = this.gameTime; }
         }
       }
     };
@@ -1302,6 +1315,23 @@ export class BattleScene extends Phaser.Scene {
     return best;
   }
 
+  addEventPing(x, y, color, big) {
+    this._eventPings.push({ x, y, t: this.gameTime, color: color || 0xff5c5c, big: !!big });
+    if (this._eventPings.length > 12) this._eventPings.shift();
+  }
+
+  toggleAutoMine() {
+    this.autoMine = !this.autoMine;
+    this.events.emit('hud:alert', this.autoMine ? 'MINING AUTOMATION: ON' : 'MINING AUTOMATION: OFF');
+    this.audio?.[this.autoMine ? 'objective' : 'error']?.();
+    if (!this.autoMine) {
+      // park idle miners; working ones finish their current cycle
+      for (const u of this.units) { if (!u.dead && u.team === 0 && u.def.worker && (!u.order || u.order.type === 'harvest' || u.order.type === 'returnCargo')) { if (u.order?.type !== 'returnCargo') { u.order = null; u.state = 'idle'; } } }
+    } else {
+      for (const u of this.units) { if (!u.dead && u.team === 0 && u.def.worker && !u.order) u.setOrder({ type: 'harvest' }); }
+    }
+  }
+
   onUnitDeath(u) {
     const p = this.players[u.team];
     p.supplyUsed -= u.def.supply || 0;
@@ -1309,6 +1339,8 @@ export class BattleScene extends Phaser.Scene {
     this.units = this.units.filter(x => x !== u);
     this.selection.delete(u);
     this.harvestTargetReset(u);
+    // minimap event ping on combat deaths
+    if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
     // F1: kill feedback — shake + credit + ultimate energy
     if (u.isBoss) {
       this.shake(10, 0.6);
@@ -1337,6 +1369,7 @@ export class BattleScene extends Phaser.Scene {
   onBuildingDeath(b) {
     this.buildings = this.buildings.filter(x => x !== b);
     this.shake(b.def.primary ? 12 : 7, 0.5);
+    if (!this.gameOver) this.addEventPing(b.x, b.y, b.team === 0 ? 0xff5c5c : 0xffb04a, !!b.def.primary);
     if (this.selectedBuilding === b) this.selectedBuilding = null;
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
     const info = RACE_INFO[this.players[b.team].race];
@@ -1723,6 +1756,8 @@ export class BattleScene extends Phaser.Scene {
       if (this.selection.size) { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } this.audio?.orderPing?.(); }
     });
     this.input.keyboard.on('keydown-T', () => this.armScan());
+    // GAP 65: mining automation toggle
+    this.input.keyboard.on('keydown-J', () => this.toggleAutoMine());
     this.input.keyboard.on('keydown-P', () => this.armPatrol());
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
     this.input.keyboard.on('keydown-F', () => this.stimSelected());
@@ -2562,6 +2597,19 @@ export class BattleScene extends Phaser.Scene {
     // fog update throttled
     this.fogTimer -= dt;
     if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); }
+
+    // GAP: first-contact detection — first enemy seen on sensors
+    if (!this._contacted && !this.gameOver) {
+      for (const u of this.units) {
+        if (u.dead || u.team === 0 || u.cloaked || u.burrowed) continue;
+        if (this.currentlyVisible(u.x, u.y)) {
+          this._contacted = true;
+          this.events.emit('hud:radio', 'We have contact! Hostile units on sensors.', 'SCV');
+          this.addEventPing(u.x, u.y, 0xff5c5c, true);
+          break;
+        }
+      }
+    }
 
     // camera shake (decays)
     if (this._shake.t > 0) {
