@@ -255,17 +255,31 @@ export class Unit {
     }
   }
 
-  // per-frame procedural animation: walk bob + idle breathing + attack recoil
+  // per-frame procedural animation: walk bob + leg-frame cycle + idle breathing + attack recoil
   animate(dt) {
     this.animT += dt;
-    const rotKinds = ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath'];
+    const rotKinds = ['wraith', 'battlecruiser', 'carrier', 'overlord']; // pure rotation vehicles: no squash, no leg frames
     if (this.moving) {
       const bob = Math.sin(this.animT * 12) * 1.4;
       this.sprite.setY(bob);
       if (!(this.def.flying || this.def.size === 'large' || rotKinds.includes(this.kind))) this.sprite.setRotation(Math.sin(this.animT * 12) * 0.06);
+      // swap leg frames for a real walk cycle
+      if (!this._noWalkFrames && !this.def.flying && !rotKinds.includes(this.kind)) {
+        const fr = Math.floor(this.animT * 8) % 3;
+        if (fr !== this._walkFr) {
+          const key = `u-${this.def.icon}-t${this.team > 2 ? 2 : this.team}-w${fr}`;
+          if (this.world.textures.exists(key)) { this.sprite.setTexture(key); this._walkFr = fr; }
+          else this._noWalkFrames = true;
+        }
+      }
     } else {
       this.sprite.setY(Math.sin(this.animT * 2.4) * 0.5);
       if (!(this.def.flying || this.def.size === 'large' || rotKinds.includes(this.kind))) this.sprite.setRotation(0);
+      if (this._walkFr !== undefined && this._walkFr !== -1) {
+        const base = `u-${this.def.icon}-t${this.team > 2 ? 2 : this.team}`;
+        if (this.world.textures.exists(base)) this.sprite.setTexture(base);
+        this._walkFr = -1;
+      }
     }
   }
 
@@ -988,7 +1002,15 @@ export class Building {
 
   update(dt) {
     if (this.dead) return;
-    // construction work by queued workers is handled in worker updateBuild
+    // AAA: structures breathe — zerg organic pulse, protoss crystal throb
+    if (this.built && this.def.race === 'zerg') {
+      this._breathT = (this._breathT || Math.random() * 6.28) + dt * 1.6;
+      const s = 1 + Math.sin(this._breathT) * 0.012;
+      this.sprite.setScale(s, 1 + Math.sin(this._breathT + 1) * 0.018);
+    } else if (this.built && this.def.race === 'protoss' && (this.buildId === 'pylon' || this.buildId === 'nexus' || this.buildId === 'cyberneticsCore')) {
+      const p = 0.85 + Math.sin((this.world?.time?.now || 0) / 700 + this.id) * 0.15;
+      this.sprite.setAlpha(p);
+    }
     // shield regen
     if (this.maxShield > 0 && this.shield < this.maxShield && this.built) {
       this.shield = Math.min(this.maxShield, this.shield + dt * 3);
@@ -1009,6 +1031,19 @@ export class Building {
     // defense structure
     if (this.def.defense && this.built) {
       this.attackTimer -= dt;
+      // AAA: turret barrel swivels to track the nearest threat
+      const d0 = this.def.defense;
+      const track = this.world.findNearestEnemy(this.x, this.y, d0.range * TILE * 1.15, d0.targets === 'air' ? true : undefined, d0.targets === 'air' ? false : d0.targets === 'ground' ? true : undefined);
+      if (track) {
+        const want = Math.atan2(track.y - this.y, track.x - this.x);
+        this._turretA = this._turretA === undefined ? want : this._turretA + Math.atan2(Math.sin(want - this._turretA), Math.cos(want - this._turretA)) * Math.min(1, 5 * dt);
+        if (!this._barrel) {
+          this._barrel = this.world.add.rectangle(0, 0, 14, 3, this.team === 0 ? 0x9fc8ff : 0xffb066, 0.95).setDepth(21);
+          this.container.add(this._barrel);
+        }
+        this._barrel.rotation = this._turretA;
+        this._barrel.x = Math.cos(this._turretA) * 7; this._barrel.y = Math.sin(this._turretA) * 7 - 4;
+      }
       if (this.attackTimer <= 0) {
         const d = this.def.defense;
         const range = d.range * TILE;

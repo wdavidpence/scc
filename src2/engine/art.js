@@ -415,8 +415,22 @@ function createUnitTextures(scene) {
       const raw = document.createElement('canvas'); raw.width = 20; raw.height = 20;
       fn(raw.getContext('2d'), col);
       const finished = finishSprite(raw, raceOf[kind] || 'terran', col);
-      if (scene.textures.exists(`u-${kind}-t${team}`)) continue;
-      scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
+      if (!scene.textures.exists(`u-${kind}-t${team}`)) scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
+      // AAA: walk-cycle frames — cut the FINISHED sprite halves and offset them (finishSprite re-centers raw, so cutting raw would cancel the shift)
+      if (kind === 'scv' || kind === 'drone' || kind === 'probe' || kind === 'overlord' || kind === 'bc' || kind === 'carrier' || kind === 'guardian' || kind === 'devourer') continue; // wheeled/hovering/flying: no leg cycle
+      const FH = finished.height;
+      for (let fr = 0; fr < 3; fr++) {
+        if (scene.textures.exists(`u-${kind}-t${team}-w${fr}`)) continue;
+        const frC = document.createElement('canvas'); frC.width = FH; frC.height = FH;
+        const fctx = frC.getContext('2d');
+        fctx.imageSmoothingEnabled = false;
+        const dx = fr === 1 ? 0 : (fr === 0 ? 1 : -1);
+        const bob = fr === 2 ? -1 : 0;
+        const mid = Math.round(FH * 0.62);
+        fctx.drawImage(finished, 0, 0, FH, mid, 0, bob, FH, mid);
+        fctx.drawImage(finished, 0, mid, FH, FH - mid, dx, mid, FH, FH - mid);
+        scene.textures.addCanvas(`u-${kind}-t${team}-w${fr}`, frC);
+      }
     }
   }
 }
