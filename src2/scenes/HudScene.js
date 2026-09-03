@@ -32,6 +32,7 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:radio', (msg, who) => { if (this.scene.isActive()) this.radio(msg, who); });
     battle.events.on('hud:groups', (gs) => { if (this.scene.isActive()) this.renderGroupBadges(gs); });
     battle.events.on('hud:groupcontents', (d) => { if (this.scene.isActive()) this.showGroupContents(d); });
+    battle.events.on('hud:activeTeam', (t) => { if (this.scene.isActive()) this.showActiveTeam(t); });
     this.events.once('shutdown', () => {
       battle.events.off('hud:tick');
       battle.events.off('hud:selection');
@@ -84,6 +85,15 @@ export class HudScene extends Phaser.Scene {
     this.buildTechTreePanel();
   }
 
+  showActiveTeam(t) {
+    const col = t === 0 ? '#6ee7a0' : '#ff8a5c';
+    if (!this._teamBadge) {
+      this._teamBadge = this.add.text(this.W / 2, 54, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', fontWeight: 'bold', color: col, backgroundColor: '#000000cc', padding: { x: 10, y: 4 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(97);
+    }
+    this._teamBadge.setText(`▶ COMMANDER ${String.fromCharCode(65 + t)} · TAB TO SWITCH`).setColor(col).setAlpha(1);
+    this.tweens.add({ targets: this._teamBadge, alpha: 0.55, duration: 500, yoyo: true, repeat: 3 });
+  }
+
   // ---------------- AAA tech tree browser (F11) ----------------
   buildTechTreePanel() {
     this._tech = this.add.container(0, 0).setDepth(96).setScrollFactor(0).setVisible(false);
@@ -119,7 +129,7 @@ export class HudScene extends Phaser.Scene {
 
   techMatchesRace(techId, b) {
     const t = TECHS[techId];
-    const race = b?.race || 'terran';
+    const race = b?.hotseat ? (b.players[b.activeTeam ?? 0]?.race || 'terran') : (b?.race || 'terran');
     const raceTech = {
       terran: ['terranInfantryWeapons', 'terranInfantryArmor', 'vehiclePlating', 'radar', 'controlTower', 'caduceusReactor', 'combatMedics', 'machineShop'],
       zerg: ['zergMeleeAttacks', 'zergCarapace', 'lurkerEgg', 'chitinousPlating', 'greaterSpire', 'lair', 'hive', 'guardian', 'devourer'],
@@ -138,9 +148,10 @@ export class HudScene extends Phaser.Scene {
   techRowClick(row) {
     if (row.disabled) return;
     const b = this.scene.get('Battle');
+    const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
     // find a built building that hosts this tech and queue it there
     const t = TECHS[row.id];
-    const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === 0 && (bb.buildId === t.at || bb.morphedTo === t.at));
+    const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === T && (bb.buildId === t.at || bb.morphedTo === t.at));
     if (!host) { this.scene.get('Battle').events.emit('hud:alert', `REQUIRES ${t.at ? (BUILDINGS[t.at]?.name || t.at).toUpperCase() : 'HOST'} ON FIELD`); return; }
     host.queueResearch(row.id) ? this.scene.get('Battle').events.emit('hud:alert', `RESEARCH QUEUED: ${t.name.toUpperCase()}`) : this.audio?.error?.();
     this.refreshTechTree();
@@ -150,13 +161,14 @@ export class HudScene extends Phaser.Scene {
     if (!this._tech || !this._tech.visible) return;
     const b = this.scene.get('Battle');
     if (!b || !b.players) return;
-    const p = b.players[0];
+    const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
+    const p = b.players[T];
     const status = {};
     for (const r of this._techRows || []) {
       const t = TECHS[r.id];
       const done = p.techs[r.id];
-      const queued = b.buildings.some(bb => !bb.dead && (bb.queue || []).some(q => q.research === r.id));
-      const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === 0 && (bb.buildId === t.at || bb.morphedTo === t.at));
+      const queued = b.buildings.some(bb => !bb.dead && bb.team === T && (bb.queue || []).some(q => q.research === r.id));
+      const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === T && (bb.buildId === t.at || bb.morphedTo === t.at));
       const prereqOk = !t.requiresTech || p.techs[t.requiresTech];
       const afford = p.minerals >= t.minerals && p.gas >= (t.gas || 0);
       r.disabled = done || queued || !host || !prereqOk;
@@ -332,7 +344,8 @@ export class HudScene extends Phaser.Scene {
   onSelection(info) {
     this.clearButtons();
     const b = this.scene.get('Battle');
-    const race = this.race;
+    const T = b?.hotseat ? (b.activeTeam ?? 0) : 0;
+    const race = b?.hotseat ? b.players[T].race : this.race;
     this._lastSelInfo = info;
     if (info?.building) {
       const sel = info.building;
@@ -647,7 +660,8 @@ export class HudScene extends Phaser.Scene {
   refresh() {
     const b = this.scene.get('Battle');
     if (!b || !b.players) return;
-    const p = b.players[0];
+    const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
+    const p = b.players[T];
     const capped = p.supplyUsed >= p.supplyCap;
     this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
     this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');

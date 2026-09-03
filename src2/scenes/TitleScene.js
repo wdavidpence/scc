@@ -51,8 +51,16 @@ export class TitleScene extends Phaser.Scene {
     tut.on('pointerout', () => tut.setFillStyle(0x101822, 1));
     this.input.keyboard.on('keydown-T', () => this.launchTutorial());
 
-    this.add.text(this.W / 2, top + 296, `maintenance -${UPKEEP}cr on launch · ENTER=mission · T=tutorial`, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#54688a' }).setOrigin(0.5);
-    this.subtitle = this.add.text(this.W / 2, top + 318, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8' }).setOrigin(0.5);
+    // AAA hot-seat 1v1: two commanders, one machine
+    const hs = this.add.rectangle(this.W / 2, top + 300, 220, 36, 0x181022, 1).setStrokeStyle(1, 0xa06bff).setInteractive({ useHandCursor: true });
+    this.add.text(this.W / 2, top + 300, 'HOT-SEAT 1v1 (H)', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#c9a0ff' }).setOrigin(0.5);
+    hs.on('pointerdown', () => this.launchHotseat());
+    hs.on('pointerover', () => hs.setFillStyle(0x33145a, 1));
+    hs.on('pointerout', () => hs.setFillStyle(0x181022, 1));
+    this.input.keyboard.on('keydown-H', () => this.launchHotseat());
+
+    this.add.text(this.W / 2, top + 334, `maintenance -${UPKEEP}cr on launch · ENTER=mission · T=tutorial · H=hot-seat`, { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#54688a' }).setOrigin(0.5);
+    this.subtitle = this.add.text(this.W / 2, top + 354, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8' }).setOrigin(0.5);
     this.updateSubtitle();
 
     this.buildShop();
@@ -260,6 +268,15 @@ export class TitleScene extends Phaser.Scene {
       race: this.pick.race === 'zerg' ? 'zerg' : 'terran', enemyRace: 'zerg', difficulty: 'easy',
       mission: { n: 0, name: 'TRAINING GROUNDS', enemy: 'zerg', difficulty: 'easy', bonusMinerals: 0, brief: 'Learn the ropes. Follow the marker.' },
       tutorial: true
+    });
+  }
+
+  launchHotseat() {
+    // AAA hot-seat 1v1 — no campaign credits, both sides human
+    const p2 = this.pick.race === 'zerg' ? 'terran' : this.pick.race === 'terran' ? 'protoss' : 'terran';
+    this.scene.start('Battle', {
+      race: this.pick.race, enemyRace: p2, difficulty: 'normal', hotseat: true,
+      mission: { n: 0, name: 'DUEL — COMMANDER A vs B', enemy: p2, difficulty: 'normal', bonusMinerals: 0, brief: 'Two commanders. One map. TAB passes the controls.' }
     });
   }
 }

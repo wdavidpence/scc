@@ -425,7 +425,7 @@ export class Unit {
         this.interceptors.push({ g, a: (i / 4) * Math.PI * 2, cd: 0, dive: null });
       }
     }
-    const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 1.3, false, true);
+    const foe = this.world.findNearestEnemy(this.x, this.y, this.def.range * TILE * 1.3, false, true, this.team);
     for (const it of this.interceptors) {
       it.cd -= dt;
       if (it.dive && (it.dive.dead || Math.hypot(it.x - it.dive.x, it.y - it.dive.y) < 8)) {
@@ -540,7 +540,7 @@ export class Unit {
     for (let v = 0; v < volley; v++) {
       const off = volley > 1 ? { x: (Math.random() * 24 - 12), y: (Math.random() * 16 - 8) } : { x: 0, y: 0 };
       const from = { x: this.x + off.x * 0.2, y: this.y + off.y * 0.2 };
-      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying) || target);
+      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying, this.team) || target);
       this.world.spawnProjectile({
         from,
         target: tgt,
@@ -1033,7 +1033,7 @@ export class Building {
       this.attackTimer -= dt;
       // AAA: turret barrel swivels to track the nearest threat
       const d0 = this.def.defense;
-      const track = this.world.findNearestEnemy(this.x, this.y, d0.range * TILE * 1.15, d0.targets === 'air' ? true : undefined, d0.targets === 'air' ? false : d0.targets === 'ground' ? true : undefined);
+      const track = this.world.findNearestEnemy(this.x, this.y, d0.range * TILE * 1.15, d0.targets === 'air' ? true : undefined, d0.targets === 'air' ? false : d0.targets === 'ground' ? true : undefined, this.team);
       if (track) {
         const want = Math.atan2(track.y - this.y, track.x - this.x);
         this._turretA = this._turretA === undefined ? want : this._turretA + Math.atan2(Math.sin(want - this._turretA), Math.cos(want - this._turretA)) * Math.min(1, 5 * dt);
@@ -1047,7 +1047,7 @@ export class Building {
       if (this.attackTimer <= 0) {
         const d = this.def.defense;
         const range = d.range * TILE;
-        const foe = this.world.findNearestEnemy(this.x, this.y, range, d.targets === 'air' ? true : undefined, d.targets === 'air' ? false : d.targets === 'ground' ? true : undefined);
+        const foe = this.world.findNearestEnemy(this.x, this.y, range, d.targets === 'air' ? true : undefined, d.targets === 'air' ? false : d.targets === 'ground' ? true : undefined, this.team);
         if (foe) {
           const mult = SIZE_MULT[d.attackType]?.[foe.def.size] ?? 1;
           this.world.spawnProjectile({ from: { x: this.x, y: this.y - 10 }, target: foe, damage: Math.max(1, Math.round(d.damage * mult - foe.def.armor)), splash: 0, team: this.team, kind: 'turret', speed: 700 });
@@ -1061,7 +1061,7 @@ export class Building {
       this.attackTimer -= dt;
       if (this.attackTimer <= 0) {
         const gd = this.def.garrisonDefense;
-        const foe = this.world.findNearestEnemy(this.x, this.y, gd.range * TILE, false, true);
+        const foe = this.world.findNearestEnemy(this.x, this.y, gd.range * TILE, false, true, this.team);
         if (foe) {
           for (const g of this.garrison.slice(0, 4)) {
             if (g.dead) continue;

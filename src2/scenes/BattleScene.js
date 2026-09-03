@@ -56,8 +56,11 @@ export class BattleScene extends Phaser.Scene {
     this.powerSurgeUntil = 0;     // power-up crate buff
     this.players = [
       { team: 0, race: this.race, minerals: 300, gas: 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } },
-      { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : 400, gas: this.difficulty === 'hard' ? 200 : 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
+      { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : (data.hotseat ? 300 : 400), gas: this.difficulty === 'hard' ? 200 : (data.hotseat ? 150 : 150), supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
     ];
+    // AAA hot-seat 1v1: two humans share the keyboard; F8 swaps control
+    this.hotseat = !!data.hotseat;
+    this.activeTeam = 0;
     // mission bonuses + persistent campaign upgrades (F4/F10)
     if (this.mission && this.mission.bonusMinerals) this.players[0].minerals += this.mission.bonusMinerals;
     if (this.campaign) {
@@ -110,7 +113,11 @@ export class BattleScene extends Phaser.Scene {
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
     // AAA: the enemy commander introduces themselves over open comms
-    if (this.aiCommander) {
+    if (this.hotseat) {
+      this.events.emit('hud:radio', 'Two commanders. One map. F8 to pass the controls.', 'HOT-SEAT');
+      this.events.emit('hud:activeTeam', 0);
+    }
+    if (this.aiCommander && !this.hotseat) {
       this.time.delayedCall(2200, () => {
         this.events.emit('hud:radio', this.aiCommander.radio, this.aiCommander.name.toUpperCase());
         this.audio.bark(this.aiCommander.radio, this.enemyRace === 'zerg' ? 0.55 : this.enemyRace === 'protoss' ? 1.25 : 0.7, 1.0);
@@ -903,7 +910,13 @@ export class BattleScene extends Phaser.Scene {
     };
     // visible: cut holes in fog (seen texture) & make vis layer transparent — soft radial edges
     // SC1: cloaked/burrowed hostiles contribute NO vision to the shared seen-map
-    for (const u of this.units) { if (!u.dead && !(u.team !== 0 && (u.cloaked || u.burrowed))) stamp(u.x, u.y, (u.burrowed && u.team !== 0) ? 1 : (u.burrowed ? 2 : u.def.sight)); }
+    for (const u of this.units) {
+      if (u.dead) continue;
+      // hot-seat: both commanders' units contribute vision (shared screen)
+      if (!this.hotseat && u.team !== 0 && (u.cloaked || u.burrowed)) continue;
+      if (this.hotseat && u.cloaked) continue;
+      stamp(u.x, u.y, (u.cloaked || u.burrowed) ? 1 : u.def.sight);
+    }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
     const softCut = (ctx, cx, cy, r) => {
       if (!isFinite(cx) || !isFinite(cy)) return;
@@ -936,10 +949,17 @@ export class BattleScene extends Phaser.Scene {
     return this.seen[this.nav.idx(tx, ty)] === 1 && this.currentlyVisible(x, y);
   }
 
+  // hot-seat: a point owned by the viewing commander's own team is always visible to them
+  visibleFor(x, y, team) {
+    if (this.hotseat && (this.activeTeam ?? 0) === team) return true;
+    return this.isVisible(x, y);
+  }
+
   currentlyVisible(x, y) {
+    const VT = this.hotseat ? (this.activeTeam ?? 0) : 0;
     for (const rv of (this._tempReveals || [])) { if (this.gameTime < rv.until && Math.hypot(x - rv.x, y - rv.y) < rv.r) return true; }
-    for (const u of this.units) { if (!u.dead && u.team === 0 && Math.hypot(u.x - x, u.y - y) < u.def.sight * TILE) return true; }
-    for (const b of this.buildings) { if (!b.dead && b.team === 0 && Math.hypot(b.x - x, b.y - y) < (b.def.sight || 5) * TILE) return true; }
+    for (const u of this.units) { if (!u.dead && u.team === VT && Math.hypot(x - u.x, y - u.y) < u.def.sight * TILE) return true; }
+    for (const b of this.buildings) { if (!b.dead && b.team === VT && Math.hypot(x - b.x, y - b.y) < (b.def.sight || 5) * TILE) return true; }
     return false;
   }
 
@@ -1738,10 +1758,11 @@ export class BattleScene extends Phaser.Scene {
       const wp0 = { x: p.worldX, y: p.worldY };
       // click select building?
       const b = this.buildingAt(wp0.x, wp0.y);
-      if (b && b.team === 0) {
+      if (b && b.team === (this.activeTeam ?? 0)) {
         this.selectBuilding(b);
         return;
       }
+      if (b && this.hotseat && b.team !== (this.activeTeam ?? 0)) { this.audio?.error(); this.events.emit('hud:alert', `NOT YOUR STRUCTURE — COMMANDER ${String.fromCharCode(65 + (this.activeTeam ?? 0))} ONLY`); return; }
       this.dragStart = wp0;
       this.dragMoved = false;
     });
@@ -1855,7 +1876,11 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-F', () => this.stimSelected());
     this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
-    this.input.keyboard.on('keydown-F8', () => this.restoreBookmark());
+    this.input.keyboard.on('keydown-F8', () => { if (this.hotseat) { this.switchActiveTeam(); return; } this.restoreBookmark(); });
+    if (this.hotseat) {
+      // AAA hot-seat: TAB passes controls to the other commander
+      this.input.keyboard.on('keydown-TAB', (e) => { if (e.preventDefault) e.preventDefault(); this.switchActiveTeam(); });
+    }
     this.input.keyboard.on('keydown-M', () => this.summonArchon(this.keys.SHIFT?.isDown ? 'darkArchon' : 'archon'));
     this.input.keyboard.on('keydown-O', () => this.morphSelected('guardian'));
     this.input.keyboard.on('keydown-L', () => this.morphSelected('devourer'));
@@ -1915,29 +1940,31 @@ export class BattleScene extends Phaser.Scene {
 
   clickSelect(x, y, additive) {
     const rad = 14;
+    const T = this.activeTeam ?? 0;
     let found = null, bd = rad;
     for (const u of this.units) {
-      if (u.team !== 0 || u.dead) continue;
+      if (u.team !== T || u.dead) continue;
       const d = Math.hypot(u.x - x, u.y - y);
       if (d < bd) { bd = d; found = u; }
     }
-    if (found) {
+      if (found) {
       if (!additive) this.clearSelection();
       this.addToSelection(found);
       this.audio?.select();
       this.audio?.selectBark([found.kind]);
     } else if (!additive) {
       const b = this.buildingAt(x, y);
-      if (b && b.team === 0) this.selectBuilding(b);
+      if (b && b.team === T) this.selectBuilding(b);
       else { this.clearSelection(); this.selectBuilding(null); this.audio?.deselect(); }
     }
   }
 
   boxSelect(rect, additive) {
     if (!additive) this.clearSelection();
+    const T = this.activeTeam ?? 0;
     let added = 0;
     for (const u of this.units) {
-      if (u.team !== 0 || u.dead) continue;
+      if (u.team !== T || u.dead) continue;
       if (u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h) {
         this.addToSelection(u); added++;
       }
@@ -2043,10 +2070,10 @@ export class BattleScene extends Phaser.Scene {
       const foe = this.enemyUnitAt(wp.x, wp.y);
       if (foe) { workers.forEach(w => w.setOrder({ type: 'attackTarget', target: foe })); return; }
       const b = this.buildingAt(wp.x, wp.y);
-      if (b && b.team === 0 && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; w.setOrder({ type: 'harvestGas' }); } }); this.audio?.move(); return; }
-      if (b && b.team === 0 && !b.built) { workers.forEach(w => w.setOrder({ type: 'build', building: b })); return; }
+      if (b && b.team === (this.activeTeam ?? 0) && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; w.setOrder({ type: 'harvestGas' }); } }); this.audio?.move(); return; }
+      if (b && b.team === (this.activeTeam ?? 0) && !b.built) { workers.forEach(w => w.setOrder({ type: 'build', building: b })); return; }
       // SC1 repair: own damaged completed structure
-      if (b && b.team === 0 && b.built && b.hp < b.maxHp) { workers.forEach(w => w.setOrder({ type: 'repair', repairTarget: b })); this.audio?.orderPing?.(); this.events.emit('hud:alert', 'SCVs REPAIRING'); return; }
+      if (b && b.team === (this.activeTeam ?? 0) && b.built && b.hp < b.maxHp) { workers.forEach(w => w.setOrder({ type: 'repair', repairTarget: b })); this.audio?.orderPing?.(); this.events.emit('hud:alert', 'SCVs REPAIRING'); return; }
       workers.forEach(w => w.issueMove(wp.x, wp.y, false));
       this.audio?.move();
       return;
@@ -2106,11 +2133,29 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  // ---------------- hot-seat team switch ----------------
+  switchActiveTeam() {
+    if (!this.hotseat || this.gameOver) return;
+    this.activeTeam = this.activeTeam === 0 ? 1 : 0;
+    this.clearSelection();
+    this.selectBuilding(null);
+    // turrets, radar detection nets, and creep growth stand down for the human side
+    this.events.emit('hud:activeTeam', this.activeTeam);
+    const label = 'COMMANDER ' + String.fromCharCode(65 + this.activeTeam);
+    this.events.emit('hud:alert', label + ' — CONTROLS YOUR FORCES');
+    this.audio?.select();
+    this.cameras.main.shake(80, 0.002);
+    // snap camera to this commander's primary base
+    const base = this.buildings.find(b => b.team === this.activeTeam && b.def.primary);
+    if (base) this.cameras.main.centerOn(base.x, base.y);
+  }
+
   enemyUnitAt(x, y) {
+    const T = this.activeTeam ?? 0;
     let best = null, bd = 18;
     for (const u of this.units) {
-      if (u.team === 0 || u.dead) continue;
-      if (!this.isVisible(u.x, u.y)) continue;
+      if (u.team === T || u.dead) continue;
+      if (!this.visibleFor(u.x, u.y, u.team)) continue;
       const d = Math.hypot(u.x - x, u.y - y);
       if (d < bd) { bd = d; best = u; }
     }
@@ -2118,9 +2163,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   allyUnitAt(x, y) {
+    const T = this.activeTeam ?? 0;
     let best = null, bd = 20;
     for (const u of this.units) {
-      if (u.team !== 0 || u.dead || u.loaded) continue;
+      if (u.team !== T || u.dead || u.loaded) continue;
       const d = Math.hypot(u.x - x, u.y - y);
       if (d < bd) { bd = d; best = u; }
     }
@@ -2128,16 +2174,18 @@ export class BattleScene extends Phaser.Scene {
   }
 
   allyBuildingAt(x, y) {
+    const T = this.activeTeam ?? 0;
     for (const b of this.buildings) {
-      if (b.team !== 0 || b.dead) continue;
+      if (b.team !== T || b.dead) continue;
       if (Math.abs(x - b.x) < (b.def.w * TILE) / 2 + 8 && Math.abs(y - b.y) < (b.def.h * TILE) / 2 + 8) return b;
     }
     return null;
   }
 
   enemyBuildingAt(x, y) {
+    const T = this.activeTeam ?? 0;
     for (const b of this.buildings) {
-      if (b.team === 0 || b.dead) continue;
+      if (b.team === T || b.dead) continue;
       if (!this.isVisible(b.x, b.y)) continue;
       if (Math.abs(x - b.x) < (b.def.w * TILE) / 2 && Math.abs(y - b.y) < (b.def.h * TILE) / 2) return b;
     }
@@ -2510,10 +2558,11 @@ export class BattleScene extends Phaser.Scene {
   startPlacing(buildId) {
     const def = BUILDINGS[buildId];
     if (!def) return;
-    if (!this.canAfford(0, def.minerals, def.gas)) { this.audio?.error(); return; }
-    const p = this.players[0];
-    const workers = [...this.selection].filter(u => u.def.worker);
-    if (this.race === 'terran' && workers.length === 0) { this.audio?.error(); return; }
+    const T = this.activeTeam ?? 0;
+    const race = this.players[T].race;
+    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.error(); return; }
+    const workers = [...this.selection].filter(u => u.def.worker && u.team === T);
+    if (race === 'terran' && workers.length === 0) { this.audio?.error(); return; }
     this.placing = { buildId };
     this.ghost = this.add.image(0, 0, this.ghostTexKey(buildId)).setDepth(501).setAlpha(0.5);
     this.ghostValid = this.add.graphics().setDepth(502);
@@ -2571,15 +2620,18 @@ export class BattleScene extends Phaser.Scene {
   tryPlace(x, y) {
     if (!this.isValid) { this.audio?.error(); return; }
     this.cmdCount++;
+    const T = this.activeTeam ?? 0;
     const def = BUILDINGS[this.placing.buildId];
-    if (!this.canAfford(0, def.minerals, def.gas)) { this.audio?.error(); this.cancelPlacing(); return; }
-    this.spend(0, def.minerals, def.gas);
-    const b = new Building(this, 0, this.placing.buildId, x, y, {});
+    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.error(); this.cancelPlacing(); return; }
+    this.spend(T, def.minerals, def.gas);
+    const b = new Building(this, T, this.placing.buildId, x, y, {});
     this.buildings.push(b);
-    if (this.race === 'terran') {
+    const race = this.players[T].race;
+    if (race === 'terran') {
       const workers = [...this.selection].filter(u => u.def.worker);
       workers.forEach(w => w.setOrder({ type: 'build', building: b }));
     }
+    if (race === 'protoss') { this.players[T].supplyCap = this.computeSupplyCap(T); }
     this.audio?.buildStart();
     this.cancelPlacing();
   }
@@ -2593,7 +2645,8 @@ export class BattleScene extends Phaser.Scene {
 
   queueFromHud(buildingId, kind) {
     this.cmdCount++;
-    const b = this.buildings.find(b => b.team === 0 && !b.dead && (b.buildId === buildingId || b.morphedTo === buildingId));
+    const T = this.activeTeam ?? 0;
+    const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId || b.morphedTo === buildingId));
     if (!b) { this.audio?.error(); return; }
     if (b.queueUnit(kind)) this.audio?.queue(); else this.audio?.error();
   }
@@ -2871,6 +2924,15 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- AI ----------------
   updateAI(dt) {
+    // hot-seat: the active team is human-controlled — that side's commander stands down
+    if (this.hotseat) {
+      const p = this.players[1];
+      const prof = this.aiProfile || this.aiProfileFallback();
+      p.minerals += dt * (this.hotseat ? 1.0 : prof.income);
+      const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'extractor' || b.buildId === 'assimilator' || b.buildId === 'refinery'));
+      p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
+      return;
+    }
     const s = this.aiState;
     const team = 1;
     const p = this.players[1];
@@ -3269,19 +3331,20 @@ export class BattleScene extends Phaser.Scene {
   // SC1 targeting rules: respect def.targets (air-only units never auto-acquire ground and vice versa)
   acquireFor(unit, range) {
     const t = unit.def.targets || 'both';
-    return this.findNearestEnemy(unit.x, unit.y, range, t === 'air' ? true : undefined, t === 'air' ? false : t === 'ground' ? true : undefined);
+    return this.findNearestEnemy(unit.x, unit.y, range, t === 'air' ? true : undefined, t === 'air' ? false : t === 'ground' ? true : undefined, unit.team);
   }
 
-  findNearestEnemy(x, y, range, forAir, forGround) {
+  findNearestEnemy(x, y, range, forAir, forGround, fromTeam) {
+    const home = fromTeam ?? 0;
     let best = null, bd = range;
     for (const u of this.units) {
       if (u.dead || u.team === undefined) continue;
-      if (u.team === (forAir === true ? 1 : 0) && forAir === undefined) { /* keep going */ }
-      const hostile = this.isHostileTeam(u.team);
+      const hostile = u.team !== home;
       if (!hostile) continue;
+      if (!this.visibleFor(u.x, u.y, home)) continue;
       if (forAir === false && u.flying) continue;
       if (forGround === false && !u.flying) continue;
-      const d = Math.hypot(u.x - x, u.y - y);
+      const d = Math.hypot(x - u.x, y - u.y);
       if (d < bd) { bd = d; best = u; }
     }
     return best;
