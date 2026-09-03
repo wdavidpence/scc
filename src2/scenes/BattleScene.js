@@ -9,6 +9,8 @@ import { createAllTextures } from '../engine/art.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
+import { pickCommander } from '../engine/commanders.js';
+import { Triggers } from '../engine/triggers.js';
 
 const MAP_W = 96;   // tiles
 const MAP_H = 96;
@@ -32,6 +34,12 @@ export class BattleScene extends Phaser.Scene {
       : data.difficulty === 'easy'
         ? { income: 0.4, armyCap: 8, threshold: 1.5, attackGap: 60, harassAt: 110, rushBuilds: [], rushAt: 1e9, workers: 8, flankSplit: 0.8 }
         : { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
+    // AAA: AI personality tiers — each difficulty rolls a NAMED commander doctrine
+    this.aiCommander = pickCommander(this.enemyRace || 'zerg', data.difficulty);
+    if (this.aiCommander) {
+      Object.assign(this.aiProfile, this.aiCommander.mods);
+      this.aiProfile.doctrine = this.aiCommander.id;
+    }
   }
 
   create() {
@@ -82,11 +90,26 @@ export class BattleScene extends Phaser.Scene {
     this.perks = {};             // F7 cosmetic meta perks
     this.ambient = null;         // F4 weather
     this.tut = null;             // F10 tutorial state
+    // AAA: AI personality — named commander doctrine rolled per race+difficulty
+    try {
+      this.aiCommander = pickCommander(this.enemyRace || 'zerg', this.difficulty);
+      if (this.aiCommander) {
+        Object.assign(this.aiProfile, this.aiCommander.mods);
+        this.aiProfile.doctrine = this.aiCommander.id;
+      }
+    } catch (e) { /* noop */ }
     // ---- mission objectives (F10) ----
     this.objectives = this.buildObjectives();
     this.mods = this.applyMissionMods();
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
+    // AAA: the enemy commander introduces themselves over open comms
+    if (this.aiCommander) {
+      this.time.delayedCall(2200, () => {
+        this.events.emit('hud:radio', this.aiCommander.radio, this.aiCommander.name.toUpperCase());
+        this.audio.bark(this.aiCommander.radio, this.enemyRace === 'zerg' ? 0.55 : this.enemyRace === 'protoss' ? 1.25 : 0.7, 1.0);
+      });
+    }
     try { window.__SCC2.audio2 = this.audio; } catch (e) { /* noop */ }
     // start music after first user gesture (title already had one)
     const startMusicNow = () => this.audio.startMusic({ boss: !!(this.mods && this.mods.boss) });
@@ -3020,7 +3043,10 @@ export class BattleScene extends Phaser.Scene {
             if (d.targets === 'air' || d.targets === 'both') sc += s.counter.air * 2.2;
             if (d.targets !== 'air') sc += s.counter.ground * 1.4;
             if (d.splash) sc += s.counter.ground * 0.8; // anti-cluster
-            if (k === 'lurker') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + shred marine blobs
+            if (k === 'lurker') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + marine blob shredder
+            // AAA: commander doctrine — preferred composition bias
+            if (prof.compBias && (k === prof.compBias || (prof.compBias === 'zergling' && k === 'zereling'))) sc += 60;
+            if (prof.lurkerEarly && k === 'lurker') sc += 80;
             return sc;
           };
           const effA = anti(a) / ((da.minerals + (da.gas || 0) * 1.4) + 1);
