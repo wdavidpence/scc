@@ -304,6 +304,7 @@ export class Audio2 {
   nukeLaunch() { this.tone(220, 0.5, 'sawtooth', 0.05, -150); this.noise(0.6, 0.06, 400); }
   nukeImpact() { this.noise(1.2, 0.16, 250); this.tone(60, 0.9, 'sawtooth', 0.08, -30); }
   psiCast() { this.tone(200, 0.4, 'sine', 0.05, 1400); }
+  brass() { this.tone(2600 + Math.random() * 900, 0.04, 'square', 0.012, -1400); }
   zap() { this.tone(1800 + Math.random() * 600, 0.07, 'sawtooth', 0.02, -1200); }
   orderPing() { this.tone(1050, 0.045, 'sine', 0.02); }
   objective() { const seq = [659, 830, 988]; seq.forEach((f, i) => setTimeout(() => this.tone(f, 0.15, 'triangle', 0.04), i * 120)); }

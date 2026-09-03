@@ -771,13 +771,17 @@ export class BattleScene extends Phaser.Scene {
     const gey = (x, y) => {
       const g = { x, y, gas: 2500, id: nextObjId(), workers: [] };
       this.geysers.push(g);
-      this.add.image(x, y, 'geyser').setDepth(15);
+      g.spr = this.add.image(x, y, 'geyser').setDepth(15);
     };
     gey(PXW * 0.22, PXH * 0.26);
     gey(PXW * 0.78, PXH * 0.74);
     gey(PXW * 0.5, PXH * 0.16);
     gey(PXW * 0.5, PXH * 0.84);
     this.geyserTiles = new Map();
+    // AAA: geysers remember their sprite + full gas for depletion visuals
+    for (const g of this.geysers) { g.full = g.gas; }
+    // mineral patches: remember full amount for shrink visuals
+    for (const m of this.minerals) { m.full = m.amount; }
 
     // SC1 power-up crates: scattered pickups, random payload on claim
     this.crates = [];
@@ -1103,32 +1107,74 @@ export class BattleScene extends Phaser.Scene {
     this.projectiles.push({ x: from.x, y: from.y, target, damage, splash, team, kind, speed, dead: false });
     const col = team === 0 ? '#bfe0ff' : '#ffc28a';
     if (kind === 'tank' || kind === 'turret') {
-      const g = this.add.graphics().setDepth(45);
-      g.lineStyle(2, team === 0 ? 0x9fc8ff : 0xffb066, 0.9);
-      g.lineBetween(from.x, from.y - 6, target.x, target.y);
-      this.tweens.add({ targets: g, alpha: 0, duration: 120, onComplete: () => g.destroy() });
-      this.applyHit(target, damage, splash);
+      // AAA: real arcing shell — flies, trails smoke, detonates on arrival
+      const ang = Math.atan2(target.y - (from.y - 6), target.x - from.x);
+      const sh = this.add.image(from.x, from.y - 6, 'shell').setDepth(45).setRotation(ang).setScale(kind === 'tank' ? 1.5 : 1);
+      sh._proj = { target, damage, splash, speed: speed || 900, team, attacker, shell: true, kind };
+      // muzzle blast: bright flash + smoke puff + recoil dust
+      const mz = this.add.image(from.x + Math.cos(ang) * 12, from.y - 6 + Math.sin(ang) * 12, 'spark').setDepth(56).setScale(kind === 'tank' ? 2.6 : 1.4);
+      this.tweens.add({ targets: mz, scale: 0.2, alpha: 0, duration: 110, onComplete: () => mz.destroy() });
+      const puff = this.add.circle(from.x + Math.cos(ang) * 10, from.y - 6 + Math.sin(ang) * 10, 5, 0x9aa4ae, 0.5).setDepth(44);
+      this.tweens.add({ targets: puff, scale: 2.4, alpha: 0, x: puff.x + Math.cos(ang) * 8, y: puff.y - 3, duration: 480, onComplete: () => puff.destroy() });
+      if (kind === 'tank') this.shake(1.6, 0.12);
+      // brass ejecta — clinks and comes to rest on the ground
+      this.ejectBrass(from.x, from.y, ang, kind === 'tank' ? 1 : 0.6);
     } else if (kind === 'firebat') {
+      // AAA: flame cone with licking tongues instead of static blobs
+      const ang = Math.atan2(target.y - from.y, target.x - from.x);
       const g = this.add.graphics().setDepth(45);
-      g.fillStyle(0xff9c3c, 0.8);
-      g.fillCircle(from.x, from.y, 6);
-      g.fillStyle(0xffd27a, 0.6);
-      g.fillCircle((from.x + target.x) / 2, (from.y + target.y) / 2, 10);
+      g.fillTriangle(from.x, from.y, target.x + Math.cos(ang + 0.35) * 14, target.y + Math.sin(ang + 0.35) * 14, target.x + Math.cos(ang - 0.35) * 14, target.y + Math.sin(ang - 0.35) * 14);
       this.tweens.add({ targets: g, alpha: 0, duration: 180, onComplete: () => g.destroy() });
+      for (let i = 1; i <= 3; i++) {
+        const t = i / 4;
+        const fx = from.x + (target.x - from.x) * t + (Math.random() * 8 - 4), fy = from.y + (target.y - from.y) * t + (Math.random() * 8 - 4);
+        const f = this.add.image(fx, fy, 'spark').setDepth(46).setScale(1.6 - t * 0.6).setTint(i === 1 ? 0xffe27a : 0xff9c3c);
+        this.tweens.add({ targets: f, alpha: 0, scale: 0.3, y: fy - 8, duration: 260 + i * 90, onComplete: () => f.destroy() });
+      }
       this.applyHit(target, damage, splash || 18);
     } else {
-      const sp = this.add.image(from.x, from.y, 'spark').setDepth(45);
+      const sp = this.add.image(from.x, from.y, kind === 'vulture' || kind === 'goliath' ? 'shell' : 'spark').setDepth(45);
+      if (kind === 'vulture' || kind === 'goliath') { sp.setScale(kind === 'goliath' ? 1.3 : 1); this.ejectBrass(from.x, from.y, Math.atan2(target.y - from.y, target.x - from.x), 0.5); }
       if (kind === 'zealot' || kind === 'darkTemplar' || kind === 'archon') {
         const g = this.add.graphics().setDepth(45);
         g.lineStyle(2, kind === 'darkTemplar' ? 0xc060ff : 0x9fd0ff, 0.9);
         g.lineBetween(from.x, from.y, target.x, target.y);
         this.tweens.add({ targets: g, alpha: 0, duration: 100, onComplete: () => g.destroy() });
+        // blade trail afterglow
+        const glow = this.add.circle((from.x + target.x) / 2, (from.y + target.y) / 2, 8, kind === 'darkTemplar' ? 0xc060ff : 0x9fd0ff, 0.35).setDepth(44);
+        this.tweens.add({ targets: glow, alpha: 0, scale: 1.8, duration: 220, onComplete: () => glow.destroy() });
         this.applyHit(target, damage, splash);
         sp.destroy();
         return;
       }
-      sp._proj = { target, damage, splash, speed, team, attacker };
+      // plasma bolts leave a fading trail dot
+      if (kind === 'muta' || kind === 'dragoon' || kind === 'corsair' || kind === 'mutalisk' || kind === 'hydra' || kind === 'hydralisk') {
+        const trail = this.add.circle(from.x, from.y, 2.5, kind === 'muta' || kind === 'mutalisk' ? 0xb090ff : 0x9fd0ff, 0.7).setDepth(44);
+        this.tweens.add({ targets: trail, alpha: 0, duration: 260, onComplete: () => trail.destroy() });
+      }
+      sp._proj = { target, damage, splash, speed, team, attacker, kind };
     }
+  }
+
+  // brass casings that eject, arc, and persist as tiny ground litter
+  ejectBrass(x, y, ang, scale = 1) {
+    if (!this.camNear || !this.camNear(x, y)) return;
+    const bx = x - Math.cos(ang) * 6, by = y - Math.sin(ang) * 6;
+    const b = this.add.image(bx, by, 'brass').setDepth(8).setScale(scale * (0.8 + Math.random() * 0.4)).setRotation(Math.random() * 6.28).setAlpha(0.95);
+    const vx = -Math.cos(ang) * (24 + Math.random() * 30) + (Math.random() * 20 - 10);
+    const vy = -Math.abs(Math.sin(ang)) * 20 - 22 - Math.random() * 14;
+    this.tweens.add({
+      targets: b, x: bx + vx * 0.35, y: by + 8, angle: b.angle + (Math.random() * 240 - 120),
+      duration: 340, ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: b, alpha: 0.35, duration: 9000 });
+        if (Math.random() < 0.5) this.audio?.brass?.();
+      },
+    });
+    // keep litter bounded
+    if (this._brass && this._brass.length > 60) { const old = this._brass.shift(); if (activeIn(old)) old.destroy(); }
+    (this._brass = this._brass || []).push(b);
+    function activeIn(o) { return o && o.active !== false; }
   }
 
   applyHit(target, damage, splash, attacker) {
@@ -1539,6 +1585,23 @@ export class BattleScene extends Phaser.Scene {
 
   onMineralDug(u, m, amt) { this.audio?.harvest(); }
 
+  // AAA: minerals visibly shrink as mined; geysers dim + weak gas puffs when nearly empty
+  updateResourceDepletion() {
+    for (const m of this.minerals) {
+      if (!m.sprite || m.amount == null || !this.camNear(m.x, m.y)) continue;
+      const frac = Math.max(0.12, Math.min(1, (m.amount / (m.full || 1500))));
+      if (Math.abs(m.sprite.scaleX - frac) > 0.03) {
+        m.sprite.setScale(frac);
+        if (frac < 0.35) m.sprite.setTint(0x8899aa);
+      }
+    }
+    for (const g of this.geysers) {
+      if (!g.spr || !this.camNear(g.x, g.y)) continue;
+      const frac = Math.max(0.2, Math.min(1, (g.gas / (g.full || 2500))));
+      g.spr.setAlpha(0.45 + 0.55 * frac);
+    }
+  }
+
   onCargoDeposited(u) {
     const isGas = u.cargoGas;
     this.addIncome(u.team, isGas ? 0 : u.cargo, isGas ? u.cargo : 0);
@@ -1628,9 +1691,9 @@ export class BattleScene extends Phaser.Scene {
       if (this.ultMode) { this.castUltimate(p.worldX, p.worldY); return; }
       if (this.scanMode) { this.scannerSweep(p.worldX, p.worldY); this.cancelScan(); return; }
       if (this.castMode) {
-        const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'devourer' && u.energy >= 75) : ((u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100)))[0];
-        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, p.worldX, p.worldY); else this.castMaelstrom(caster, p.worldX, p.worldY); }
-        this.castMode = null; this.input.setDefaultCursor('default');
+        const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'devourer' && u.energy >= 75) : (this.castMode === 'storm' ? (u.def.castAbility === 'storm' && u.energy >= 75) : ((u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100))))[0];
+        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, p.worldX, p.worldY); else if (this.castMode === 'storm') this.castUnitPsiStorm(caster, p.worldX, p.worldY); else this.castMaelstrom(caster, p.worldX, p.worldY); }
+        this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost();
         return;
       }
       if (this.patrolMode) {
@@ -1670,7 +1733,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on('pointerup', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['up', p.button, Math.round(p.x), Math.round(p.y), !!this.dragStart, !!this.dragMoved]);
-      if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }, p.shiftKey); return; }
+      if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }, p.shiftKey, p.altKey); return; }
       if (!this.dragStart) return;
       const wpt = { x: p.worldX, y: p.worldY };
       if (this.dragMoved) {
@@ -1736,7 +1799,7 @@ export class BattleScene extends Phaser.Scene {
       const b = this.selectedBuilding;
       if (b && b.def.garrison && b.garrison?.length) this.emergeAll(b);
     });
-    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
@@ -1797,9 +1860,12 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:castStorm', () => {
       const casters = [...this.selection].filter(u => u.def.castAbility === 'storm' && u.energy >= 75);
       if (!casters.length) { this.events.emit('hud:alert', 'PSI STORM: NEED 75 ENERGY'); this.audio?.error(); return; }
-      const cx = [...this.selection].reduce((a, u) => a + u.x, 0) / this.selection.size;
-      const cy = [...this.selection].reduce((a, u) => a + u.y, 0) / this.selection.size;
-      this.castUnitPsiStorm(casters[0], cx, cy);
+      // AAA: targeted cast — arm the storm, click where the psi blade should fall
+      this.castMode = 'storm';
+      this._castArmTime = this.gameTime;
+      this.input.setDefaultCursor('crosshair');
+      this.showCastGhost(55, 0xc060ff);
+      this.events.emit('hud:alert', 'PSI STORM: CLICK TARGET AREA');
     });
   }
 
@@ -1886,9 +1952,33 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:selection', { building: b ? { buildId: b.buildId, name: b.def.name, hp: Math.ceil(b.hp), maxHp: b.maxHp, queue: b.queue.map(q => ({ kind: q.kind || q.research, remaining: Math.ceil(q.remaining), label: UNITS[q.kind]?.name || TECHS[q.research]?.name })), canProduce: Object.keys(UNITS).filter(k => UNITS[k].build === b.buildId && b.canProduce(k)) } : null });
   }
 
-  rightClickOrder(wp, shift) {
+  rightClickOrder(wp, shift, alt) {
     this.cmdCount++;
     this.showOrderMarker(wp.x, wp.y);
+    // AAA/SC1: Alt+right-click movement subgroups — each alt-click selects the NEXT batch of units
+    if (alt && this.selection.size && !shift) {
+      const list = [...this.selection].filter(u => !u.dead);
+      if (list.length > 1) {
+        this._sgCycle = (this._sgCycle ?? 0) + 1;
+        if (this._sgLast && Math.hypot(wp.x - this._sgLast.x, wp.y - this._sgLast.y) > 18) this._sgCycle = 1;
+        this._sgLast = { x: wp.x, y: wp.y };
+        const per = Math.max(1, Math.ceil(list.length / Math.min(6, Math.ceil(list.length / 12))));
+        const batch = list.slice(((this._sgCycle - 1) * per) % list.length).slice(0, per);
+        if (batch.length < 2) { // cycled through — wrap: divide whole selection at this point
+          this._sgCycle = 1;
+          const half = list.slice(0, Math.ceil(list.length / 2));
+          half.forEach(u => u.issueMove(wp.x + (Math.random() * 30 - 15), wp.y + (Math.random() * 30 - 15), this.attackMoveMode));
+          const rest = list.filter(u => !half.includes(u));
+          rest.forEach(u => u.issueMove(wp.x + (Math.random() * 30 - 15), wp.y + (Math.random() * 30 - 15), this.attackMoveMode));
+          this.events.emit('hud:alert', 'MOVE: ALL');
+        } else {
+          batch.forEach(u => u.issueMove(wp.x + (Math.random() * 26 - 13), wp.y + (Math.random() * 26 - 13), this.attackMoveMode));
+          this.events.emit('hud:alert', `MOVE GROUP ${this._sgCycle} (${batch.length})`);
+        }
+        this.audio?.move();
+        return;
+      }
+    }
     // SC1 shift-queue: append move/attack-move waypoints to current selection
     if (shift && this.selection.size && !this.attackMoveMode) {
       for (const u of this.selection) {
@@ -2169,6 +2259,7 @@ export class BattleScene extends Phaser.Scene {
     this.castMode = 'maelstrom';
     this._castArmTime = this.gameTime;
     this.input.setDefaultCursor('crosshair');
+    this.showCastGhost(70, 0x9a6bff);
     this.events.emit('hud:alert', 'MAELSTROM: CLICK TARGET CLUSTER');
   }
 
@@ -2178,8 +2269,23 @@ export class BattleScene extends Phaser.Scene {
     this.castMode = 'cloud';
     this._castArmTime = this.gameTime;
     this.input.setDefaultCursor('crosshair');
+    this.showCastGhost(52, 0x8bc34a);
     this.events.emit('hud:alert', 'CAUSTIC MIST: CLICK TARGET AREA');
   }
+
+  // AAA: targeting ghost that follows the cursor while a spell is armed
+  showCastGhost(r, col) {
+    this.clearCastGhost();
+    this._castGhost = this.add.circle(0, 0, r, col, 0.10).setStrokeStyle(1.5, col, 0.85).setDepth(505).setScrollFactor(0);
+    this._castGhostR = r;
+    const p = this.input.activePointer;
+    this._castGhost.setPosition(p.x, p.y);
+    if (!this._castGhostMoveH) {
+      this._castGhostMoveH = (pt) => { if (this._castGhost) this._castGhost.setPosition(pt.x, pt.y); };
+      this.input.on('pointermove', this._castGhostMoveH);
+    }
+  }
+  clearCastGhost() { if (this._castGhost) { this._castGhost.destroy(); this._castGhost = null; } }
 
   castMaelstrom(caster, x, y) {
     caster.energy -= 100;
@@ -2578,8 +2684,26 @@ export class BattleScene extends Phaser.Scene {
       const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
       const d = Math.hypot(dx, dy);
       const step = pr.speed * dt;
-      if (d <= step + pr.target.radius) { this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker); sp.destroy(); continue; }
+      if (d <= step + pr.target.radius) {
+        this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker);
+        // tank shells leave a smoking impact crater
+        if (pr.shell && this.camNear(sp.x, sp.y)) {
+          const cr = this.add.image(pr.target.x, pr.target.y + 4, 'scorch').setDepth(5).setScale(0.9 + Math.random() * 0.4).setAlpha(0.55).setRotation(Math.random() * 6.28);
+          this.tweens.add({ targets: cr, alpha: 0.15, duration: 14000 });
+          const fl = this.add.image(pr.target.x, pr.target.y, 'explosion').setDepth(58).setScale(1.1);
+          this.tweens.add({ targets: fl, scale: 2.1, alpha: 0, duration: 220, onComplete: () => fl.destroy() });
+          for (let i = 0; i < 3; i++) {
+            const sm = this.add.circle(pr.target.x + (Math.random() * 14 - 7), pr.target.y + (Math.random() * 10 - 5), 4, 0x8f9aa4, 0.4).setDepth(44);
+            this.tweens.add({ targets: sm, alpha: 0, y: sm.y - 18, scale: 2.2, duration: 700 + Math.random() * 400, onComplete: () => sm.destroy() });
+          }
+        }
+        sp.destroy(); continue;
+      }
       sp.x += (dx / d) * step; sp.y += (dy / d) * step;
+      if (pr.shell && Math.random() < 0.4 && this.camNear(sp.x, sp.y)) {
+        const tr = this.add.circle(sp.x, sp.y, 1.8, 0xb8c2cc, 0.35).setDepth(44);
+        this.tweens.add({ targets: tr, alpha: 0, scale: 2.4, duration: 380, onComplete: () => tr.destroy() });
+      }
     }
 
     // SC1 spider mines + scanner cooldown + temp reveal expiry
@@ -2596,7 +2720,7 @@ export class BattleScene extends Phaser.Scene {
 
     // fog update throttled
     this.fogTimer -= dt;
-    if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); }
+    if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); this.updateResourceDepletion(); }
 
     // GAP: first-contact detection — first enemy seen on sensors
     if (!this._contacted && !this.gameOver) {

@@ -510,6 +510,18 @@ function createFx(scene) {
     ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(4, 4, 3, 0, 7); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillRect(3, 3, 2, 2);
   });
+  // artillery shell (points +x)
+  makeTex(scene, 'shell', 10, 4, (ctx) => {
+    ctx.fillStyle = '#c9ccd4'; ctx.fillRect(0, 1, 6, 2);
+    ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.moveTo(6, 0.5); ctx.lineTo(10, 2); ctx.lineTo(6, 3.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7a828c'; ctx.fillRect(0, 1, 2, 2);
+  });
+  // spent brass casing
+  makeTex(scene, 'brass', 5, 2, (ctx) => {
+    ctx.fillStyle = '#d8a848'; ctx.fillRect(0, 0, 5, 2);
+    ctx.fillStyle = '#f2d080'; ctx.fillRect(0, 0, 2, 1);
+    ctx.fillStyle = '#8f6c28'; ctx.fillRect(4, 0, 1, 2);
+  });
   makeTex(scene, 'explosion', 40, 40, (ctx) => {
     ctx.fillStyle = '#ff9c3c'; ctx.beginPath(); ctx.arc(20, 20, 16, 0, 7); ctx.fill();
     ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.arc(20, 20, 10, 0, 7); ctx.fill();

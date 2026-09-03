@@ -197,7 +197,12 @@ export class Unit {
     // SC1: zerg ground units surge faster on their creep
     let effSpeed = this.speed;
     if (!this.flying && this.def.race === 'zerg' && this.world.creepSpeedAt && this.world.creepSpeedAt(this.team, this.x, this.y)) effSpeed *= 1.45;
-    const step = effSpeed * dt;
+    // AAA movement feel: ramp speed (accel/decel) instead of instant start/stop
+    const ramp = this.flying ? 2.6 : 3.4; // air units glide longer
+    this._curSpeed = this._curSpeed || 0;
+    this._curSpeed += (effSpeed - this._curSpeed) * Math.min(1, ramp * dt);
+    if (effSpeed === 0 && this._curSpeed < 6) this._curSpeed = 0;
+    const step = this._curSpeed * dt;
     if (d <= step) {
       this.setPos(wp.x, wp.y);
       this.pathIndex++;
@@ -776,6 +781,16 @@ export class Unit {
     boom.setDepth(60).setScale(this.def.size === 'large' ? 1.4 : 0.8);
     if (this.world.flash) this.world.flash(this.x, this.y, 0xff9c3c, this.def.size === 'large' ? 3 : 1.6, 260);
     this.world.tweens.add({ targets: boom, scale: (this.def.size === 'large' ? 2.2 : 1.4), alpha: 0, duration: 320, onComplete: () => boom.destroy() });
+    // AAA: persistent corpse — the unit sprite itself topples, darkens, and fades over ~25s
+    const corpseKey = `u-${this.def.icon}-t${this.team > 2 ? 2 : this.team}`;
+    if (this.world.textures.exists(corpseKey)) {
+      const corp = this.world.add.image(this.x, this.y, corpseKey).setDepth(7);
+      corp.setTint(0x6a6258); corp.setAlpha(0.9);
+      corp.setScale((this.baseScale || 1) * 0.94, (this.baseScale || 1) * 0.62); // flattened
+      corp.setRotation((Math.random() * 0.7 - 0.35) + (this.sprite.flipX ? Math.PI : 0) * 0.0);
+      this.world.tweens.add({ targets: corp, angle: corp.angle + (Math.random() < 0.5 ? 75 : -75), duration: 260, ease: 'Quad.easeOut' });
+      this.world.tweens.add({ targets: corp, alpha: 0.28, duration: 24000 });
+    }
     // debris shards
     if (this.world.camNear && this.world.camNear(this.x, this.y)) {
       for (let i = 0; i < 5; i++) {
