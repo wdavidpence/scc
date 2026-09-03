@@ -81,6 +81,92 @@ export class HudScene extends Phaser.Scene {
     this.events.once('shutdown', () => b.events.off('hud:objectives'));
     this.renderObjectives(b.objectives);
     this.buildIntelPanel();
+    this.buildTechTreePanel();
+  }
+
+  // ---------------- AAA tech tree browser (F11) ----------------
+  buildTechTreePanel() {
+    this._tech = this.add.container(0, 0).setDepth(96).setScrollFactor(0).setVisible(false);
+    const dim = this.add.rectangle(0, 0, this.W, this.H, 0x000000, 0.74).setInteractive();
+    const W = Math.min(860, this.W - 40), H = Math.min(460, this.H - 80);
+    const cx = this.W / 2, cy = this.H / 2;
+    const bg = this.add.rectangle(cx, cy, W, H, 0x0a121e, 0.98).setStrokeStyle(2, 0x7ad7ff, 0.85);
+    const title = this.add.text(cx, cy - H / 2 + 20, 'T E C H   T R E E', { fontFamily: 'Menlo, monospace', fontSize: '16px', color: '#7ad7ff', fontStyle: 'bold' }).setOrigin(0.5);
+    const hint = this.add.text(cx, cy + H / 2 - 12, 'F11 / ESC to close · click an available upgrade to queue research', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#5f748f' }).setOrigin(0.5);
+    this._techRows = [];
+    const rowH = 18, startY = cy - H / 2 + 44;
+    const b0 = this.scene.get('Battle');
+    const race = b0?.race || 'terran';
+    const techIds = Object.keys(TECHS).filter(k => this.techMatchesRace(k, b0));
+    let y = startY;
+    for (const id of techIds) {
+      if (y > cy + H / 2 - 30) break;
+      const t = TECHS[id];
+      const txt = this.add.text(cx - W / 2 + 18, y, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#9fb3d8', lineHeight: rowH }).setOrigin(0, 0);
+      const hit = this.add.rectangle(cx - W / 2 + 8, y + 7, W - 30, rowH - 2, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+      const row = { id, txt, hit, y: y - startY };
+      hit.on('pointerdown', () => this.techRowClick(row));
+      hit.on('pointerover', () => { if (!row.disabled) { txt.setColor('#ffffff'); } });
+      hit.on('pointerout', () => { this.refreshTechTree(); });
+      this._tech.add([txt, hit]);
+      this._techRows.push(row);
+      y += rowH;
+    }
+    this._tech.add([dim, bg, title, hint]);
+    this.input.keyboard.on('keydown-F11', () => { if (this.scene.isActive()) this.toggleTechTree(); });
+    dim.on('pointerdown', () => this.toggleTechTree(false));
+  }
+
+  techMatchesRace(techId, b) {
+    const t = TECHS[techId];
+    const race = b?.race || 'terran';
+    const raceTech = {
+      terran: ['terranInfantryWeapons', 'terranInfantryArmor', 'vehiclePlating', 'radar', 'controlTower', 'caduceusReactor', 'combatMedics', 'machineShop'],
+      zerg: ['zergMeleeAttacks', 'zergCarapace', 'lurkerEgg', 'chitinousPlating', 'greaterSpire', 'lair', 'hive', 'guardian', 'devourer'],
+      protoss: ['gatewayWarp', 'zealotSpeed', 'dragoonRange', 'roboticsFacilityTech', 'psionicStorm', 'darkTemplar', 'fleetBeacon', 'protossGround', 'darkArchonMerge'],
+    };
+    const match = raceTech[race] || raceTech.terran;
+    return match.some(m => techId.startsWith(m) || techId === m);
+  }
+
+  toggleTechTree(force) {
+    const on = force !== undefined ? force : !this._tech.visible;
+    this._tech.setVisible(on);
+    if (on) this.refreshTechTree();
+  }
+
+  techRowClick(row) {
+    if (row.disabled) return;
+    const b = this.scene.get('Battle');
+    // find a built building that hosts this tech and queue it there
+    const t = TECHS[row.id];
+    const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === 0 && (bb.buildId === t.at || bb.morphedTo === t.at));
+    if (!host) { this.scene.get('Battle').events.emit('hud:alert', `REQUIRES ${t.at ? (BUILDINGS[t.at]?.name || t.at).toUpperCase() : 'HOST'} ON FIELD`); return; }
+    host.queueResearch(row.id) ? this.scene.get('Battle').events.emit('hud:alert', `RESEARCH QUEUED: ${t.name.toUpperCase()}`) : this.audio?.error?.();
+    this.refreshTechTree();
+  }
+
+  refreshTechTree() {
+    if (!this._tech || !this._tech.visible) return;
+    const b = this.scene.get('Battle');
+    if (!b || !b.players) return;
+    const p = b.players[0];
+    const status = {};
+    for (const r of this._techRows || []) {
+      const t = TECHS[r.id];
+      const done = p.techs[r.id];
+      const queued = b.buildings.some(bb => !bb.dead && (bb.queue || []).some(q => q.research === r.id));
+      const host = b.buildings.find(bb => !bb.dead && bb.built && bb.team === 0 && (bb.buildId === t.at || bb.morphedTo === t.at));
+      const prereqOk = !t.requiresTech || p.techs[t.requiresTech];
+      const afford = p.minerals >= t.minerals && p.gas >= (t.gas || 0);
+      r.disabled = done || queued || !host || !prereqOk;
+      const mark = done ? '✔' : queued ? '…' : host && prereqOk ? (afford ? '◆' : '◇') : '✕';
+      const name = t.name.padEnd(22, ' ');
+      const cost = `${t.minerals}M ${t.gas || 0}G ${t.time}s`.padEnd(16, ' ');
+      const note = done ? 'RESEARCHED' : queued ? 'IN PROGRESS' : !prereqOk ? `REQ: ${TECHS[t.requiresTech]?.name || t.requiresTech}` : !host ? `NEED ${BUILDINGS[t.at]?.name || t.at}` : afford ? 'AVAILABLE' : 'INSUFFICIENT';
+      r.txt.setText(`${mark} ${name} ${cost} ${note}`);
+      r.txt.setColor(done ? '#9fe0b0' : queued ? '#ffd23f' : host && prereqOk && afford ? '#dbe7ff' : '#5f748f');
+    }
   }
 
   // ---------------- SC1-style intelligence panel (F10) ----------------
