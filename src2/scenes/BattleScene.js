@@ -24,6 +24,7 @@ export class BattleScene extends Phaser.Scene {
     this.race = data.race || 'terran';
     this.enemyRace = data.enemyRace || 'zerg';
     this.difficulty = data.difficulty || 'normal';
+    this.hotseat = !!data.hotseat;
     this.mission = data.mission || null;
     this.campaign = data.campaign || null;
     this.tutorialMode = !!data.tutorial;
@@ -56,10 +57,9 @@ export class BattleScene extends Phaser.Scene {
     this.powerSurgeUntil = 0;     // power-up crate buff
     this.players = [
       { team: 0, race: this.race, minerals: 300, gas: 150, supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } },
-      { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : (data.hotseat ? 300 : 400), gas: this.difficulty === 'hard' ? 200 : (data.hotseat ? 150 : 150), supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
+      { team: 1, race: this.enemyRace, minerals: this.difficulty === 'hard' ? 600 : (this.hotseat ? 300 : 400), gas: this.difficulty === 'hard' ? 200 : (this.hotseat ? 150 : 150), supplyUsed: 0, supplyCap: 0, techs: {}, upgrades: { weapons: 0, armor: 0 } }
     ];
-    // AAA hot-seat 1v1: two humans share the keyboard; F8 swaps control
-    this.hotseat = !!data.hotseat;
+    // AAA hot-seat 1v1: two humans share the keyboard; TAB/F8 swaps control
     this.activeTeam = 0;
     // mission bonuses + persistent campaign upgrades (F4/F10)
     if (this.mission && this.mission.bonusMinerals) this.players[0].minerals += this.mission.bonusMinerals;

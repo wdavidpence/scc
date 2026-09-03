@@ -39,7 +39,7 @@ const { chromium } = require('/Users/davidpence/.hermes/node/lib/node_modules/pl
   // commander B (team 1) can select its own zerg units
   out.selB = await page.evaluate(async () => {
     const b = window.__SCC2.scene.getScene('Battle');
-    const z = b.units.filter(u => u.team === 1 && u.kind === 'zergling' && !u.dead);
+    const z = b.units.filter(u => u.team === 1 && !u.dead && !u.dead);
     b.clearSelection(); z.slice(0, 3).forEach(u => b.addToSelection(u));
     return { team: b.activeTeam, sel: b.selection.size };
   });
@@ -66,7 +66,7 @@ const { chromium } = require('/Users/davidpence/.hermes/node/lib/node_modules/pl
   await page.waitForTimeout(400);
   out.selA = await page.evaluate(() => {
     const b = window.__SCC2.scene.getScene('Battle');
-    const ms = b.units.filter(u => u.team === 0 && u.kind === 'marine' && !u.dead);
+    const ms = b.units.filter(u => u.team === 0 && !u.dead && !u.dead);
     b.clearSelection(); ms.slice(0, 3).forEach(u => b.addToSelection(u));
     return { team: b.activeTeam, sel: b.selection.size };
   });
