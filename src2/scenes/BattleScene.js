@@ -101,6 +101,12 @@ export class BattleScene extends Phaser.Scene {
     // ---- mission objectives (F10) ----
     this.objectives = this.buildObjectives();
     this.mods = this.applyMissionMods();
+    // AAA: data-driven mission triggers (time-based reinforcement drops, zone alerts)
+    this.triggers = new Triggers([
+      { id: 'mid-reinforce', when: 'time', t: 150, msg: 'Sensors detect warp-in signatures — enemy reinforcements dropping.', bark: true, barkPitch: 0.7, spawn: [{ kind: this.enemyRace === 'zerg' ? 'zergling' : this.enemyRace === 'protoss' ? 'zealot' : 'marine', team: 1, fx: 0.82, fy: 0.14 }, { kind: this.enemyRace === 'zerg' ? 'zergling' : this.enemyRace === 'protoss' ? 'zealot' : 'marine', team: 1, fx: 0.86, fy: 0.18 }, { kind: this.enemyRace === 'zerg' ? 'hydralisk' : this.enemyRace === 'protoss' ? 'dragoon' : 'firebat', team: 1, fx: 0.84, fy: 0.22 }] },
+      { id: 'late-reinforce', when: 'time', t: 300, msg: 'Massive bio/contact signature inbound. Hold the line.', bark: true, barkPitch: 0.6, spawn: [{ kind: this.enemyRace === 'zerg' ? 'hydralisk' : this.enemyRace === 'protoss' ? 'darkTemplar' : 'tank', team: 1, fx: 0.8, fy: 0.12 }, { kind: this.enemyRace === 'zerg' ? 'mutalisk' : this.enemyRace === 'protoss' ? 'carrier' : 'wraith', team: 1, fx: 0.88, fy: 0.1 }] },
+      { id: 'near-base-alert', when: 'near:0.30,0.30,140', msg: 'Hostiles inside our perimeter!', bark: true, barkPitch: 1.05 },
+    ]);
     this.audio = new Audio2(this);
     this.audio.setRace(this.race);
     // AAA: the enemy commander introduces themselves over open comms
@@ -2795,6 +2801,15 @@ export class BattleScene extends Phaser.Scene {
       if (this.record.frames.length > 900) this.record.frames.shift();
     }
 
+    // AAA: mission triggers tick (event/condition/action framework)
+    this.triggers?.tick(dt, {
+      gameTime: this.gameTime, scene: this, units: this.units, buildings: this.buildings,
+      objectives: this.objectives, events: this.events, audio: this.audio,
+      isVisible: (x, y) => this.isVisible(x, y),
+      spawnUnit: (team, kind, x, y, o) => this.spawnUnit(team, kind, x, y, o),
+      PXW, PXH, cameras: this.cameras,
+    });
+
     // hold-the-line objective countdown
     if (this._holdUntil != null && !this.gameOver) {
       const remain = Math.ceil(this._holdUntil - this.gameTime);
@@ -3044,8 +3059,9 @@ export class BattleScene extends Phaser.Scene {
             if (d.targets !== 'air') sc += s.counter.ground * 1.4;
             if (d.splash) sc += s.counter.ground * 0.8; // anti-cluster
             if (k === 'lurker') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + marine blob shredder
-            // AAA: commander doctrine — preferred composition bias
-            if (prof.compBias && (k === prof.compBias || (prof.compBias === 'zergling' && k === 'zereling'))) sc += 60;
+            // AAA: commander doctrine — preferred composition bias (canonical kind keys)
+            if (prof.compBias && k.toLowerCase() === String(prof.compBias).toLowerCase()) sc += 60;
+            if (prof.compBias === 'zergling' && k === 'zereling') sc += 60;
             if (prof.lurkerEarly && k === 'lurker') sc += 80;
             return sc;
           };
