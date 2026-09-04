@@ -141,6 +141,7 @@ export class BattleScene extends Phaser.Scene {
     this.createCreepLayers();
     this.spawnBase(0, this.race);
     this.spawnBase(1, this.enemyRace);
+    this.setupMissionObjectives();
     this.createInput();
     this.createEvents();
     this.aiState = { buildQueue: [], lastThink: 0, army: 0, nextAttackAt: 90, retaliations: [] };
@@ -167,8 +168,11 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- mission objectives & modifiers (F10/F4) ----------------
   buildObjectives() {
     const objs = [];
-    if (this.mods && this.mods.escape) objs.push({ id: 'escape', text: `EVACUATE at T-${this.mods.escape} — survive, then board the LZ`, done: false });
+    if (this.mods && this.mods.cratesWin) objs.push({ id: 'cratesWin', text: `RECLAIM ${this.mods.cratesWin} SUPPLY CRATES`, done: false });
+    else if (this.mods && this.mods.escape) objs.push({ id: 'escape', text: `EVACUATE at T-${this.mods.escape} — survive, then board the LZ`, done: false });
     else objs.push({ id: 'kill', text: 'Destroy the enemy base', done: false });
+    if (this.mods && this.mods.convoy) objs.push({ id: 'convoy', text: 'Escort the convoy transports to the extraction zone', done: false });
+    if (this.mods && this.mods.blitz) objs.push({ id: 'blitz', text: 'Destroy the shield Pylon Nexus (marked ⌬)', done: false });
     if (this.crates && this.crates.length) objs.push({ id: 'crates', text: 'OPTIONAL: recover 3 power-up crates (+300)', done: false });
     if (this.mission && this.mission.mods && this.mission.mods.holdTime) {
       objs.push({ id: 'hold', text: `HOLD THE LINE for ${this.mission.mods.holdTime}s`, done: false });
@@ -182,6 +186,11 @@ export class BattleScene extends Phaser.Scene {
   applyMissionMods() {
     const mods = { ...(this.mods || {}) };
     if (mods.holdTime) { this._holdUntil = this.mission.mods.holdTime; }
+    if (mods.cratesWin) {
+      // scatter the mission crates AFTER terrain generation (see setupMissionObjectives)
+      this._cratesWinN = mods.cratesWin;
+    }
+    // convoy + blitz entities are created after terrain/bases exist: setupMissionObjectives()
     if (mods.escape) {
       this._escapeAt = this.mission.mods.escape;
       this._escapeBoarded = false;
@@ -194,6 +203,91 @@ export class BattleScene extends Phaser.Scene {
       this._lzLabel = this.add.text(bx, by - TILE * 3.4, 'EXTRACTION', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#6ee7a0', fontStyle: 'bold', backgroundColor: '#00000099', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(46).setAlpha(0);
     }
     return mods;
+  }
+
+  setupMissionObjectives() {
+    const mods = this.mods || {};
+    if (mods.cratesWin && this.crates) {
+      const spots = [[0.30, 0.42], [0.68, 0.30], [0.44, 0.66], [0.58, 0.52], [0.86, 0.40], [0.15, 0.62]];
+      this.crates.length = 0;
+      for (let i = 0; i < Math.min(mods.cratesWin, spots.length); i++) {
+        const x = PXW * spots[i][0], y = PXH * spots[i][1];
+        const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+        if (this.nav && this.nav.solid[this.nav.idx(tx, ty)]) continue;
+        const spr = this.add.image(x, y, 'crate').setDepth(14).setScale(1.3);
+        this.tweens.add({ targets: spr, alpha: 0.55, duration: 700, yoyo: true, repeat: -1 });
+        this.crates.push({ x, y, kind: 'minerals', spr, id: 9000 + i });
+      }
+      this._missionCratesLeft = this.crates.filter(c => c.id >= 9000).length;
+      this.events.emit('hud:objectives', this.objectives);
+    }
+    if (mods.convoy) {
+      this._convoy = [];
+      const lz = { x: PXW - TILE * 8, y: PXH * 0.5, r: TILE * 4 };
+      this._convoyLZ = lz;
+      this._convoyG = this.add.graphics().setDepth(45);
+      this._convoyLabel = this.add.text(lz.x, lz.y - TILE * 3.4, 'CONVOY LZ', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#6ee7a0', fontStyle: 'bold', backgroundColor: '#00000099', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(46);
+      const kinds = ['dropship', 'dropship', 'dropship'];
+      for (let i = 0; i < 3; i++) {
+        const tx = PXW * (0.30 + i * 0.06), ty = PXH * 0.58;
+        const tr = this.spawnUnit(0, kinds[i], tx, ty, { arriveReady: true });
+        if (!tr) continue;
+        tr.maxHp = Math.round(tr.maxHp * 2.2); tr.hp = tr.maxHp;
+        tr.convoy = true; tr.sprite.setTint(0x9fd8ff);
+        tr.setOrder({ type: 'move', point: { x: tx, y: ty } });
+        this._convoy.push(tr);
+      }
+      if (this._convoy.length) { this.convoyMode = true; this.audio?.ultimateBark?.(); this.events.emit('hud:radio', 'Three transports, one corridor to the LZ. Keep them breathing, commander.', 'CONVOY LEAD'); }
+    }
+    if (mods.blitz) {
+      this.time.delayedCall(800, () => {
+        const cands = this.buildings.filter(b => b.team === 1 && !b.dead);
+        if (!cands.length) return;
+        const nx = cands.find(b => b.buildId === 'pylon') || cands.find(b => b.def.supplyBonus) || cands[0];
+        nx.isBlitzTarget = true;
+        nx.maxHp = Math.round(nx.maxHp * 2); nx.hp = nx.maxHp;
+        this._nexusMark = this.add.text(nx.x, nx.y - 26, '⌬ NEXUS', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#ff5c8a', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(48);
+        this._nexusRing = this.add.circle(nx.x, nx.y, 34, 0xff5c8a, 0.12).setStrokeStyle(2, 0xff5c8a, 0.8).setDepth(47);
+        this.tweens.add({ targets: this._nexusRing, scale: 1.35, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
+        this.events.emit('hud:alert', 'HIGH-VALUE TARGET MARKED — SHIELD PYLON NEXUS');
+        this.events.emit('hud:radio', 'One pylon feeds their shield matrix. Bring it down and the base goes dark.', 'TECH OFFICER');
+      });
+    }
+  }
+
+  updateConvoy(dt) {
+    if (!this.convoyMode || this.gameOver) return;
+    const alive = this._convoy.filter(t => !t.dead);
+    // stranded transports crawl toward the LZ once the player has screen presence nearby
+    for (const t of alive) {
+      if (t.state === 'idle' && this._convoyEscortNear) t.issueMove(this._convoyLZ.x, this._convoyLZ.y, false);
+    }
+    this._convoyEscortNear = this.units.some(u => !u.dead && u.team === 0 && !u.convoy && Math.hypot(u.x - alive[0]?.x || 0, u.y - alive[0]?.y || 0) < 160);
+    const arrived = alive.filter(t => Math.hypot(t.x - this._convoyLZ.x, t.y - this._convoyLZ.y) <= this._convoyLZ.r).length;
+    if (alive.length === 0 && !this._convoyLost) {
+      this._convoyLost = true;
+      this.events.emit('hud:alert', 'CONVOY LOST — SECTOR DENIED');
+      this.audio?.gameEnd?.(false);
+      this.endGame('defeat');
+      return;
+    }
+    if (alive.length >= 1 && arrived >= Math.max(1, Math.ceil(this._convoy.length * 0.5))) {
+      const k = this.objectives.find(o => o.id === 'convoy'); if (k) k.done = true;
+      this.events.emit('hud:objectives', this.objectives);
+      this.events.emit('hud:alert', 'CONVOY SECURED — EXTRACTION COMPLETE');
+      this.endGame('victory');
+      return;
+    }
+    // draw LZ ring + arrived counter
+    if (this._convoyG) {
+      this._convoyG.clear();
+      this._convoyG.lineStyle(3, 0x6ee7a0, 0.8);
+      this._convoyG.strokeCircle(this._convoyLZ.x, this._convoyLZ.y, this._convoyLZ.r);
+      this._convoyLabel.setText(`CONVOY LZ  ${arrived}/${this._convoy.length}`);
+    }
+    // path hint for each transport
+    for (const t of alive) if (!t._cnvMark) { t._cnvMark = this.add.circle(t.x, t.y, 10, 0x9fd8ff, 0).setStrokeStyle(1, 0x9fd8ff, 0.7).setDepth(47); }
+    for (const t of this._convoy) if (t._cnvMark && !t.dead) { t._cnvMark.setPosition(t.x, t.y); } else if (t._cnvMark && t.dead) { t._cnvMark.destroy(); t._cnvMark = null; }
   }
 
   updateEscape(dt) {
@@ -265,7 +359,8 @@ export class BattleScene extends Phaser.Scene {
     const num = this.add.text(0, -46, `MISSION ${this.mission.n}`, { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#ffd23f' }).setOrigin(0.5);
     const ttl = this.add.text(0, -16, this.mission.name, { fontFamily: 'Menlo, monospace', fontSize: '34px', color: '#e8f1ff', fontStyle: 'bold' }).setOrigin(0.5);
     const brf = this.add.text(0, 24, this.mission.brief, { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8', align: 'center', wordWrap: { width: Math.min(520, W - 80) } }).setOrigin(0.5);
-    const obj = this.add.text(0, 56, (this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE') + '   ·   G = ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0' }).setOrigin(0.5);
+    const objLine = this.mods.cratesWin ? `RECLAIM ${this.mods.cratesWin} SUPPLY CRATES` : this.mods.convoy ? 'ESCORT THE CONVOY TO EXTRACTION' : this.mods.blitz ? 'DESTROY THE SHIELD PYLON NEXUS ⌬' : this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE';
+    const obj = this.add.text(0, 56, objLine + '   ·   G = ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0' }).setOrigin(0.5);
     cont.add([bg, num, ttl, brf, obj]);
     this.tweens.add({ targets: cont, alpha: 1, duration: 500, onComplete: () => {
       this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => cont.destroy() });
@@ -1471,10 +1566,27 @@ export class BattleScene extends Phaser.Scene {
     if (this.selectedBuilding === b) this.selectedBuilding = null;
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
     const info = RACE_INFO[this.players[b.team].race];
+    // blitz mission: killing the marked nexus wins, razing the base does not
+    if (b.isBlitzTarget && b.team === 1 && this.mods && this.mods.blitz) {
+      const k = this.objectives.find(o => o.id === 'blitz'); if (k) k.done = true;
+      this.events.emit('hud:objectives', this.objectives);
+      if (this._nexusMark) { this._nexusMark.destroy(); this._nexusMark = null; }
+      if (this._nexusRing) { this._nexusRing.destroy(); this._nexusRing = null; }
+      this.shake(12, 0.8);
+      this.events.emit('hud:alert', 'SHIELD MATRIX COLLAPSED — FINISH THEM');
+      this.audio?.objective?.();
+      this.audio?.ultimateBark?.();
+      // shield grid down: kill the enemy force's shields instantly for the cinematic collapse
+      for (const u of this.units) if (!u.dead && u.team === 1 && u.shield > 0) { u.shield = 0; }
+      this.time.delayedCall(2500, () => { if (!this.gameOver) this.endGame('victory'); });
+      return;
+    }
     if (b.buildId === info.primary) {
-      // escape missions are won by boarding the LZ, not by razing the enemy base
-      if (b.team === 0 || !(this.mods && this.mods.escape)) this.endGame(b.team === 0 ? 'defeat' : 'victory');
-      else this.events.emit('hud:alert', 'ENEMY BASE DOWN — HOLD FOR EVAC');
+      // special-op missions are won by their own objectives, not by razing the base
+      const special = this.mods && (this.mods.escape || this.mods.cratesWin || this.mods.convoy);
+      if (b.team === 0) this.endGame('defeat');
+      else if (!special) this.endGame('victory');
+      else this.events.emit('hud:alert', 'ENEMY BASE DOWN — COMPLETE YOUR MISSION OBJECTIVE');
     }
     if (b.team === 1 && this.enemyRace) {
       this.aiState.lastSeenPlayerPos = { x: b.x, y: b.y };
@@ -2547,6 +2659,25 @@ export class BattleScene extends Phaser.Scene {
     this._crateCount++;
     const co = this.objectives?.find(o => o.id === 'crates');
     if (co && !co.done && this._crateCount >= 3) { co.done = true; this.events.emit('hud:objectives', this.objectives); this.audio?.objective?.(); this.players[0].minerals += 300; this.events.emit('hud:alert', 'BONUS: +300 MINERALS'); }
+    // SUPPLY RUN mission: reclaiming all mission crates wins
+    if (this.mods && this.mods.cratesWin && c.id >= 9000) {
+      this._missionCratesLeft = Math.max(0, (this._missionCratesLeft ?? this.mods.cratesWin) - 1);
+      const obj0 = this.objectives.find(o => o.id === 'cratesWin');
+      if (obj0 && !obj0.done) obj0.text = `RECLAIM CRATES  ${this.mods.cratesWin - this._missionCratesLeft}/${this.mods.cratesWin}`;
+      if (this._missionCratesLeft > 0) return;
+    }
+    if (this.mods && this.mods.cratesWin && (this._missionCratesLeft ?? 1) === 0) {
+      const kw = this.objectives.find(o => o.id === 'cratesWin');
+      if (kw && !kw.done) {
+        kw.text = `RECLAIM CRATES  ${this.mods.cratesWin}/${this.mods.cratesWin}`;
+        kw.done = true;
+        this.events.emit('hud:objectives', this.objectives);
+        this.audio?.objective?.();
+        this.events.emit('hud:alert', 'ALL CRATES RECLAIMED — EXFIL AUTHORIZED');
+        this.events.emit('hud:radio', 'Cargo secure. Every crate accounted for. Outstanding work, commander.', 'FLEET CMD');
+        this.time.delayedCall(1800, () => { if (!this.gameOver) this.endGame('victory'); });
+      }
+    }
   }
 
   updateCritters(dt) {
@@ -2982,6 +3113,7 @@ export class BattleScene extends Phaser.Scene {
     this.updateAI(dt);
     this.updateThreats(dt);
     this.updateEscape(dt);
+    this.updateConvoy(dt);
     this.updateAmbient(dt);
     this.updateLighting(dt);
     this.updateTutorial();

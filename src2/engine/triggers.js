@@ -35,6 +35,16 @@ export class Triggers {
       const lost = ctx.buildings.filter(b => b.dead && b.team === 0).length;
       return lost >= (tr.t || 1);
     }
+    if (tr.when === 'playerUnitsAt') {
+      // count own units inside a fractional map zone: playerUnitsAt:fx,fy,r
+      const [, fx, fy, r] = tr.when.split(':');
+      const x = parseFloat(fx) * (ctx.PXW || 1), y = parseFloat(fy) * (ctx.PXH || 1), rr = parseFloat(r) || 120;
+      return ctx.units.some(u => !u.dead && u.team === 0 && Math.hypot(u.x - x, u.y - y) < rr);
+    }
+    if (tr.when === 'unitsDeadTotal') {
+      const n = ctx.units.filter(u => u.dead && u.team !== 0).length;
+      return n >= (tr.t || 1);
+    }
     if (tr.when && tr.when.startsWith('near:')) {
       // near:fx,fy,r — enemy unit enters fractional map zone
       const [, fx, fy, r] = tr.when.split(':');

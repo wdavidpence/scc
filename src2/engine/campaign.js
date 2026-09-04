@@ -13,7 +13,10 @@ export const MISSIONS = [
   { n: 8, name: 'FINAL RECKONING', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The Overmind itself focuses on you. Hold 3 minutes, then slay the Ultralisk champion.', mods: { holdTime: 180, boss: 'ultralisk' } },
   { n: 9, name: 'GHOST PROTOCOL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 100, brief: 'Ghost operatives and dropships hit your supply lines. Hold 3 minutes and purge the sector.', mods: { holdTime: 180, boss: 'ghost' } },
   { n: 10, name: 'OVERMIND ASCENDANT', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: an Ultralisk champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'ultralisk' } },
-  { n: 11, name: 'HELLFIRE EVAC', enemy: 'terran', difficulty: 'hard', bonusMinerals: 200, brief: 'The sector is being glassed at T-240. Survive until the evac shuttle reaches the green extraction zone, then get ANY units aboard.', mods: { escape: 240 } }
+  { n: 11, name: 'HELLFIRE EVAC', enemy: 'terran', difficulty: 'hard', bonusMinerals: 200, brief: 'The sector is being glassed at T-240. Survive until the evac shuttle reaches the green extraction zone, then get ANY units aboard.', mods: { escape: 240 }},
+  { n: 12, name: 'SUPPLY RUN', enemy: 'zerg', difficulty: 'normal', bonusMinerals: 0, brief: 'Salvage teams dropped 4 supply crates across the hotspot. Reclaim ALL FOUR crates to resupply the strike force — the swarm wants them too.', mods: { cratesWin: 4 }},
+  { n: 13, name: 'CONVOY RESCUE', enemy: 'terran', difficulty: 'normal', bonusMinerals: 150, brief: 'Three loyalist transports are stranded mid-map with a reactor core aboard. Escort them to the extraction zone. If the convoy is wiped out, the sector is lost.', mods: { convoy: true }},
+  { n: 14, name: 'BLITZ STRIKE', enemy: 'protoss', difficulty: 'hard', bonusMinerals: 250, brief: 'Skip the fortified line. Their shield Pylon Nexus projects cover over the whole map — kill THAT structure and their base collapses. They will reinforce it constantly.', mods: { blitz: true }}
 ];
 
 export const UPGRADES = [
