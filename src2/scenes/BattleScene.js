@@ -114,7 +114,8 @@ export class BattleScene extends Phaser.Scene {
     this.audio.setRace(this.race);
     // AAA: the enemy commander introduces themselves over open comms
     if (this.hotseat) {
-      this.events.emit('hud:radio', 'Two commanders. One map. F8 to pass the controls.', 'HOT-SEAT');
+      this.setupSplitScreen();
+      this.events.emit('hud:radio', 'Two commanders. One map. Click your half to command.', 'HOT-SEAT');
       this.events.emit('hud:activeTeam', 0);
     }
     if (this.aiCommander && !this.hotseat) {
@@ -687,7 +688,9 @@ export class BattleScene extends Phaser.Scene {
 
   camNear(x, y) {
     const vw = this.cameras.main.worldView;
-    return x > vw.x - 60 && x < vw.x + vw.width + 60 && y > vw.y - 60 && y < vw.y + vw.height + 60;
+    if (x > vw.x - 60 && x < vw.x + vw.width + 60 && y > vw.y - 60 && y < vw.y + vw.height + 60) return true;
+    if (this.hotseat && this.cam2) { const v2 = this.cam2.worldView; if (x > v2.x - 60 && x < v2.x + v2.width + 60 && y > v2.y - 60 && y < v2.y + v2.height + 60) return true; }
+    return false;
   }
 
   // ---------------- terrain ----------------
@@ -1737,25 +1740,29 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
-      if (this.ultMode) { this.castUltimate(p.worldX, p.worldY); return; }
-      if (this.scanMode) { this.scannerSweep(p.worldX, p.worldY); this.cancelScan(); return; }
+      const wp = this.worldFor(p);
+      if (this.ultMode) { this.castUltimate(wp.x, wp.y); return; }
+      if (this.scanMode) { this.scannerSweep(wp.x, wp.y); this.cancelScan(); return; }
       if (this.castMode) {
         const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'devourer' && u.energy >= 75) : (this.castMode === 'storm' ? (u.def.castAbility === 'storm' && u.energy >= 75) : ((u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100))))[0];
-        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, p.worldX, p.worldY); else if (this.castMode === 'storm') this.castUnitPsiStorm(caster, p.worldX, p.worldY); else this.castMaelstrom(caster, p.worldX, p.worldY); }
+        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, wp.x, wp.y); else if (this.castMode === 'storm') this.castUnitPsiStorm(caster, wp.x, wp.y); else this.castMaelstrom(caster, wp.x, wp.y); }
         this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost();
         return;
       }
+      if (this.hotseat && this.cam2) this.autoTeamByPointer(p);
       if (this.patrolMode) {
-        if (!this._patrolAnchor) { this._patrolAnchor = { x: p.worldX, y: p.worldY }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); }
-        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: p.worldX, y: p.worldY }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); }
+        if (!this._patrolAnchor) { this._patrolAnchor = { x: wp.x, y: wp.y }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); }
+        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: wp.x, y: wp.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); }
         return;
       }
       if (p.button === 2) return;
+      // never start a drag on the command card / minimap panels
+      if ((p.y > this.scale.height - 100 && p.x < 350) || (p.x > this.scale.width - 200 && p.y < 250)) { return; }
       if (this.placing) {
-        this.tryPlace(p.worldX, p.worldY);
+        this.tryPlace(wp.x, wp.y);
         return;
       }
-      const wp0 = { x: p.worldX, y: p.worldY };
+      const wp0 = wp;
       // click select building?
       const b = this.buildingAt(wp0.x, wp0.y);
       if (b && b.team === (this.activeTeam ?? 0)) {
@@ -1763,17 +1770,27 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       if (b && this.hotseat && b.team !== (this.activeTeam ?? 0)) { this.audio?.error(); this.events.emit('hud:alert', `NOT YOUR STRUCTURE — COMMANDER ${String.fromCharCode(65 + (this.activeTeam ?? 0))} ONLY`); return; }
-      this.dragStart = wp0;
+      this.dragStart = (this.hotseat && this.cam2) ? { x: p.x, y: p.y, screen: true } : wp0;
       this.dragMoved = false;
     });
 
     this.input.on('pointermove', (p) => {
       if (this.ultMode && this.ultGhost) { this.ultGhost.setPosition(p.x, p.y); }
       if (this.placing && this.ghost) {
-        this.snapGhost({ x: p.worldX, y: p.worldY });
+        this.snapGhost(this.worldFor(p));
       }
       if (!this.dragStart) return;
-      const wpt = { x: p.worldX, y: p.worldY };
+      if (this.dragStart.screen) {
+        if (Math.hypot(p.x - this.dragStart.x, p.y - this.dragStart.y) > 6) this.dragMoved = true;
+        if (this.dragMoved) {
+          const c = this.teamForPointer(p) === 1 ? this.cam2 : this.cameras.main;
+          const a = c.getWorldPoint(this.dragStart.x, this.dragStart.y);
+          const b2 = c.getWorldPoint(p.x, p.y);
+          this.drawBox(this.dragBox(a, b2));
+        }
+        return;
+      }
+      const wpt = this.worldFor(p);
       if (Math.hypot(wpt.x - this.dragStart.x, wpt.y - this.dragStart.y) > 6) this.dragMoved = true;
       if (this.dragMoved) {
         const rect = this.dragBox(this.dragStart, wpt);
@@ -1783,14 +1800,23 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on('pointerup', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['up', p.button, Math.round(p.x), Math.round(p.y), !!this.dragStart, !!this.dragMoved]);
-      if (p.button === 2) { this.rightClickOrder({ x: p.worldX, y: p.worldY }, p.shiftKey, p.altKey); return; }
+      if (this.hotseat && this.cam2) this.autoTeamByPointer(p);
+      if (p.button === 2) { this.rightClickOrder(this.worldFor(p), p.shiftKey, p.altKey); return; }
       if (!this.dragStart) return;
-      const wpt = { x: p.worldX, y: p.worldY };
-      if (this.dragMoved) {
-        const rect = this.dragBox(this.dragStart, wpt);
-        this.boxSelect(rect, p.shiftKey);
+      if (this.dragStart.screen) {
+        const c = this.teamForPointer(p) === 1 ? this.cam2 : this.cameras.main;
+        const a = c.getWorldPoint(this.dragStart.x, this.dragStart.y);
+        const b2 = c.getWorldPoint(p.x, p.y);
+        if (this.dragMoved) this.boxSelect(this.dragBox(a, b2), p.shiftKey);
+        else this.clickSelect(b2.x, b2.y, p.shiftKey);
       } else {
-        this.clickSelect(wpt.x, wpt.y, p.shiftKey);
+        const wpt = this.worldFor(p);
+        if (this.dragMoved) {
+          const rect = this.dragBox(this.dragStart, wpt);
+          this.boxSelect(rect, p.shiftKey);
+        } else {
+          this.clickSelect(wpt.x, wpt.y, p.shiftKey);
+        }
       }
       this.dragStart = null;
       this.box.clear();
@@ -1800,10 +1826,11 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('wheel', (p, go, dx, dy) => {
       const nz = Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.8, 2.6);
       this.cameras.main.setZoom(nz);
+      if (this.hotseat && this.cam2) this.cam2.setZoom(nz);
     });
 
     // pointer world pos tracked for unload-at-cursor
-    this.input.on('pointermove', (p) => { this.pointerPos = { x: p.worldX, y: p.worldY }; });
+    this.input.on('pointermove', (p) => { const w = this.worldFor(p); this.pointerPos = { x: w.x, y: w.y }; });
     // SC1 display-lifetime tooltip: hover a unit or building -> stat card
     this._hoverTip = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#dbe7ff', backgroundColor: '#05080ff2', padding: { x: 7, y: 5 }, align: 'left' }).setOrigin(0, 1).setDepth(120).setScrollFactor(0).setAlpha(0);
     let _hoverLast = 0;
@@ -1814,7 +1841,8 @@ export class BattleScene extends Phaser.Scene {
       if (this.placing || this.scanMode || this.castMode || this.ultMode) { this._hoverTip.setAlpha(0); return; }
       // don't compete with the command card or minimap panels
       if ((p.y > this.scale.height - 100 && p.x < 350) || (p.x > this.scale.width - 200 && p.y < 250)) { this._hoverTip.setAlpha(0); return; }
-      const wx = p.worldX, wy = p.worldY;
+      // hot-seat: hover tooltips must use the camera of the half being hovered
+      const hp = this.worldFor(p); const wx = hp.x, wy = hp.y;
       let best = null, bd = 22;
       for (const u of this.units) { if (u.dead || (u.cloaked && u.team !== 0) || (u.burrowed && u.team !== 0)) continue; const d = Math.hypot(u.x - wx, u.y - wy); if (d < bd) { bd = d; best = u; } }
       let bb = null, bbd = 34;
@@ -1835,8 +1863,12 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerdown', (p) => { if (this.input.manager.pointersActive?.size > 1) { /* noop */ } });
     this.input.addPointer(2);
 
+    // hot-seat: drop stale split cameras if this is NOT a hot-seat run (scene restart reuses instances)
+    if (!this.hotseat && this.cam2) { this.cameras.remove(this.cam2); this.cam2 = null; }
+
     // keyboard
     this.keys = this.input.keyboard.addKeys('W,A,S,D,Q,R,F2,F3,F4,F1,ESCAPE,SPACE,SHIFT,CTRL');
+    this.keysB = this.input.keyboard.addKeys('I,J,K,L');
     this.input.keyboard.on('keydown-F2', () => this.assignGroup(1));
     this.input.keyboard.on('keydown-F3', () => this.assignGroup(2));
     this.input.keyboard.on('keydown-F4', () => this.assignGroup(3));
@@ -2134,6 +2166,58 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- hot-seat team switch ----------------
+  camFor(team) { return (this.hotseat && this.cam2 && team === 1) ? this.cam2 : this.cameras.main; }
+
+  setupSplitScreen() {
+    // AAA: true split-screen — A on left half (main cam), B on right half (cam2)
+    const half = this.scale.width / 2;
+    this.cameras.main.setViewport(0, 0, half, this.scale.height);
+    this.cam2 = this.cameras.add(half, 0, half, this.scale.height);
+    this.cam2.setZoom(this.cameras.main.zoom);
+    const bBase = this.buildings.find(b => b.team === 1 && b.def.primary);
+    if (bBase) this.cam2.centerOn(bBase.x, bBase.y);
+    // divider
+    this._splitLine = this.add.graphics().setScrollFactor(0).setDepth(200);
+    this._splitLine.fillStyle(0x0a0f18, 1).fillRect(half - 1, 0, 2, this.scale.height);
+    this._splitLabel = this.add.text(half - 46, 6, 'CMDR A', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0', backgroundColor: '#000000aa', padding: { x: 4, y: 2 } }).setScrollFactor(0).setDepth(201);
+    this._splitLabelB = this.add.text(half + 8, 6, 'CMDR B · IJKL', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#ff8a5c', backgroundColor: '#000000aa', padding: { x: 4, y: 2 } }).setScrollFactor(0).setDepth(201);
+    this.keysB = this.input.keyboard.addKeys('I,J,K,L');
+    this.panBVX = 0; this.panBVY = 0;
+    this.scale.on('resize', () => {
+      const hw = this.scale.width / 2;
+      this.cameras.main.setViewport(0, 0, hw, this.scale.height);
+      if (this.cam2) this.cam2.setViewport(hw, 0, hw, this.scale.height);
+      this._splitLine.clear().fillStyle(0x0a0f18, 1).fillRect(hw - 1, 0, 2, this.scale.height);
+      this._splitLabel.setPosition(hw - 46, 6); this._splitLabelB.setPosition(hw + 8, 6);
+    });
+  }
+
+  // world position for a pointer, honoring which half of the split it is in
+  worldFor(p) {
+    if (!this.hotseat || !this.cam2) return { x: p.worldX, y: p.worldY };
+    const half = this.scale.width / 2;
+    if (p.x < half) return this.cameras.main.getWorldPoint(p.x, p.y);
+    return this.cam2.getWorldPoint(p.x - half, p.y);
+  }
+
+  teamForPointer(p) {
+    if (!this.hotseat || !this.cam2) return this.activeTeam ?? 0;
+    return p.x < this.scale.width / 2 ? 0 : 1;
+  }
+
+  // in split-screen, clicking a half implicitly takes command of that side
+  autoTeamByPointer(p) {
+    if (p.y > this.scale.height - 100 && p.x < 350) return;   // command card
+    if (p.x > this.scale.width - 200 && p.y < 250) return;      // minimap
+    const t = this.teamForPointer(p);
+    if (t !== (this.activeTeam ?? 0)) {
+      this.activeTeam = t;
+      this.clearSelection(); this.selectedBuilding = null;
+      this.groups = this.groups || {}; this._groupCycle = {};
+      this.events.emit('hud:activeTeam', t);
+    }
+  }
+
   switchActiveTeam() {
     if (!this.hotseat || this.gameOver) return;
     this.activeTeam = this.activeTeam === 0 ? 1 : 0;
@@ -2653,7 +2737,8 @@ export class BattleScene extends Phaser.Scene {
 
   queueResearchFromHud(buildingId, techId) {
     this.cmdCount++;
-    const b = this.buildings.find(b => b.team === 0 && !b.dead && (b.buildId === buildingId));
+    const T = this.activeTeam ?? 0;
+    const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId));
     if (!b) { this.audio?.error(); return; }
     if (b.queueResearch(techId)) this.audio?.queue(); else this.audio?.error();
   }
@@ -2683,6 +2768,7 @@ export class BattleScene extends Phaser.Scene {
 
     // edge pan + WASD with SC-feel acceleration/inertia
     const cam = this.cameras.main;
+    if (this.hotseat && this.cam2 && this.cam2.zoom !== cam.zoom) this.cam2.setZoom(cam.zoom);
     const maxPan = 620 / cam.zoom;
     const k = this.keys || {};
     this.panVX = this.panVX || 0; this.panVY = this.panVY || 0;
@@ -2711,6 +2797,22 @@ export class BattleScene extends Phaser.Scene {
     if (Math.abs(this.panVY) < 4) this.panVY = 0;
     cam.scrollX += this.panVX * dt;
     cam.scrollY += this.panVY * dt;
+    // AAA split-screen: commander B pans with IJKL (same inertia feel)
+    if (this.hotseat && this.cam2 && this.keysB) {
+      const kb = this.keysB;
+      this.panBVX = this.panBVX || 0; this.panBVY = this.panBVY || 0;
+      let bx = 0, by = 0;
+      if (kb.J.isDown) bx -= maxPan;
+      if (kb.L.isDown) bx += maxPan;
+      if (kb.I.isDown) by -= maxPan;
+      if (kb.K.isDown) by += maxPan;
+      this.panBVX += (bx - this.panBVX) * (bx !== 0 ? acc : (1 - dec));
+      this.panBVY += (by - this.panBVY) * (by !== 0 ? acc : (1 - dec));
+      if (Math.abs(this.panBVX) < 4) this.panBVX = 0;
+      if (Math.abs(this.panBVY) < 4) this.panBVY = 0;
+      this.cam2.scrollX += this.panBVX * dt;
+      this.cam2.scrollY += this.panBVY * dt;
+    }
     // autoscroll to selection back (Q handled elsewhere)
 
     // spatial hash rebuild (separation + neighbor queries)
