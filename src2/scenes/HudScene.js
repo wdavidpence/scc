@@ -292,8 +292,8 @@ export class HudScene extends Phaser.Scene {
     const brd = this.add.rectangle(x, y, w, h, 0x2f3a49, 0).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3f4a5a);
     const txt = this.add.text(x + w / 2, y + h / 2, label, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#dbe7ff', align: 'center' }).setOrigin(0.5).setScrollFactor(0);
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
-    hit.on('pointerdown', () => { this.flash(bg); cb(); });
-    hit.on('pointerover', () => { bg.setFillStyle(0x22304a, 1); if (tip) this.showTip(x + w / 2, y - 8, tip); });
+    hit.on('pointerdown', () => { this.flash(txt); this.scene.get('Battle').audio?.uiClick?.(); cb(); });
+    hit.on('pointerover', () => { bg.setFillStyle(0x22304a, 1); this.scene.get('Battle').audio?.uiHover?.(); if (tip) this.showTip(x + w / 2, y - 8, tip); });
     hit.on('pointerout', () => { bg.setFillStyle(0x18202c, 1); this.hideTip(); });
     const btn = { bg, brd, txt, hit, x, y, w, h, label, setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); } };
     this.buttons.push(btn);
@@ -621,6 +621,7 @@ export class HudScene extends Phaser.Scene {
 
   showGameOver(r) {
     this.gameOver = r;
+    if (r === 'victory') this.scene.get('Battle').polish?.confetti();
     this.goPanel.setVisible(true).setAlpha(0);
     this.goDim.setSize(this.W, this.H);
     this.goTitle.setPosition(this.W / 2, this.H / 2 - 60);
@@ -731,6 +732,9 @@ export class HudScene extends Phaser.Scene {
     const g = this.mmG;
     g.clear();
     const s = this.mmSize / (96 * TILE);
+    // polish: rotating radar sweep + framed bezel
+    b.polish?.radarSweep(g, this.mmX, this.mmY, this.mmSize);
+    b.polish?.mmFrame(g, this.mmX, this.mmY, this.mmSize);
     // creep
     for (const t of [0, 1]) {
       const cells = b.creepCanvases[t].cells;

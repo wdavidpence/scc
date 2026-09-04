@@ -11,6 +11,7 @@ import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaig
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
 import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
+import { PolishFX } from '../engine/polish.js';
 
 const MAP_W = 96;   // tiles
 const MAP_H = 96;
@@ -111,6 +112,7 @@ export class BattleScene extends Phaser.Scene {
       { id: 'near-base-alert', when: 'near:0.30,0.30,140', msg: 'Hostiles inside our perimeter!', bark: true, barkPitch: 1.05 },
     ]);
     this.audio = new Audio2(this);
+    this.polish = new PolishFX(this);
     this.audio.setRace(this.race);
     // AAA: the enemy commander introduces themselves over open comms
     if (this.hotseat) {
@@ -373,6 +375,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.paused = !this.paused;
     this.audio?.orderPing();
+    this.polish?.pauseOverlay(this.paused);
     this.events.emit('hud:pause', this.paused);
   }
 
@@ -1233,6 +1236,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const u = new Unit(this, team, kind, x, y);
     this.units.push(u);
+    this.polish?.spawnFlash(x, y, team);
     p.supplyUsed += def.supply || 0;
     if (def.supplyBonus) p.supplyCap += def.supplyBonus;
     // apply weapon upgrades
@@ -1327,7 +1331,13 @@ export class BattleScene extends Phaser.Scene {
   applyHit(target, damage, splash, attacker) {
     if (target.dead) return;
     target.takeDamage(damage, attacker);
+    target._lastHurtT = this.gameTime;
     const tx = target.x, ty = target.y;
+    // polish: spark tick on every hit landing on your own units
+    if (!target.def && target.kind && target.team === (this.activeTeam ?? 0)) {
+      const sp = this.add.circle(tx, ty, 2, 0xffd0d0, 0.9).setDepth(46);
+      this.tweens.add({ targets: sp, scale: 2.4, alpha: 0, duration: 180, onComplete: () => sp.destroy() });
+    }
     this.hitRocksNear(tx, ty, damage, splash);
     if (splash > 0) {
       if (splash >= 20) this.shake(6, 0.35);
@@ -1534,6 +1544,9 @@ export class BattleScene extends Phaser.Scene {
     this.harvestTargetReset(u);
     // minimap event ping on combat deaths
     if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
+    // polish: kill pop + streak taunts when the enemy dies in your vision
+    if (u.team === 1 && this.currentlyVisible(u.x, u.y)) this.polish?.killPop(u.x, u.y, !!u.isBoss || !!u.def.heavy);
+    if (u.team === 0 && !this.gameOver) this.polish?.underAttack(u.x, u.y);
     // F1: kill feedback — shake + credit + ultimate energy
     if (u.isBoss) {
       this.shake(10, 0.6);
@@ -1573,6 +1586,7 @@ export class BattleScene extends Phaser.Scene {
       if (this._nexusMark) { this._nexusMark.destroy(); this._nexusMark = null; }
       if (this._nexusRing) { this._nexusRing.destroy(); this._nexusRing = null; }
       this.shake(12, 0.8);
+      this.polish?.zapFX();
       this.events.emit('hud:alert', 'SHIELD MATRIX COLLAPSED — FINISH THEM');
       this.audio?.objective?.();
       this.audio?.ultimateBark?.();
@@ -1609,6 +1623,7 @@ export class BattleScene extends Phaser.Scene {
       this.showRallyFlag(b);
     }
     this.audio?.buildComplete();
+    this.polish?.buildCompleteFX(b.x, b.y, !!b.def.primary);
   }
 
   drawPowerField(b) {
@@ -1769,6 +1784,7 @@ export class BattleScene extends Phaser.Scene {
   onCargoDeposited(u) {
     const isGas = u.cargoGas;
     this.addIncome(u.team, isGas ? 0 : u.cargo, isGas ? u.cargo : 0);
+    if (u.team === (this.activeTeam ?? 0)) this.polish?.floatGain(u.x, u.y, u.cargo, isGas);
     this.audio?.deposit();
   }
 
@@ -1907,6 +1923,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.dragMoved) {
         const rect = this.dragBox(this.dragStart, wpt);
         this.drawBox(rect);
+        this.polish?.drawAnts(rect);
       }
     });
 
@@ -1931,6 +1948,7 @@ export class BattleScene extends Phaser.Scene {
         }
       }
       this.dragStart = null;
+      if (this.polish && this.polish._ants) this.polish._ants.clear();
       this.box.clear();
     });
 
@@ -1957,6 +1975,7 @@ export class BattleScene extends Phaser.Scene {
       const hp = this.worldFor(p); const wx = hp.x, wy = hp.y;
       let best = null, bd = 22;
       for (const u of this.units) { if (u.dead || (u.cloaked && u.team !== 0) || (u.burrowed && u.team !== 0)) continue; const d = Math.hypot(u.x - wx, u.y - wy); if (d < bd) { bd = d; best = u; } }
+      this.polish?.hoverGlow(best);
       let bb = null, bbd = 34;
       if (!best) for (const bu of this.buildings) { if (bu.dead) continue; const d = Math.hypot(bu.x - wx, bu.y - wy); if (d < Math.max(bu.def.w, bu.def.h) * TILE * 0.6 && d < bbd) { bbd = d; bb = bu; } }
       if (best) {
@@ -2019,6 +2038,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
     this.input.keyboard.on('keydown-F', () => this.stimSelected());
     this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
+    this.input.keyboard.on('keydown-F6', () => this.polish?.cycleSpeed());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
     this.input.keyboard.on('keydown-F8', () => { if (this.hotseat) { this.switchActiveTeam(); return; } this.restoreBookmark(); });
     if (this.hotseat) {
@@ -2261,6 +2281,7 @@ export class BattleScene extends Phaser.Scene {
   // F1: order acknowledgment marker (SC-style green/attack click sprite)
   showOrderMarker(x, y) {
     const atk = this.attackMoveMode;
+    this.polish?.clickMarker(x, y, atk ? 0xff5c5c : 0x6ee7a0);
     const m = this.add.circle(x, y, atk ? 10 : 8, atk ? 0xff5c5c : 0x6ee7a0, 0.25).setStrokeStyle(1.5, atk ? 0xff8080 : 0x9fffff, 0.9).setDepth(70);
     this.tweens.add({ targets: m, scale: 1.8, alpha: 0, duration: 320, onComplete: () => m.destroy() });
     if (this.selection.size > 1) { // staggered acks for group
@@ -2399,6 +2420,7 @@ export class BattleScene extends Phaser.Scene {
   assignGroup(n) {
     if (!this.selection.size) return;
     this.controlGroups[n] = [...this.selection];
+    this.polish?.groupPop(n, this.selection.size);
     this.events.emit('hud:groups', Object.keys(this.controlGroups).map(k => ({ n: k, count: this.controlGroups[k].length })));
     this.audio?.select();
     this.audio?.groupBark?.(n);
@@ -3112,6 +3134,13 @@ export class BattleScene extends Phaser.Scene {
     // enemy AI
     this.updateAI(dt);
     this.updateThreats(dt);
+    this.polish?.tick(dt, { units: this.units, buildings: this.buildings, gameTime: this.gameTime });
+    // polish: rally pennants flutter + construction countdown arcs
+    for (const b of this.buildings) { if (!b.dead && b._rallyFlag) this.polish?.flagWave(b); if (!b.dead && !b.built) this.polish?.buildCountdown(b); }
+    // polish: supply-block sticky vignette (active team only)
+    { const T = this.hotseat ? (this.activeTeam ?? 0) : 0; const pp = this.players[T];
+      const over = pp.supplyUsed >= pp.supplyCap && this.buildings.some(b => b.team === T && !b.dead && b.def.production);
+      if (over !== this._supOver) { this._supOver = over; this.polish?.supplyVignette(over); } }
     this.updateEscape(dt);
     this.updateConvoy(dt);
     this.updateAmbient(dt);

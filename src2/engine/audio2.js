@@ -63,6 +63,8 @@ export class Audio2 {
   researchComplete() { this.tone(700, 0.12, 'sine', 0.04, 300); }
   death(big) { this.noise(big ? 0.4 : 0.15, big ? 0.1 : 0.05, big ? 300 : 900); }
   error() { this.tone(180, 0.12, 'square', 0.04, -60); }
+  uiHover() { this.tone(1400, 0.03, 'sine', 0.012); }
+  uiClick() { this.tone(900, 0.05, 'square', 0.02, -120); }
   gameEnd(win) {
     this.stopMusic();
     if (win) this.victoryFanfare(); else this.defeatDirge();
