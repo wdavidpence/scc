@@ -113,6 +113,7 @@ export class BattleScene extends Phaser.Scene {
     ]);
     this.audio = new Audio2(this);
     this.polish = new PolishFX(this);
+    this.polish.initAmbient();
     this.audio.setRace(this.race);
     // AAA: the enemy commander introduces themselves over open comms
     if (this.hotseat) {
@@ -1546,6 +1547,8 @@ export class BattleScene extends Phaser.Scene {
     if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
     // polish: kill pop + streak taunts when the enemy dies in your vision
     if (u.team === 1 && this.currentlyVisible(u.x, u.y)) this.polish?.killPop(u.x, u.y, !!u.isBoss || !!u.def.heavy);
+    // v2.26: corpse decals — every death leaves a fading mark
+    if (this.camNear(u.x, u.y)) this.polish?.registerCorpse(u.x, u.y, !!u.def.heavy || u.def.size === 'large', u.team === 1 ? 0x6b1f2f : 0x2f3a49);
     if (u.team === 0 && !this.gameOver) this.polish?.underAttack(u.x, u.y);
     // F1: kill feedback — shake + credit + ultimate energy
     if (u.isBoss) {
@@ -1575,6 +1578,8 @@ export class BattleScene extends Phaser.Scene {
   onBuildingDeath(b) {
     this.buildings = this.buildings.filter(x => x !== b);
     this.shake(b.def.primary ? 12 : 7, 0.5);
+    // v2.26: permanent scorch under razed structures (fades over 30s)
+    this.polish?.registerCorpse(b.x, b.y, true, 0x241a12);
     if (!this.gameOver) this.addEventPing(b.x, b.y, b.team === 0 ? 0xff5c5c : 0xffb04a, !!b.def.primary);
     if (this.selectedBuilding === b) this.selectedBuilding = null;
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
@@ -1832,6 +1837,8 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: ring, radius: TILE * 4, alpha: 0, duration: 900, onComplete: () => ring.destroy() });
         lab.sprite.setTintFill(tint);
         this.tweens.add({ targets: lab.sprite, tint: 0xffffff, duration: 700 });
+        // v2.26: upgrade orb flies from the lab to the top bar
+        if (this.camNear(lab.x, lab.y)) this.polish?.orbFly(lab.x, lab.y);
       }
       for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker) {
         u.sprite.setTintFill(tint);
@@ -2141,6 +2148,7 @@ export class BattleScene extends Phaser.Scene {
       this.selection.add(u);
       u.selected = true;
       this.showSelRing(u);
+      this.polish?.selGlow(u);
       this.selectedBuilding = null;
       this.events.emit('hud:selection', this.selectionInfo());
     }
@@ -2156,6 +2164,7 @@ export class BattleScene extends Phaser.Scene {
   clearSelection() {
     for (const u of this.selection) { u.selected = false; if (u._ring) { u._ring.destroy(); u._ring = null; } }
     this.selection.clear();
+    this.polish?.clearSelGlow();
     this.events.emit('hud:selection', this.selectionInfo());
   }
 
@@ -2215,6 +2224,7 @@ export class BattleScene extends Phaser.Scene {
       const sb = this.selectedBuilding;
       sb.rallyPoint = { x: wp.x, y: wp.y };
       this.showRallyFlag(sb);
+      this.polish?.rallyArrow(sb);
       this.audio?.move();
       return;
     }
@@ -2222,6 +2232,8 @@ export class BattleScene extends Phaser.Scene {
       const list = [...this.selection];
       if (list.length >= 3) this.issueGroupMove(list, wp.x, wp.y, true);
       else for (const u of list) u.issueMove(wp.x, wp.y, true);
+      // v2.26 polish: SC-style "?" when a war party marches into unexplored fog
+      if (list.length >= 3 && !this.seen[this.nav.idx((wp.x / 16) | 0, (wp.y / 16) | 0)]) this.polish?.fogQuestion(wp.x, wp.y);
       this.attackMoveMode = false;
       this.input.setDefaultCursor('default');
       this.audio?.move();
@@ -2769,6 +2781,7 @@ export class BattleScene extends Phaser.Scene {
     this._idleIdx = ((this._idleIdx || 0) + 1) % idle.length;
     const u = idle[this._idleIdx];
     this.selection.clear(); this.addToSelection(u);
+    this.polish?.idlePing(u, this._idleIdx + 1, idle.length);
     this.cameras.main.centerOn(u.x, u.y);
     this.audio?.orderPing?.();
   }
@@ -2822,6 +2835,8 @@ export class BattleScene extends Phaser.Scene {
     this.ghostValid.lineStyle(2, ok ? 0x6ee7a0 : 0xff4444, 0.8);
     this.ghostValid.strokeRect(gx - (def.w * TILE) / 2, gy - (def.h * TILE) / 2, def.w * TILE, def.h * TILE);
     this.ghost.setTint(ok ? 0xffffff : 0xff5555);
+    // v2.26: build-site stencil — hatch fill + per-tile dots under the ghost
+    this.polish?.ghostStencil(this.ghostValid, gx, gy, def, ok);
   }
 
   placementValid(buildId, x, y) {
@@ -2885,7 +2900,7 @@ export class BattleScene extends Phaser.Scene {
     const T = this.activeTeam ?? 0;
     const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId || b.morphedTo === buildingId));
     if (!b) { this.audio?.error(); return; }
-    if (b.queueUnit(kind)) this.audio?.queue(); else this.audio?.error();
+    if (b.queueUnit(kind)) this.audio?.queue(); else { this.audio?.error(); this.events.emit('hud:unaffordable'); }
   }
 
   queueResearchFromHud(buildingId, techId) {
@@ -2893,7 +2908,7 @@ export class BattleScene extends Phaser.Scene {
     const T = this.activeTeam ?? 0;
     const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId));
     if (!b) { this.audio?.error(); return; }
-    if (b.queueResearch(techId)) this.audio?.queue(); else this.audio?.error();
+    if (b.queueResearch(techId)) this.audio?.queue(); else { this.audio?.error(); this.events.emit('hud:unaffordable'); }
   }
 
   handleHudCommand(action) {
@@ -3018,6 +3033,7 @@ export class BattleScene extends Phaser.Scene {
     for (const sp of this.children.list.filter(c => c._proj && c.active)) {
       const pr = sp._proj;
       if (pr.target.dead) { sp.destroy(); continue; }
+      this.polish?.projTrail(sp);
       const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
       const d = Math.hypot(dx, dy);
       const step = pr.speed * dt;

@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 // polish.js — v2.25 micro-feedback layer: click markers, floats, sweeps, badges, confetti.
 // Self-contained: every method guards on scene state; cheap tweens, auto-destroy.
 export class PolishFX {
@@ -288,11 +290,360 @@ export class PolishFX {
     g.strokeRoundedRect(mmX - 4, mmY - 4, size + 8, size + 8, 5);
   }
 
+  // ---------------- v2.26 AAA layer ----------------
+  _cheap(s) { return s && s.children.list.length < 850; }
+
+  // 21) weapon-class identity: phosphor trails under live projectiles
+  projTrail(sp) {
+    const s = this.s;
+    if (!s || s.gameOver || !this._cheap(s) || !s.camNear(sp.x, sp.y)) return;
+    const pr = sp._proj; if (!pr) return;
+    pr._trN = (pr._trN || 0) + 1;
+    if (pr._trN % 2) return;
+    const kind = pr.kind;
+    const col = kind === 'hydralisk' || kind === 'hydra' ? 0x9dff7a
+      : kind === 'dragoon' || kind === 'archon' ? 0x9fd0ff
+      : kind === 'corsair' || kind === 'darkTemplar' ? 0xb060ff
+      : kind === 'vulture' || kind === 'goliath' || kind === 'tank' ? 0xffd27a
+      : 0xbfe0ff;
+    const d = s.add.circle(sp.x, sp.y, kind === 'tank' ? 2.6 : 1.7, col, 0.55).setDepth(43).setBlendMode(Phaser.BlendModes.ADD);
+    s.tweens.add({ targets: d, alpha: 0, scale: 0.35, duration: 240, onComplete: () => d.destroy() });
+  }
+
+  // 22) flinch: squash-and-stretch on any unit taking a hit
+  flinch(u) {
+    const s = this.s;
+    if (!s || s.gameOver || !u || u.dead || !u.sprite || !u.container || !u.container.visible) return;
+    if (!s.camNear(u.x, u.y)) return;
+    const bs = u.baseScale || 1;
+    u.sprite.setScale(bs * 1.14, bs * 0.86);
+    s.tweens.add({ targets: u.sprite, scaleX: bs, scaleY: bs, duration: 120, ease: 'Back.easeOut' });
+  }
+
+  // 23) shield break: glass-shatter ring + shards when a shield hits zero
+  shieldBreak(u) {
+    const s = this.s;
+    if (!s || s.gameOver || !this._cheap(s) || !s.camNear(u.x, u.y)) return;
+    const g = s.add.circle(u.x, u.y, u.radius + 7, 0x4ea1ff, 0).setStrokeStyle(2, 0xbfe0ff, 0.95).setDepth(56);
+    s.tweens.add({ targets: g, scale: 2.1, alpha: 0, duration: 340, ease: 'Cubic.easeOut', onComplete: () => g.destroy() });
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * 6.28;
+      const p = s.add.rectangle(u.x, u.y, 2.5, 5, 0xbfe0ff, 0.9).setDepth(57).setRotation(a);
+      s.tweens.add({ targets: p, x: u.x + Math.cos(a) * (14 + Math.random() * 12), y: u.y + Math.sin(a) * (14 + Math.random() * 12), alpha: 0, rotation: a + 3, duration: 420 + Math.random() * 180, onComplete: () => p.destroy() });
+    }
+  }
+
+  // 24) lingering smoke wisps over fresh graves (heavy = taller column)
+  smokeWisp(x, y, heavy = false) {
+    const s = this.s;
+    if (!s || s.gameOver || !this._cheap(s) || !s.camNear(x, y)) return;
+    const n = heavy ? 5 : 2;
+    for (let i = 0; i < n; i++) {
+      const puff = s.add.circle(x + (Math.random() * 10 - 5), y, 3 + Math.random() * 3, heavy ? 0x3a3a3a : 0x6a6a6a, heavy ? 0.4 : 0.3).setDepth(9);
+      s.tweens.add({ targets: puff, y: y - (heavy ? 46 : 24) - Math.random() * 14, x: puff.x + (Math.random() * 16 - 8), alpha: 0, scale: (heavy ? 3.4 : 2.2) + Math.random(), duration: (heavy ? 2200 : 1400) + Math.random() * 700, ease: 'Sine.easeOut', onComplete: () => puff.destroy() });
+    }
+  }
+
+  // 25) building destruction: fireball, black smoke column, spark ring, crater
+  heavyDeathFX(b) {
+    const s = this.s;
+    if (!s || s.gameOver || !b) return;
+    const big = !!b.def.primary;
+    const R = Math.max(b.def.w || 2, b.def.h || 2) * 8;
+    if (s.textures.exists('explosion')) {
+      const ex = s.add.image(b.x, b.y, 'explosion').setDepth(60).setScale(big ? 2.6 : 1.6);
+      s.tweens.add({ targets: ex, scale: big ? 5 : 3, alpha: 0, duration: 520, ease: 'Cubic.easeOut', onComplete: () => ex.destroy() });
+    }
+    s.add.image(b.x, b.y, 'scorch').setDepth(6).setAlpha(0.85).setScale(big ? 3.2 : 1.8).setRotation(Math.random() * 6.28);
+    if (s.camNear(b.x, b.y)) {
+      for (let i = 0; i < (big ? 10 : 6); i++) {
+        const puff = s.add.circle(b.x + (Math.random() * R * 0.5 - R * 0.25), b.y - Math.random() * 8, 4 + Math.random() * 5, i % 2 ? 0x2e2e2e : 0x50443c, 0.5).setDepth(10);
+        s.tweens.add({ targets: puff, y: b.y - 60 - Math.random() * 40, x: puff.x + (Math.random() * 26 - 13), alpha: 0, scale: 3 + Math.random() * 2, duration: 1800 + Math.random() * 1400, ease: 'Sine.easeOut', onComplete: () => puff.destroy() });
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * 6.28, sp = 40 + Math.random() * 60;
+        const d = s.add.image(b.x, b.y, 'spark').setDepth(58).setScale(1 + Math.random());
+        s.tweens.add({ targets: d, x: b.x + Math.cos(a) * sp, y: b.y + Math.sin(a) * sp * 0.7, alpha: 0, duration: 500 + Math.random() * 280, ease: 'Quad.easeOut', onComplete: () => d.destroy() });
+      }
+    }
+  }
+
+  // 26) overkill: gold spark shower + tag when splash crushes a light unit
+  overkillFX(x, y, amt) {
+    const s = this.s;
+    if (!s || s.gameOver || !this._cheap(s) || !s.camNear(x, y)) return;
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * 6.28, sp = 22 + Math.random() * 34;
+      const p = s.add.circle(x, y, 1.8, 0xffd23f, 1).setDepth(53).setBlendMode(Phaser.BlendModes.ADD);
+      s.tweens.add({ targets: p, x: x + Math.cos(a) * sp, y: y + Math.sin(a) * sp - 6, alpha: 0, scale: 0.2, duration: 380 + Math.random() * 220, ease: 'Quad.easeOut', onComplete: () => p.destroy() });
+    }
+    if (amt >= 30) {
+      const t = s.add.text(x, y - 20, 'OVERKILL', { fontFamily: 'Menlo, monospace', fontSize: '11px', fontWeight: 'bold', color: '#ffd23f' }).setOrigin(0.5).setDepth(76).setStroke(2, 0x000000, 0.8);
+      s.tweens.add({ targets: t, y: y - 40, alpha: 0, scale: 1.3, duration: 700, ease: 'Back.easeOut', onComplete: () => t.destroy() });
+    }
+  }
+
+  // 27) idle worker ping: double ring + position badge when camera jumps to one
+  idlePing(u, i, n) {
+    const s = this.s;
+    if (!s || s.gameOver || !u) return;
+    for (let k = 0; k < 2; k++) {
+      const g = s.add.circle(u.x, u.y, (u.radius || 6) + 6, 0x6ee7a0, 0).setStrokeStyle(1.5, 0x6ee7a0, 0.9).setDepth(56);
+      s.tweens.add({ targets: g, scale: 2.2, alpha: 0, duration: 420, delay: k * 160, ease: 'Cubic.easeOut', onComplete: () => g.destroy() });
+    }
+    const t = s.add.text(u.x, u.y - 24, `IDLE ${i}/${n}`, { fontFamily: 'Menlo, monospace', fontSize: '10px', fontWeight: 'bold', color: '#6ee7a0', backgroundColor: '#00000099', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(76).setScrollFactor(0);
+    s.tweens.add({ targets: t, alpha: 0, y: u.y - 34, duration: 1100, onComplete: () => t.destroy() });
+  }
+
+  // 28) rally arrow flight: an arrow streaks from the building to its new rally flag
+  rallyArrow(b) {
+    const s = this.s;
+    if (!s || s.gameOver || !b.rallyPoint || !this._cheap(s)) return;
+    const ang = Math.atan2(b.rallyPoint.y - b.y, b.rallyPoint.x - b.x);
+    const a = s.add.triangle(0, 0, -7, -4, 7, 0, -7, 4, 0x6ee7a0).setDepth(56).setAlpha(0.95);
+    a.setPosition(b.x, b.y).setRotation(ang);
+    s.tweens.add({ targets: a, x: b.rallyPoint.x, y: b.rallyPoint.y, angle: Math.sin(s.gameTime) * 6, alpha: 0, scale: 0.7, duration: 420, ease: 'Quad.easeOut', onComplete: () => a.destroy() });
+    const dust = s.add.circle(b.x, b.y, 5, 0xdbe7ff, 0.35).setDepth(55);
+    s.tweens.add({ targets: dust, scale: 2.2, alpha: 0, duration: 320, onComplete: () => dust.destroy() });
+  }
+
+  // 29) build ghost stencil: diagonal hatch + footprint tile dots on the placement ghost
+  ghostStencil(g, gx, gy, def, ok) {
+    if (!g) return;
+    const W = def.w * 16, H = def.h * 16;
+    const x0 = gx - W / 2, y0 = gy - H / 2;
+    g.lineStyle(1, ok ? 0x6ee7a0 : 0xff4444, 0.28);
+    for (let d = 0; d < W + H; d += 6) {
+      const x1 = x0 + Math.max(0, d - H), y1 = y0 + Math.min(H, d);
+      const x2 = x0 + Math.min(W, d), y2 = y0 + Math.max(0, d - W);
+      g.lineBetween(x1, y1, x2, y2);
+    }
+    g.fillStyle(ok ? 0x6ee7a0 : 0xff4444, 0.18);
+    for (let tx = 0; tx < def.w; tx++) for (let ty = 0; ty < def.h; ty++) g.fillCircle(x0 + tx * 16 + 8, y0 + ty * 16 + 8, 1.4);
+  }
+
+  // 31) fog question marks: SC-style "?" cluster when a big group marches blind
+  fogQuestion(x, y) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    for (let i = 0; i < 3; i++) {
+      const t = s.add.text(x + (Math.random() * 28 - 14), y + (Math.random() * 20 - 10), '?', { fontFamily: 'Menlo, monospace', fontSize: '14px', fontWeight: 'bold', color: '#ffd23f' }).setOrigin(0.5).setDepth(76).setStroke(2, 0x000000, 0.7).setAlpha(0);
+      s.tweens.add({ targets: t, alpha: 0.95, y: t.y - 12 - i * 4, duration: 260, delay: i * 110, ease: 'Back.easeOut', onComplete: () => s.tweens.add({ targets: t, alpha: 0, duration: 900, onComplete: () => t.destroy() }) });
+    }
+    s.addEventPing?.(x, y, 0xffd23f, false);
+  }
+
+  // 32) creep ambient: slow bubbles rising and popping across live creep
+  creepBubbles(dt) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    this._cbT = (this._cbT || 0) - dt;
+    if (this._cbT > 0) return;
+    this._cbT = 0.5 + Math.random() * 0.7;
+    if (!this._cheap(s)) return;
+    const vw = s.cameras.main.worldView;
+    for (const t of [0, 1]) {
+      const cc = s.creepCanvases && s.creepCanvases[t];
+      if (!cc) continue;
+      for (let tries = 0; tries < 10; tries++) {
+        const tx = Phaser.Math.Clamp(((vw.x + Math.random() * vw.width) / 16) | 0, 0, 95);
+        const ty = Phaser.Math.Clamp(((vw.y + Math.random() * vw.height) / 16) | 0, 0, 95);
+        if (!cc.cells[ty * 96 + tx]) continue;
+        const x = tx * 16 + 8 + (Math.random() * 8 - 4), y = ty * 16 + 8 + (Math.random() * 8 - 4);
+        const col = t === 0 ? 0x5a2a7a : 0x7a2a3a;
+        const b = s.add.circle(x, y, 1 + Math.random() * 1.6, col, 0.75).setDepth(9);
+        s.tweens.add({ targets: b, y: y - 6 - Math.random() * 5, alpha: 0, scale: 1.6, duration: 700 + Math.random() * 500, onComplete: () => { const r = s.add.circle(x, y - 8, 2.4, col, 0).setStrokeStyle(1, col, 0.7).setDepth(9); s.tweens.add({ targets: r, scale: 1.8, alpha: 0, duration: 220, onComplete: () => r.destroy() }); } });
+        break;
+      }
+    }
+  }
+
+  // 33) cloak shimmer: faint distortion left where cloaked foes passed
+  cloakScan(dt) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    this._csT = (this._csT || 0) - dt;
+    if (this._csT > 0) return;
+    this._csT = 0.45;
+    if (!this._cheap(s)) return;
+    for (const u of s.units) {
+      if (u.dead || u.team === 0 || !u.cloaked) continue;
+      if (!s.camNear(u.x, u.y)) continue;
+      this.cloakShimmer(u.x, u.y);
+    }
+  }
+  cloakShimmer(x, y) {
+    const s = this.s;
+    if (!s || !this._cheap(s)) return;
+    const g = s.add.graphics().setDepth(52).setAlpha(0.5);
+    g.lineStyle(1, 0x9fd0ff, 0.5);
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * 6.28, r = 5 + Math.random() * 7;
+      g.beginPath();
+      g.arc(x + Math.cos(a) * 4, y + Math.sin(a) * 4, r, a, a + 1.4 + Math.random());
+      g.strokePath();
+    }
+    s.tweens.add({ targets: g, alpha: 0, y: y - 4, duration: 900, onComplete: () => g.destroy() });
+  }
+
+  // 34) day/night ambience: starfield parallax + 4-minute tint cycle (subtle, max 0.14)
+  initAmbient() {
+    const s = this.s;
+    if (!s || this._stars) return;
+    this._stars = s.add.container(0, 0).setDepth(3).setScrollFactor(0.45);
+    this._stars.setAlpha(0);
+    for (let i = 0; i < 110; i++) {
+      const st = s.add.rectangle(Math.random() * 1600, Math.random() * 1600, 1 + (Math.random() < 0.12 ? 1.5 : 0), 1 + (Math.random() < 0.12 ? 1.5 : 0), Math.random() < 0.5 ? 0xdbe7ff : 0xffffff, 0.5 + Math.random() * 0.5);
+      this._stars.add(st);
+      if (Math.random() < 0.3) s.tweens.add({ targets: st, alpha: 0.1, duration: 900 + Math.random() * 1600, yoyo: true, repeat: -1 });
+    }
+    this._dn = { tint: s.add.rectangle(s.scale.width / 2, s.scale.height / 2, s.scale.width, s.scale.height, 0x0a1226, 1).setScrollFactor(0).setDepth(1850).setAlpha(0), t: 0, phase: 0 };
+    s.events.once('shutdown', () => { this._stars = null; this._dn = null; });
+  }
+  ambient(dt) {
+    const s = this.s;
+    if (!s || !this._dn || !this._stars) return;
+    this._dn.phase = (this._dn.phase + dt / 240) % 1;
+    const ph = this._dn.phase;
+    // day 0-0.45 · dusk 0.45-0.55 · night 0.55-0.9 · dawn 0.9-1
+    let col = 0x0a1226, a = 0;
+    if (ph < 0.45) { col = 0x101a30; a = 0; }
+    else if (ph < 0.55) { const k = (ph - 0.45) / 0.1; col = 0x50302a; a = 0.10 * k; }
+    else if (ph < 0.9) { col = 0x0a1226; a = 0.14; }
+    else { const k = 1 - (ph - 0.9) / 0.1; col = 0x503a28; a = 0.12 * k; }
+    this._dn.tint.setFillStyle(col, a);
+    this._stars.setAlpha(a > 0.06 ? (a - 0.06) * 7 : 0);
+  }
+
+  // 38) corpse decals — pooled scorch+splat on fresh graves, 30s fade
+  registerCorpse(x, y, heavy = false, raceCol = 0x6b1f2f) {
+    const s = this.s;
+    if (!s || s.gameOver || !s.textures.exists('scorch')) return;
+    if ((this._corpN || 0) > 60) return;
+    this._corpN = (this._corpN || 0) + 1;
+    const sc = s.add.image(x, y, 'scorch').setDepth(6).setAlpha(0.5).setScale(heavy ? 1.9 : 1).setRotation(Math.random() * 6.28);
+    const bl = s.add.image(x, y, 'blood').setDepth(7).setAlpha(0.85).setScale(heavy ? 1.5 : 0.8 + Math.random() * 0.5).setRotation(Math.random() * 6.28).setTint(raceCol);
+    const ic = heavy && s.textures.exists('corpse') ? s.add.image(x, y, 'corpse').setDepth(7).setAlpha(0.9).setRotation(Math.random() * 6.28) : null;
+    s.tweens.add({ targets: [sc, bl, ...(ic ? [ic] : [])], alpha: 0, duration: 24000, delay: 6000, ease: 'Sine.easeIn', onComplete: () => { sc.destroy(); bl.destroy(); if (ic) ic.destroy(); this._corpN = Math.max(0, (this._corpN || 1) - 1); } });
+  }
+
+  // 35) selection tint: selected units brighten + green ring + ground glow
+  selGlow(u) {
+    const s = this.s;
+    if (!s || !u || u.dead) return;
+    if (!this._selGlows) this._selGlows = new Map();
+    this.clearSelGlow(u);
+    if (u.sprite) { u._tinted = true; u.sprite.setTint(0xd8f0e0); }
+    const r = u.radius || 8;
+    const ring = s.add.circle(u.x, u.y, r + 5, 0x6ee7a0, 0).setStrokeStyle(1.5, 0x6ee7a0, 0.85).setDepth(55);
+    const glow = s.add.circle(u.x, u.y, r + 2, 0x6ee7a0, 0.12).setDepth(8).setBlendMode(Phaser.BlendModes.ADD);
+    this._selGlows.set(u, { ring, glow });
+  }
+  clearSelGlow(only) {
+    if (!this._selGlows) return;
+    if (only) {
+      const e = this._selGlows.get(only);
+      if (e) { e.ring.destroy(); e.glow.destroy(); this._selGlows.delete(only); }
+      if (only.sprite && only._tinted) { only.sprite.clearTint(); only._tinted = false; }
+      return;
+    }
+    for (const [u, e] of this._selGlows) { e.ring.destroy(); e.glow.destroy(); if (u.sprite && u._tinted) u.sprite.clearTint(); }
+    this._selGlows.clear();
+  }
+  selGlowTick() {
+    if (!this._selGlows) return;
+    const s = this.s;
+    if (!s) return;
+    for (const [u, e] of [...this._selGlows]) {
+      if (u.dead || !this.selectionHas?.(u)) { this.clearSelGlow(u); continue; }
+      e.ring.setPosition(u.x, u.y);
+      e.glow.setPosition(u.x, u.y);
+    }
+  }
+  selectionHas(u) { return this.s?.selection?.has(u); }
+
+  // 36) unaffordable flash: red card + audio cue instead of a silent beep
+  unaffordable(card) {
+    const s = this.s;
+    if (!s || !card) return;
+    s.tweens.add({ targets: card, alpha: 0.25, duration: 90, yoyo: true, repeat: 1, onComplete: () => card.setAlpha(1) });
+    const bg = card.findOne ? card.findOne(c => c.type === 'RoundedRectangle' || c.type === 'Rectangle') : null;
+    if (bg && bg.setFillStyle) {
+      const prev = bg.fillColor;
+      bg.setFillStyle(0xff4444, 0.55);
+      s.time.delayedCall(220, () => { if (bg.active) bg.setFillStyle(prev, bg.fillAlpha); });
+    }
+  }
+
+  // 37) upgrade-complete orb: flies from the research building to the top bar
+  orbFly(x, y) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    const orb = s.add.circle(x, y, 4, 0x9fd0ff, 0.95).setDepth(70).setBlendMode(Phaser.BlendModes.ADD);
+    const halo = s.add.circle(x, y, 7, 0x9fd0ff, 0.25).setDepth(69).setBlendMode(Phaser.BlendModes.ADD);
+    s.tweens.add({ targets: [orb, halo], y: 8, x: s.scale.width * 0.5, scale: 0.3, alpha: 0, duration: 750, ease: 'Cubic.easeIn', onComplete: () => { orb.destroy(); halo.destroy(); } });
+  }
+
+  // 39) production queue chips: icons + ETA hovering over the selected producing building
+  queueChips() {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    const b = s.selection && [...s.selection].find(x => x.def && x.queue && x.queue.length && x.built);
+    if (!b) {
+      if (this._qc) {
+        for (const c of (this._qc.c || [])) c.destroy();
+        if (this._qc.c) this._qc.c.length = 0;
+        this._qc = null;
+      }
+      return;
+    }
+    const sig = b.queue.map(q => `${q.kind || q.research}:${Math.ceil(q.remaining)}`).join('|');
+    if (this._qc && this._qc.b === b && this._qc.sig === sig) return;
+    if (this._qc && this._qc.b === b) { for (const c of this._qc.c) c.destroy(); this._qc.c = []; }
+    this._qc = { b, sig, c: [] };
+    const bx = b.x, by = b.y - (b.def.h || 2) * 8 - 10;
+    b.queue.slice(0, 6).forEach((q, i) => {
+      const ox = (i - (Math.min(b.queue.length, 6) - 1) / 2) * 15;
+      const kind = q.kind || q.research;
+      const isUnit = !!q.kind;
+      const chip = s.add.rectangle(bx + ox, by, 13, 13, isUnit ? 0x102436 : 0x2a1c4a, 0.92).setDepth(80).setStrokeStyle(1, isUnit ? 0x4ea1ff : 0xb060ff, 0.9);
+      const lbl = s.add.text(bx + ox, by, (isUnit ? (UNITS_SHORT[kind] || '?') : '⚙'), { fontFamily: 'Menlo, monospace', fontSize: '9px', fontWeight: 'bold', color: isUnit ? '#bfe0ff' : '#d8b8ff' }).setOrigin(0.5).setDepth(81);
+      if (i === 0) {
+        const ring = s.add.circle(bx + ox, by, 8, 0, 0).setStrokeStyle(1.5, 0x6ee7a0, 0.9).setDepth(80);
+        const total = q.total || 1;
+        const prog = 1 - Math.min(1, q.remaining / total);
+        ring.setAngle(-90 + prog * 360);
+        this._qc.c.push(ring);
+        this._qc._ring = ring; this._qc._q = q;
+      }
+      this._qc.c.push(chip, lbl);
+    });
+    s.events.once('shutdown', () => { this._qc = null; });
+  }
+  queueChipsTick(dt) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    this._qcT = (this._qcT || 0) - dt;
+    if (this._qcT <= 0) { this._qcT = 0.25; this.queueChips(); }
+    if (this._qc && this._qc._ring && this._qc._q && !this._qc.b.dead) {
+      const prog = 1 - Math.min(1, this._qc._q.remaining / (this._qc._q.total || 1));
+      this._qc._ring.setAngle(-90 + prog * 360);
+    }
+  }
+
   tick(dt, ctx) {
     // under-attack watchdog: ally units flashing recent damage
     const s = this.s;
     if (!s || s.gameOver) return;
     const hurt = (ctx.units || []).filter(u => !u.dead && u.team === 0 && u._lastHurtT && (ctx.gameTime - u._lastHurtT) < 1.2).length;
     if (hurt >= 2) this.underAttack(ctx.units.find(u => !u.dead && u.team === 0 && u._lastHurtT)?.x);
+    this.creepBubbles(dt);
+    this.cloakScan(dt);
+    this.ambient(dt);
+    this.selGlowTick();
+    this.queueChipsTick(dt);
   }
 }
+
+// short labels for queue chips
+const UNITS_SHORT = { marine: 'M', firebat: 'F', tank: 'T', medic: '+', ghost: 'G', vulture: 'V', goliath: 'G', scv: 'W', zealot: 'Z', dragoon: 'D', stalker: 'S', darkTemplar: 'D', archon: 'A', probe: 'W', mutalisk: 'M', hydralisk: 'H', lurker: 'L', broodling: 'B', scourge: 'S', ultralisk: 'U', infestor: 'I', defiler: 'D', drone: 'W', queen: 'Q', overlord: 'O', tauRifle: 'T' };

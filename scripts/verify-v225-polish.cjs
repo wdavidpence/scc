@@ -87,15 +87,22 @@ require('fs').mkdirSync(OUT, { recursive: true });
   const unpaused = await page.evaluate(() => { const s = window.__SCC2.scene.getScene('Battle'); return !s.polish._pauseG && !s.polish._pauseTxt && !s.paused; });
   chk('pause overlay cleared', unpaused);
 
-  // hover glow over a unit
-  await page.evaluate(() => {
-    const s = window.__SCC2.scene.getScene('Battle');
-    const u = s.units.find(u => !u.dead && u.team === 0);
-    if (u) { const cam = s.cameras.main; const p = cam.worldToScreen ? cam.worldToScreen(u.x, u.y) : { x: u.x - cam.scrollX, y: u.y - cam.scrollY }; window.__HOVERPT = { x: p.x, y: p.y }; }
-  });
-  const hp = await page.evaluate(() => window.__HOVERPT);
-  if (hp) { await page.mouse.move(hp.x, hp.y, { steps: 4 }); await page.waitForTimeout(250); }
-  const hover = await page.evaluate(() => !!window.__SCC2.scene.getScene('Battle').polish._hoverRing);
+  // hover glow over a unit (track it: live units move away from a static cursor)
+  let hover = false;
+  for (let k = 0; k < 10 && !hover; k++) {
+    const hp = await page.evaluate(() => {
+      const s = window.__SCC2.scene.getScene('Battle');
+      const u = s.units.find(u => !u.dead && u.team === 0);
+      if (!u) return null;
+      const cam = s.cameras.main;
+      // screen = (world - worldView.topleft) * zoom  (no worldToScreen in this Phaser build)
+      return { x: (u.x - cam.worldView.x) * cam.zoom, y: (u.y - cam.worldView.y) * cam.zoom };
+    });
+    if (!hp) break;
+    await page.mouse.move(hp.x + 1, hp.y + 1, { steps: 2 });
+    await page.waitForTimeout(120);
+    hover = await page.evaluate(() => !!window.__SCC2.scene.getScene('Battle').polish._hoverRing);
+  }
   chk('hoverGlow ring', hover);
 
   // minimap radar sweep advances

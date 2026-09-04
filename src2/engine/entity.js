@@ -741,6 +741,7 @@ export class Unit {
 
   takeDamage(amount, attacker) {
     if (this.dead) return;
+    const wasShielded = this.shield > 0;
     if (this.shield > 0) {
       const s = Math.min(this.shield, amount);
       this.shield -= s; amount -= s;
@@ -753,6 +754,9 @@ export class Unit {
     }
     this.hp -= amount;
     this.sprite.setTint(0xffffff);
+    // v2.26 polish: flinch on every hit; glass-shatter when the last shield point breaks
+    this.world.polish?.flinch(this);
+    if (wasShielded && this.shield <= 0) this.world.polish?.shieldBreak(this);
     // damage numbers (throttled, camera-visible only)
     if (!this._dmgAcc) this._dmgAcc = 0;
     this._dmgAcc += amount;
@@ -826,6 +830,8 @@ export class Unit {
       }
     }
     this.world.audio?.death(this.def.size === 'large');
+    // v2.26 polish: smoke wisps linger over fresh graves
+    this.world.polish?.smokeWisp(this.x, this.y, this.def.size === 'large');
     if (this.def.size === 'large') this.world.shake?.(4, 0.25);
     this.container.destroy();
     this.world.nav.unblockBy(this.id);

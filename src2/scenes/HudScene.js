@@ -25,6 +25,7 @@ export class HudScene extends Phaser.Scene {
     battle.events.off('hud:gameover');
     battle.events.on('hud:tick', () => { if (this.scene.isActive()) this.refresh(); });
     battle.events.on('hud:selection', (info) => { if (this.scene.isActive()) this.onSelection(info); });
+    battle.events.on('hud:unaffordable', () => { if (this.scene.isActive()) this.flashNotEnough(); });
     battle.events.on('hud:gameover', (r) => { if (this.scene.isActive()) this.showGameOver(r); });
     battle.events.on('hud:alert', (msg) => { if (this.scene.isActive()) this.banner(msg); });
     battle.events.on('hud:pause', (on) => { if (this.scene.isActive()) this.showPause(on); });
@@ -298,6 +299,13 @@ export class HudScene extends Phaser.Scene {
     const btn = { bg, brd, txt, hit, x, y, w, h, label, setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); } };
     this.buttons.push(btn);
     return btn;
+  }
+
+  flashNotEnough() {
+    if (!this._neT) this._neT = this.add.text(this.W / 2, 34, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontWeight: 'bold', color: '#ff6060' }).setOrigin(0.5).setScrollFactor(0).setDepth(95).setStroke(2, 0x000000, 0.8);
+    this._neT.setText('NOT ENOUGH MINERALS').setAlpha(1).setScale(1.06);
+    this.tweens.add({ targets: this._neT, alpha: 0, scale: 1, duration: 900, ease: 'Quad.easeOut' });
+    if (this.resText) { const c = this.resText.color; this.resText.setColor('#ff6060'); this.time.delayedCall(350, () => { if (this.resText?.active) this.resText.setColor(c); }); }
   }
 
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
