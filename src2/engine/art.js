@@ -232,11 +232,16 @@ function createUnitTextures(scene) {
       px(ctx, 17, 6, 4, 2, '#ff7b2e');
     },
     goliath: (ctx, col) => {
-      px(ctx, 4, 4, 12, 12, '#4a5462'); px(ctx, 5, 5, 10, 4, col);
-      px(ctx, 2, 2, 4, 8, '#39424e'); px(ctx, 14, 2, 4, 8, '#39424e'); // rockets pods
-      px(ctx, 3, 3, 2, 1, '#ff5a5a'); px(ctx, 15, 3, 2, 1, '#ff5a5a');
-      px(ctx, 15, 10, 6, 3, '#2c333d'); //链 gun
-      px(ctx, 6, 16, 3, 3, '#313842'); px(ctx, 11, 16, 3, 3, '#313842');
+      // bipedal walker: coroutine hull, cluster rocket pods with lit tips, chaingun
+      px(ctx, 4, 5, 12, 10, '#3d4653'); px(ctx, 5, 6, 10, 3, '#525d6c'); // hull + highlight
+      px(ctx, 6, 8, 8, 3, col); // team chest band
+      px(ctx, 2, 2, 4, 8, '#39424e'); px(ctx, 14, 2, 4, 8, '#39424e'); // rocket pods
+      px(ctx, 2, 2, 4, 1, '#556070'); px(ctx, 14, 2, 4, 1, '#556070'); // pod caps
+      px(ctx, 3, 4, 2, 1, '#ff5a5a'); px(ctx, 15, 4, 2, 1, '#ff5a5a'); // rocket lights
+      px(ctx, 3, 6, 2, 1, '#ff8a5a'); px(ctx, 15, 6, 2, 1, '#ff8a5a');
+      px(ctx, 15, 10, 6, 3, '#2c333d'); px(ctx, 20, 11, 2, 1, '#141a22'); // chaingun barrel
+      px(ctx, 6, 15, 3, 4, '#313842'); px(ctx, 11, 15, 3, 4, '#313842'); // hydraulic legs
+      px(ctx, 6, 18, 3, 1, '#525d6c'); px(ctx, 11, 18, 3, 1, '#525d6c'); // feet
     },
     wraith: (ctx, col) => {
       ctx.fillStyle = '#414b58'; ctx.beginPath(); ctx.moveTo(10, 2); ctx.lineTo(18, 8); ctx.lineTo(20, 16); ctx.lineTo(2, 16); ctx.lineTo(4, 8); ctx.closePath(); ctx.fill();
@@ -258,10 +263,15 @@ function createUnitTextures(scene) {
       px(ctx, 15, 6, 4, 2, '#6ee7a0'); // med-injector
     },
     bc: (ctx, col) => {
-      ctx.fillStyle = '#4b5563'; ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(16, 2); ctx.lineTo(18, 10); ctx.lineTo(14, 16); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
-      px(ctx, 6, 4, 8, 3, col); px(ctx, 14, 4, 6, 2, '#2c333d'); px(ctx, 14, 8, 6, 2, '#2c333d');
-      px(ctx, 2, 12, 4, 2, '#7a8794'); px(ctx, 4, 14, 3, 2, '#3d444d');
-      px(ctx, 8, 8, 4, 4, '#9fb4c8');
+      // NGV battleship: layered grey hull, forward battery, team-lit spine, burning engines
+      ctx.fillStyle = '#39424e'; ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(16, 2); ctx.lineTo(18, 10); ctx.lineTo(14, 16); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4b5563'; ctx.beginPath(); ctx.moveTo(5, 5); ctx.lineTo(15, 3.5); ctx.lineTo(16.5, 9.5); ctx.lineTo(13, 14); ctx.lineTo(3.5, 11); ctx.closePath(); ctx.fill();
+      px(ctx, 7, 5, 6, 2, '#6b7684'); // deck highlight
+      px(ctx, 6, 8, 5, 2, col); px(ctx, 12, 6, 2, 6, col); // team spine + bridge
+      px(ctx, 15, 3, 3, 1, '#2c333d'); px(ctx, 15, 7, 3, 1, '#2c333d'); px(ctx, 15, 11, 3, 1, '#2c333d'); // starboard batteries
+      px(ctx, 2, 12, 3, 2, '#7a8794'); px(ctx, 4, 14, 2, 2, '#3d444d');
+      px(ctx, 1, 8, 2, 2, '#ffb03c'); px(ctx, 0, 10, 1, 2, '#ff7b2e'); // engine flare
+      px(ctx, 9, 6, 1, 1, '#ffd23f'); // hull beacon
     },
     ghost: (ctx, col) => {
       px(ctx, 5, 4, 10, 12, '#3d4450'); px(ctx, 6, 5, 8, 4, col);
@@ -297,12 +307,18 @@ function createUnitTextures(scene) {
       px(ctx, 8, 13, 3, 3, '#37284f');
     },
     ultra: (ctx, col) => {
-      ctx.fillStyle = '#7a3a22'; ctx.beginPath(); ctx.arc(10, 10, 8, 0, 7); ctx.fill();
-      ctx.fillStyle = '#a05030'; ctx.beginPath(); ctx.arc(10, 6, 5, 0, 7); ctx.fill();
-      px(ctx, 3, 2, 3, 4, '#ffe9c2'); px(ctx, 14, 2, 3, 4, '#ffe9c2'); // tusks
-      px(ctx, 7, 7, 6, 3, col);
-      px(ctx, 1, 12, 3, 3, '#57291763'); px(ctx, 16, 12, 3, 3, '#572917');
-      px(ctx, 5, 16, 3, 3, '#572917'); px(ctx, 12, 16, 3, 3, '#572917');
+      // hulking champion: armored carapace ridges, massive glow-tipped tusks, spiked forelegs
+      ctx.fillStyle = '#5c2c19'; ctx.beginPath(); ctx.arc(10, 11, 8, 0, 7); ctx.fill(); // shadow body
+      ctx.fillStyle = '#7a3a22'; ctx.beginPath(); ctx.arc(10, 10, 7, 0, 7); ctx.fill();
+      ctx.fillStyle = '#a05030'; ctx.beginPath(); ctx.arc(10, 6, 5, 0, 7); ctx.fill(); // head mass
+      px(ctx, 6, 3, 8, 2, '#8a4526'); // carapace ridge
+      px(ctx, 2, 1, 4, 5, '#ffe9c2'); px(ctx, 14, 1, 4, 5, '#ffe9c2'); // giant tusks
+      px(ctx, 2, 1, 1, 2, col); px(ctx, 17, 1, 1, 2, col); // takedown glow tips
+      px(ctx, 7, 7, 6, 3, col); // chest team plate
+      px(ctx, 8, 8, 1, 1, '#ffd23f'); px(ctx, 11, 8, 1, 1, '#ffd23f'); // eye cluster
+      px(ctx, 0, 12, 3, 4, '#572917'); px(ctx, 17, 12, 3, 4, '#572917'); // spiked forelegs
+      px(ctx, 1, 11, 1, 1, '#ffe9c2'); px(ctx, 18, 11, 1, 1, '#ffe9c2'); // claw points
+      px(ctx, 4, 16, 3, 3, '#472214'); px(ctx, 13, 16, 3, 3, '#472214'); // rear legs
     },
     overlord: (ctx, col) => {
       ctx.fillStyle = '#7a5030'; ctx.beginPath(); ctx.arc(10, 9, 7, 0, 7); ctx.fill();
@@ -361,11 +377,15 @@ function createUnitTextures(scene) {
       px(ctx, 8, 2, 4, 3, '#ffffff');
     },
     carrier: (ctx, col) => {
-      ctx.fillStyle = '#6f7f95'; ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(18, 3); ctx.lineTo(20, 12); ctx.lineTo(4, 16); ctx.closePath(); ctx.fill();
-      px(ctx, 4, 7, 12, 4, col);
-      px(ctx, 6, 12, 8, 2, '#4a586b'); // flight deck
-      px(ctx, 8, 14, 4, 1, '#9fc8ff');
-      ctx.fillStyle = '#55657a'; ctx.fillRect(14, 2, 5, 3);
+      // protoss carrier: cathedral-ship silhouette, interceptor bay glow, thruster corona
+      ctx.fillStyle = '#55657a'; ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(18, 3); ctx.lineTo(20, 12); ctx.lineTo(4, 16); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6f7f95'; ctx.beginPath(); ctx.moveTo(3, 6.5); ctx.lineTo(17, 4); ctx.lineTo(18.5, 11); ctx.lineTo(5, 15); ctx.closePath(); ctx.fill();
+      px(ctx, 4, 7, 12, 3, col); // team-lit superstructure
+      px(ctx, 5, 4, 4, 3, '#7d8fa8'); px(ctx, 6, 5, 2, 1, '#cfe0ff'); // bridge tower
+      px(ctx, 6, 12, 8, 2, '#2a3648'); // dark interceptor bay
+      px(ctx, 7, 12, 1, 2, '#9fc8ff'); px(ctx, 10, 12, 1, 2, '#9fc8ff'); px(ctx, 13, 12, 1, 2, '#9fc8ff'); // interceptor lights
+      ctx.fillStyle = 'rgba(159,200,255,0.35)'; ctx.beginPath(); ctx.arc(17, 13, 3, 0, 7); ctx.fill(); // thruster corona
+      px(ctx, 15, 2, 4, 2, '#8fa2bc');
     },
     corsair: (ctx, col) => {
       // sleek protoss hunter: swept wings, glowing void emitter
