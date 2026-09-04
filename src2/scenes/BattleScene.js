@@ -1331,9 +1331,18 @@ export class BattleScene extends Phaser.Scene {
 
   applyHit(target, damage, splash, attacker) {
     if (target.dead) return;
+    const preHp = (target.hp || 0) + (target.shield || 0);
+    const hadShield = (target.shield || 0) > 0;
     target.takeDamage(damage, attacker);
     target._lastHurtT = this.gameTime;
     const tx = target.x, ty = target.y;
+    // v2.26: floating damage numbers + overkill spark shower on light-unit splash kills
+    if (this.camNear(tx, ty)) {
+      const eff = Math.max(1, preHp - ((target.hp || 0) + (target.shield || 0)));
+      const kind = splash >= 20 ? 'crit' : hadShield ? 'shield' : (target.def && target.def.armor >= 2) ? 'armor' : 'hit';
+      this.polish?.dmgNumber(tx, ty, eff, kind);
+      if (target.dead && splash > 0 && target.def && (target.def.size !== 'large') && damage > (preHp * 2)) this.polish?.overkillFX(tx, ty, damage);
+    }
     // polish: spark tick on every hit landing on your own units
     if (!target.def && target.kind && target.team === (this.activeTeam ?? 0)) {
       const sp = this.add.circle(tx, ty, 2, 0xffd0d0, 0.9).setDepth(46);

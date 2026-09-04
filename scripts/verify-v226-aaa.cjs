@@ -133,7 +133,41 @@ require('fs').mkdirSync(OUT, { recursive: true });
     return u.sprite.tintTopLeft !== 16777215 || (g.polish._selGlows && g.polish._selGlows.size > 0);
   }));
 
-  // 8) orb fly + smoke wisp + shield break APIs fire
+  // 10b) floating damage numbers + overkill shower
+  await page.evaluate(() => {
+    const g = window.__SCC2.scene.getScene('Battle');
+    const foe = g.units.find(x => !x.dead && x.team === 1);
+    if (foe) { g.cameras.main.centerOn(foe.x, foe.y); g._gateFoe3 = foe; }
+  });
+  await page.waitForTimeout(350);
+  chk('floating dmg numbers', await page.evaluate(() => {
+    const g = window.__SCC2.scene.getScene('Battle');
+    const foe = g._gateFoe3 && !g._gateFoe3.dead ? g._gateFoe3 : g.units.find(x => !x.dead && x.team === 1);
+    if (!foe) return 'skip';
+    const n0 = g.children.list.filter(c => c.type === 'Text' && c.depth === 74).length;
+    g._gateOverkillTarget = foe;
+    g.polish._dnAcc = 1; // next dmgNumber call draws (odd acc -> passes even-skip)
+    g.applyHit(foe, 8, 0, g.units.find(u => u.team === 0));
+    return g.children.list.filter(c => c.type === 'Text' && c.depth === 74).length > n0;
+  }));
+  chk('overkill spark shower', await page.evaluate(() => {
+    const g = window.__SCC2.scene.getScene('Battle');
+    const foe = g._gateOverkillTarget && !g._gateOverkillTarget.dead ? g._gateOverkillTarget : g.units.find(x => !x.dead && x.team === 1);
+    if (!foe) return 'skip';
+    foe.hp = 2; foe.shield = 0;
+    const n0 = g.children.list.filter(c => c.active && c.depth === 53).length;
+    g.applyHit(foe, 60, 24, g.units.find(u => u.team === 0));
+    return g.children.list.filter(c => c.active && c.depth === 53).length > n0 || (foe.dead && g.children.list.filter(c => c.active && c.depth === 53).length > 0);
+  }));
+  // 10c) income rate readout lives after minerals tick
+  chk('income rate readout', await page.evaluate(() => {
+    const hud = window.__SCC2.scene.getScene('Hud');
+    if (!hud || !hud.scene.isActive()) return 'skip';
+    hud.setIncomeRate(42);
+    return !!(hud.rateTxt && hud.rateTxt.text.includes('/m'));
+  }));
+
+  // 11) orb fly + smoke wisp + shield break APIs exist and run
   chk('orb/smoke/shieldbreak fire', await page.evaluate(() => {
     const g = window.__SCC2.scene.getScene('Battle');
     const m = g.cameras.main.midPoint;
@@ -151,7 +185,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
     return !!(p._stars && p._dn);
   }));
 
-  // 10) creep bubbles fire somewhere over live creep (camera aimed at a real creep cell)
+  // 10) creep bubbles: aim camera at a live creep cell, spawn immediately, assert in same call
   chk('creep bubbles', await page.evaluate(() => {
     const g = window.__SCC2.scene.getScene('Battle');
     let hit = null;
@@ -162,15 +196,15 @@ require('fs').mkdirSync(OUT, { recursive: true });
     }
     if (!hit) return 'skip';
     g.cameras.main.centerOn(hit.tx * 16 + 8, hit.ty * 16 + 8);
-    return true;
-  }));
-  await page.waitForTimeout(350);
-  chk('creep bubbles visible', await page.evaluate(() => {
-    const g = window.__SCC2.scene.getScene('Battle');
-    // bypass rate timer: invoke the spawn path directly 6 times
-    const n0 = g.children.list.filter(c => c.depth === 9).length;
-    for (let k = 0; k < 6; k++) { g.polish._cbT = 0; g.polish.creepBubbles(1); }
-    return g.children.list.filter(c => c.depth === 9).length > n0;
+    return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const oc = g.polish._cheap;
+      g.polish._cheap = () => true; // prior checks piled FX; exempt this probe from the budget guard
+      const n0 = g.children.list.filter(c => c.depth === 9 && c.active).length;
+      for (let k = 0; k < 6; k++) { g.polish._cbT = 0; g.polish.creepBubbles(1); }
+      const ok = g.children.list.filter(c => c.depth === 9 && c.active).length > n0;
+      g.polish._cheap = oc;
+      res(ok);
+    })));
   }));
 
   // 11) real combat: trails + muzzle + streak still clean

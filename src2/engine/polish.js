@@ -515,6 +515,17 @@ export class PolishFX {
     this._stars.setAlpha(a > 0.06 ? (a - 0.06) * 7 : 0);
   }
 
+  // 40) floating damage numbers: color-coded by hit type, crits pop bigger
+  dmgNumber(x, y, amt, kind = 'hit') {
+    const s = this.s;
+    if (!s || s.gameOver || amt <= 0 || !this._cheap(s) || !s.camNear(x, y)) return;
+    this._dnAcc = (this._dnAcc || 0) + 1;
+    if (this._dnAcc % 2) return; // halve density in big fights
+    const col = kind === 'crit' ? '#ffd23f' : kind === 'shield' ? '#7db4ff' : kind === 'armor' ? '#b8c4d0' : '#ffffff';
+    const t = s.add.text(x + (Math.random() * 12 - 6), y - 12, kind === 'crit' ? `${amt}!` : `${amt}`, { fontFamily: 'Menlo, monospace', fontSize: kind === 'crit' ? '13px' : '11px', fontWeight: 'bold', color: col }).setOrigin(0.5).setDepth(74).setStroke(2, 0x000000, 0.8).setAlpha(0);
+    s.tweens.add({ targets: t, alpha: 1, y: y - 26, scale: kind === 'crit' ? 1.25 : 1, duration: 160, ease: 'Back.easeOut', onComplete: () => s.tweens.add({ targets: t, alpha: 0, y: y - 38, duration: 480, ease: 'Quad.easeIn', onComplete: () => t.destroy() }) });
+  }
+
   // 38) corpse decals — pooled scorch+splat on fresh graves, 30s fade
   registerCorpse(x, y, heavy = false, raceCol = 0x6b1f2f) {
     const s = this.s;

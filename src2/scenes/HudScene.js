@@ -301,6 +301,11 @@ export class HudScene extends Phaser.Scene {
     return btn;
   }
 
+  setIncomeRate(perMin) {
+    if (!this.rateTxt) this.rateTxt = this.add.text(this.resText.width + 22, 9, '', { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#4c7ea8' }).setScrollFactor(0);
+    this.rateTxt.setText(perMin > 0 ? `+${Math.round(perMin)}/m` : '');
+  }
+
   flashNotEnough() {
     if (!this._neT) this._neT = this.add.text(this.W / 2, 34, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontWeight: 'bold', color: '#ff6060' }).setOrigin(0.5).setScrollFactor(0).setDepth(95).setStroke(2, 0x000000, 0.8);
     this._neT.setText('NOT ENOUGH MINERALS').setAlpha(1).setScale(1.06);
@@ -673,6 +678,18 @@ export class HudScene extends Phaser.Scene {
     const p = b.players[T];
     const capped = p.supplyUsed >= p.supplyCap;
     this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
+    // v2.26: income rate readout (+N/min) once your economy is collecting
+    {
+      const nowMs2 = performance.now();
+      if (!this._ir) this._ir = { t: nowMs2, m: p.minerals, g: p.gas, on: false };
+      const dt = (nowMs2 - this._ir.t) / 60000;
+      if (dt >= 0.5) {
+        const dm = p.minerals - this._ir.m, dg = p.gas - this._ir.g;
+        if (dm > 0 || dg > 0) this._ir.on = true;
+        if (this._ir.on) this.setIncomeRate(dt > 0 ? (dm + dg * 1.4) / dt : 0);
+        this._ir = { t: nowMs2, m: p.minerals, g: p.gas, on: this._ir.on };
+      }
+    }
     this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');
     const idle = p.idleWorkers || 0;
     if (!this.idleTxt) {
