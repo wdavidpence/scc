@@ -1,0 +1,25 @@
+{
+ "terran": {
+  "trained": 1,
+  "ready": 3,
+  "select": 2,
+  "build": 2,
+  "move": 4,
+  "attack": 4
+ },
+ "zerg": {
+  "ready": 2,
+  "select": 1,
+  "build": 1,
+  "move": 3,
+  "attack": 3
+ },
+ "protoss": {
+  "ready": 2,
+  "boss": 3,
+  "select": 1,
+  "build": 1,
+  "move": 3,
+  "attack": 3
+ }
+}

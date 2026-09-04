@@ -249,7 +249,62 @@ export class Audio2 {
     if (this.musicBus && this.ctx) { try { this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime); this.musicBus.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.8); } catch (e) { try { this.musicBus.gain.value = 0; } catch (e2) {} } }
   }
 
-  // ---------- voice barks (SpeechSynthesis; silent fallback) ----------
+  // ---------- voice barks: real audio pack first, SpeechSynthesis fallback ----------
+  voSrc() {
+    if (!this.scene) return null;
+    if (!this._vo) {
+      // relative to the page URL: works at / (dev) and /scc/ (Pages)
+      this._vo = { base: '', manifest: null, idx: {}, loading: false, ready: false };
+      this._loadManifest();
+    }
+    return this._vo;
+  }
+
+  _loadManifest() {
+    const v = this._vo;
+    if (v.loading) return; v.loading = true;
+    try {
+      fetch(v.base + 'vo/manifest.json').then(r => r.ok ? r.json() : null)
+        .then(m => { if (m) { v.manifest = m; v.ready = true; } v.loadedOnce = true; })
+        .catch(() => { v.loadedOnce = true; });
+    } catch (e) { v.loadedOnce = true; }
+  }
+
+  // preload the whole (tiny) pack once per race so barks never buffer
+  voPreload() {
+    const v = this.voSrc();
+    if (!v || !v.ready || v._pre) return; v._pre = true;
+    const race = this.race || 'terran';
+    const acts = (v.manifest[race]) || {};
+    for (const [act, n] of Object.entries(acts)) {
+      for (let i = 1; i <= n; i++) { const a = new Audio(); a.preload = 'auto'; a.src = `${v.base}vo/${race}/${act}_${i}.m4a`; (v.pools = v.pools || {}); (v.pools[`${act}_${i}`] = a); }
+    }
+  }
+
+  voPlay(action, pitch = 1.0, vol = 0.95) {
+    const v = this.voSrc();
+    if (!v || !v.ready) return false;
+    const race = this.race || 'terran';
+    const n = (v.manifest[race] || {})[action];
+    if (!n) return false;
+    const now = Date.now();
+    if (this._lastBark && now - this._lastBark < 700) return true; // rate-limit (already voiced)
+    const k = `${race}_${action}`;
+    v.idx[k] = ((v.idx[k] ?? -1) + 1) % n;
+    const url = `${v.base}vo/${race}/${action}_${v.idx[k] + 1}.m4a`;
+    try {
+      const pooled = v.pools && v.pools[`${action}_${v.idx[k] + 1}`];
+      const el = pooled || new Audio();
+      if (!pooled) { el.preload = 'auto'; el.src = url; }
+      else { try { el.currentTime = 0; } catch (e) {} }
+      el.volume = vol;
+      el.playbackRate = Math.max(0.7, Math.min(1.5, pitch));
+      const p = el.play(); if (p && p.catch) p.catch(() => {});
+      this._lastBark = now;
+      return true;
+    } catch (e) { return false; }
+  }
+
   bark(text, pitch = 0.8, rate = 1.05) {
     if (!('speechSynthesis' in window)) return;
     try {
@@ -267,12 +322,15 @@ export class Audio2 {
   // race-flavored player voice: Terran crisp-low, Zerg guttural, Protoss resonant
   setRaceVoice(race) {
     this.racePitch = race === 'zerg' ? 0.55 : race === 'protoss' ? 1.25 : 0.85;
+    // preload the pack after a user gesture lands (browser autoplay policy)
+    if (this._preT) clearTimeout(this._preT);
+    this._preT = setTimeout(() => { try { this.voPreload(); } catch (e) {} }, 2500);
   }
-  readyBark() { const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], zerg: ['Yes master.', 'Hatching now.', 'Ready to kill.'], protoss: ['My life for Aiur.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
-  moveBark() { const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], zerg: ['Obey.', 'We move.', 'Hunting.'], protoss: ['It is done.', 'Advancing.', 'En taro Adun.'] }; const a = L[this.race] || L.terran; if (Math.random() < 0.5) this.bark(a[Math.floor(Math.random() * a.length)]); }
-  attackBark() { const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], zerg: ['KILL!', 'Slay them all!', 'For the Overmind!'], protoss: ['Attack!', 'Purge the enemy!', 'For the Daelaam!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
+  readyBark() { if (this.voPlay('ready', this.racePitch || 1)) return; const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], zerg: ['Yes master.', 'Hatching now.', 'Ready to kill.'], protoss: ['My life for Aiur.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
+  moveBark() { if (Math.random() < 0.5) { if (this.voPlay('move', this.racePitch || 1)) return; const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], zerg: ['Obey.', 'We move.', 'Hunting.'], protoss: ['It is done.', 'Advancing.', 'En taro Adun.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); } }
+  attackBark() { if (this.voPlay('attack', (this.racePitch || 1) * 1.05)) return; const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], zerg: ['KILL!', 'Slay them all!', 'For the Overmind!'], protoss: ['Attack!', 'Purge the enemy!', 'For the Daelaam!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
   underAttackBark() { this.bark('We are under attack!', 1.1, 1.1); }
-  buildBark() { const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
+  buildBark() { if (this.voPlay('build', this.racePitch || 1)) return; const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
   groupBark(n) { this.bark('Group ' + n, 0.95, 1.15); }
@@ -293,6 +351,8 @@ export class Audio2 {
     else if (unitKinds.includes('tank') || unitKinds.includes('goliath') || unitKinds.includes('siege')) group = 'tank';
     else if (unitKinds.some(k => ['wraith', 'banshee', 'corsair', 'phoenix', 'mutalisk', 'viper', 'carrier', 'battlecruiser', 'observer', 'overlord', 'scout', 'raven', 'medic', 'darktemplar'].includes(k))) group = 'air';
     const race = this.race || 'terran';
+    // real recorded select vo when the pack has it
+    if (this.voPlay('select', (group === 'worker' ? 1.0 : 0.75) * (this.racePitch || 1))) return;
     const lines = G[group][race] || G.default.terran;
     this._selIdx = this._selIdx || {};
     const i = ((this._selIdx[group] || 0) + 1) % lines.length;
