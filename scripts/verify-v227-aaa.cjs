@@ -162,6 +162,29 @@ const { chromium } = require(PW);
   });
   chk('veteran tally + chevrons', vet === 'skip' || (vet && vet.killsTallied === true && vet.chevrons >= 1));
 
+  // 14) materialize blur when a cloaked enemy appears in view
+  chk('cloak materialize blur', await page.evaluate(async () => {
+    const g = window.__SCC2.scene.getScene('Battle');
+    const foe = g.units.find(x => !x.dead && x.team === 1);
+    if (!foe) return 'skip';
+    g.cameras.main.centerOn(foe.x, foe.y);
+    await new Promise(r => setTimeout(r, 400));
+    foe.cloaked = true;
+    if (g.polish._matSeen) g.polish._matSeen.delete(foe);
+    const before = g.children.list.filter(c => c.depth === 51).length;
+    g.polish.materialize(foe);
+    return g.children.list.filter(c => c.depth === 51).length > before;
+  }));
+
+  // 15) battle report board shows with tally line at mission end
+  chk('battle report board', await page.evaluate(async () => {
+    const g = window.__SCC2.scene.getScene('Battle');
+    const h = window.__SCC2.scene.getScene('Hud');
+    g.showGameOverBoard('victory');
+    await new Promise(r => setTimeout(r, 700));
+    return !!(h.goPanel && h.goPanel.visible && h.goStats && h.goStats.text.length > 0);
+  }));
+
   await page.waitForTimeout(600);
   const shot = '/Users/davidpence/scc-work/verify/v227-aaa.png';
   await page.screenshot({ path: shot });
