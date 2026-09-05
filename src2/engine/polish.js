@@ -642,6 +642,161 @@ export class PolishFX {
     }
   }
 
+  // ---------------- v2.27 AAA layer ----------------
+
+  // 41) eased camera jump: all centerOn calls glide with an ease-out curve
+  smoothCenter(x, y, dur = 320) {
+    const s = this.s;
+    if (!s) return;
+    const cam = s.cameras.main;
+    if (!this._camTween) this._camTween = { pan: { x: cam.scrollX, y: cam.scrollY } };
+    const t = this._camTween;
+    if (t.tw) t.tw.stop();
+    t.pan.x = cam.scrollX; t.pan.y = cam.scrollY;
+    const vw = cam.worldView;
+    t.tw = s.tweens.add({ targets: t.pan, x: x - vw.width / 2, y: y - vw.height / 2, duration: dur, ease: 'Cubic.easeOut', onUpdate: () => { cam.scrollX = t.pan.x; cam.scrollY = t.pan.y; } });
+  }
+
+  // 42) camera follow: lock cam onto a moving unit until order/combat breaks it
+  follow(u) {
+    const s = this.s;
+    if (!s || !u || u.dead) return;
+    this._follow = u;
+    s.events.emit('hud:alert', 'CAM FOLLOW ENGAGED');
+  }
+  stopFollow() { this._follow = null; }
+  followTick(dt) {
+    const s = this.s;
+    const u = this._follow;
+    if (!s || !u || u.dead || s.paused) return;
+    const cam = s.cameras.main;
+    const vw = cam.worldView;
+    // soft deadzone: only nudge when unit drifts past inner box
+    const dx = u.x - cam.scrollX - vw.width / 2, dy = u.y - cam.scrollY - vw.height / 2;
+    const zx = vw.width * 0.16, zy = vw.height * 0.16;
+    if (Math.abs(dx) > zx || Math.abs(dy) > zy) {
+      const k = 1 - Math.pow(0.001, dt);
+      cam.scrollX += (u.x - vw.width / 2 - cam.scrollX) * k;
+      cam.scrollY += (u.y - vw.height / 2 - cam.scrollY) * k;
+    }
+  }
+
+  // 43) anchor-wheel zoom: zoom glides, keeping the cursor world point fixed
+  anchorZoom(p, dy) {
+    const s = this.s;
+    if (!s) return;
+    const cam = s.cameras.main;
+    const before = this.worldFor ? this.worldFor(p) : { x: p.x / cam.zoom + cam.scrollX, y: p.y / cam.zoom + cam.scrollY };
+    const nz = Phaser.Math.Clamp(cam.zoom - dy * 0.0012, 0.8, 2.6);
+    const z0 = cam.zoom, sx0 = cam.scrollX, sy0 = cam.scrollY;
+    const f = nz / z0;
+    const nx = before.x - (before.x - sx0) / f;
+    const ny = before.y - (before.y - sy0) / f;
+    if (this._zoomTween) this._zoomTween.stop();
+    this._zoomTween = s.tweens.addCounter({ from: 0, to: 1, duration: 150, ease: 'Quad.easeOut', onUpdate: (twn) => {
+      const v = twn.getValue(0, 1);
+      cam.setZoom(z0 + (nz - z0) * v);
+      cam.scrollX = sx0 + (nx - sx0) * v;
+      cam.scrollY = sy0 + (ny - sy0) * v;
+      if (s.hotseat && s.cam2) { s.cam2.setZoom(cam.zoom); s.cam2.scrollX = cam.scrollX; s.cam2.scrollY = cam.scrollY; }
+    } });
+  }
+
+  // 44) status icon chips under a unit: stim/cloak/burrow/siege with drain arc
+  statusIcons(u) {
+    const s = this.s;
+    if (!s || s.gameOver || !u || u.dead || !u.container || !s.camNear(u.x, u.y)) return;
+    const nowMs = (s.gameTime || 0) * 1000;
+    this._siTs = this._siTs || {};
+    if (this._siTs[u.id] && nowMs - this._siTs[u.id] < 50) return; // 20Hz per unit
+    this._siTs[u.id] = nowMs;
+    this._statIcons = this._statIcons || new Map();
+    const key = u.id + ':' + [u.stimmed ? 1 : 0, u.cloaked ? 1 : 0, u.burrowed ? 1 : 0, u.sieged ? 1 : 0].join('') + ':' + Math.min(3, (u._kills || 0) >= 6 ? 3 : (u._kills || 0) >= 3 ? 2 : (u._kills || 0) >= 1 ? 1 : 0);
+    const prev = this._statIcons.get(u.id);
+    if (prev && prev.key === key) return;
+    if (prev) { for (const c of prev.nodes) c.destroy(); }
+    const nodes = [];
+    const bits = [];
+    if (u.stimmed) bits.push(['S', 0xff7a5c]);
+    if (u.cloaked) bits.push(['C', 0x9fd0ff]);
+    if (u.burrowed) bits.push(['B', 0xc9a06a]);
+    if (u.sieged) bits.push(['T', 0xffd23f]);
+    const vetRank = (u._kills || 0) >= 6 ? 3 : (u._kills || 0) >= 3 ? 2 : (u._kills || 0) >= 1 ? 1 : 0;
+    if (vetRank) bits.push(['▲'.repeat(vetRank), u.team === 0 ? 0x6ee7a0 : 0xff5c5c]);
+    bits.forEach(([ch, col], i) => {
+      const x = u.x + (i - (bits.length - 1) / 2) * 11;
+      nodes.push(s.add.circle(x, u.y + (u.radius || 6) + 7, 4.5, 0x050a14, 0.92).setStrokeStyle(1, col, 0.95).setDepth(54));
+      nodes.push(s.add.text(x, u.y + (u.radius || 6) + 7, ch, { fontFamily: 'Menlo, monospace', fontSize: '7px', fontWeight: 'bold', color: '#' + col.toString(16).padStart(6, '0') }).setOrigin(0.5).setDepth(55));
+    });
+    this._statIcons.set(u.id, { key, nodes });
+  }
+
+  // 45) movement dust kicked up by running troops, tone by surface
+  moveDust(u) {
+    const s = this.s;
+    if (!s || s.gameOver || !this._cheap(s) || !s.camNear(u.x, u.y)) return;
+    u._dustT = (u._dustT || 0) + 1;
+    if (u._dustT % 5) return;
+    const kind = s.terrainKindAt ? s.terrainKindAt(u.x, u.y) : 'dirt';
+    const col = kind === 'rock' ? 0x9aa4ae : kind === 'metal' ? 0xb8c8dc : 0xc9a06a;
+    const d = s.add.circle(u.x + (Math.random() * 6 - 3), u.y + (u.radius || 5), 1.6 + Math.random(), col, 0.4).setDepth(8);
+    s.tweens.add({ targets: d, alpha: 0, scale: 2.2, y: u.y + (u.radius || 5) + 2, duration: 380, onComplete: () => d.destroy() });
+  }
+
+  // 46) directional damage vignette: edge darkens toward the shooter
+  hitVignette(sx, sy, heavy = false) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    const now = s.gameTime || 0;
+    if (now - (this._hvAt || 0) < 0.8) return;
+    this._hvAt = now;
+    const W = s.scale.width, H = s.scale.height;
+    const g = s.add.graphics().setScrollFactor(0).setDepth(1880);
+    const a = Math.atan2(sy - H / 2, sx - W / 2);
+    const cx = W / 2 + Math.cos(a) * W * 0.5, cy = H / 2 + Math.sin(a) * H * 0.5;
+    g.fillStyle(0x8a0f0f, heavy ? 0.4 : 0.26);
+    for (let i = 0; i < 5; i++) {
+      const px = cx + (Math.random() * 120 - 60), py = cy + (Math.random() * 120 - 60);
+      g.fillCircle(px, py, 90 + Math.random() * 60);
+    }
+    s.tweens.add({ targets: g, alpha: 0, duration: 700, ease: 'Quad.easeOut', onComplete: () => { g.destroy(); } });
+  }
+
+  // 47) cast ring: ground rune tightens as channel completes
+  castRing(x, y, durMs, col = 0xb060ff) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    const ring = s.add.circle(x, y, 42, 0, 0).setStrokeStyle(2.5, col, 0.9).setDepth(50);
+    const inner = s.add.circle(x, y, 42, col, 0.06).setDepth(49);
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i;
+      const tick = s.add.rectangle(x + Math.cos(a) * 42, y + Math.sin(a) * 42, 2, 8, col, 0.8).setDepth(50).setRotation(a);
+      s.tweens.add({ targets: tick, x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 10, alpha: 0, duration: durMs, ease: 'Cubic.easeIn', onComplete: () => tick.destroy() });
+    }
+    s.tweens.add({ targets: [ring, inner], radius: 10, alpha: 0.15, duration: durMs, ease: 'Cubic.easeIn', onComplete: () => { ring.destroy(); inner.destroy(); } });
+  }
+
+  // 48) materialize blur when a cloaked enemy becomes visible
+  materialize(u) {
+    const s = this.s;
+    if (!s || !u || !s.camNear(u.x, u.y) || !this._cheap(s)) return;
+    for (let i = 0; i < 4; i++) {
+      const r = s.add.circle(u.x + (Math.random() * 16 - 8), u.y + (Math.random() * 16 - 8), 3 + Math.random() * 4, 0x9fd0ff, 0.35).setDepth(51).setBlendMode(Phaser.BlendModes.ADD);
+      s.tweens.add({ targets: r, alpha: 0, scale: 0.4, duration: 480 + i * 60, onComplete: () => r.destroy() });
+    }
+  }
+
+  // 49) directional death ragdoll: corpse tumbles away from the shot
+  ragdoll(u, fromX, fromY) {
+    const s = this.s;
+    if (!s || !u || !s.camNear(u.x, u.y) || !u.sprite) return;
+    const a = Math.atan2(u.y - fromY, u.x - fromX);
+    const sp = 14 + Math.random() * 16;
+    const spr = u.sprite;
+    spr.setDepth(12);
+    s.tweens.add({ targets: spr, x: u.x + Math.cos(a) * sp, y: u.y + Math.sin(a) * sp * 0.6 - 4, rotation: spr.rotation + (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random()), duration: 260, ease: 'Quad.easeOut' });
+  }
+
   tick(dt, ctx) {
     // under-attack watchdog: ally units flashing recent damage
     const s = this.s;
@@ -653,6 +808,26 @@ export class PolishFX {
     this.ambient(dt);
     this.selGlowTick();
     this.queueChipsTick(dt);
+    // v2.27: camera follow + per-unit presentation upkeep
+    this.followTick(dt);
+    if (s.selection) {
+      for (const u of s.selection) if (!u.dead) this.statusIcons(u);
+    }
+    if (!s.paused) {
+      for (const u of s.units) {
+        if (u.dead || u.def.worker) continue;
+        if (u.state === 'move' || u.state === 'attackMove' || u.state === 'attackTarget') this.moveDust(u);
+        if (u.cloaked && s.currentlyVisible(u.x, u.y) && u.sprite && u.sprite.visible) this.statusIcons(u);
+      }
+    }
+    // cloaked->visible materialize detection
+    this._matSeen = this._matSeen || new WeakSet();
+    for (const u of s.units) {
+      if (u.dead || u.team === 0) continue;
+      const vis = s.currentlyVisible(u.x, u.y);
+      if (u.cloaked && vis && !this._matSeen.has(u)) { this._matSeen.add(u); this.materialize(u); }
+      if (!u.cloaked) this._matSeen.delete(u);
+    }
   }
 }
 

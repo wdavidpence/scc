@@ -31,6 +31,9 @@ export class HudScene extends Phaser.Scene {
     battle.events.on('hud:pause', (on) => { if (this.scene.isActive()) this.showPause(on); });
     battle.events.on('hud:cinema', (r) => { if (this.scene.isActive()) this.cinemaFlash(r); });
     battle.events.on('hud:radio', (msg, who) => { if (this.scene.isActive()) this.radio(msg, who); });
+    // v2.27: kill feed ticker + voice bark subtitles
+    battle.events.on('hud:kill', (e) => { if (this.scene.isActive()) this.killFeed(e); });
+    battle.events.on('hud:bark', (t) => { if (this.scene.isActive()) this.barkSub(t); });
     battle.events.on('hud:groups', (gs) => { if (this.scene.isActive()) this.renderGroupBadges(gs); });
     battle.events.on('hud:groupcontents', (d) => { if (this.scene.isActive()) this.showGroupContents(d); });
     battle.events.on('hud:activeTeam', (t) => { if (this.scene.isActive()) this.showActiveTeam(t); });
@@ -250,6 +253,7 @@ export class HudScene extends Phaser.Scene {
     this.mmFrame = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x2b313a, 1).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3b444f);
     this.mmG = this.add.graphics().setScrollFactor(0);
     const zone = this.add.zone(this.mmX, this.mmY, this.mmSize, this.mmSize).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
+    this.mmZone = zone;
     zone.on('pointerdown', (p) => this.mmClick(p.x, p.y, p.button));
     zone.on('pointerdrag', (p) => this.mmClick(p.x, p.y, 0));
     this.input.on('pointerdown', (p) => { if (p.button === 2 && this.input.mouse) this.input.mouse.disableContextMenu?.(); });
@@ -674,6 +678,8 @@ export class HudScene extends Phaser.Scene {
   refresh() {
     const b = this.scene.get('Battle');
     if (!b || !b.players) return;
+    this.censusTick(b);
+    this.urgencyTick(b);
     const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
     const p = b.players[T];
     const capped = p.supplyUsed >= p.supplyCap;
@@ -829,6 +835,105 @@ export class HudScene extends Phaser.Scene {
         g.strokeCircle(mx, my, 5 + blink * 3);
       }
     }
+  }
+
+  // ---------------- v2.27 ----------------
+  // 55) kill feed ticker: bottom-left combat rows with weapon icons, 6s fade
+  killFeed(e) {
+    if (!e) return;
+    this._kf = this._kf || [];
+    this._kf.push({ born: this.time.now, mine: e.mine, line: `${e.killer}  ⚔  ${e.victim}` });
+    if (this._kf.length > 5) this._kf.shift();
+    if (!this._kfText) this._kfText = this.add.text(12, this.H - 236, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', lineHeight: 15, color: '#ffd0d0' }).setScrollFactor(0).setDepth(61).setAlpha(0.95);
+    this._kfText.setText(this._kf.map((m, i) => m.line).join('\n'));
+    this.tweens.killTweensOf(this._kfText);
+    this._kfText.setAlpha(0.95);
+    this.tweens.add({ targets: this._kfText, alpha: 0.55, delay: 4200, duration: 1800 });
+  }
+
+  // 56) voice bark subtitle card (mirrors SpeechSynthesis barks)
+  barkSub(text) {
+    if (!text) return;
+    if (this._barkT) this._barkT.destroy();
+    if (this._barkG) this._barkG.destroy();
+    const w = Math.min(520, text.length * 7 + 40);
+    this._barkG = this.add.graphics().setScrollFactor(0).setDepth(70);
+    this._barkG.fillStyle(0x050a14, 0.88).fillRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
+    this._barkG.lineStyle(1, 0x6ee7a0, 0.85).strokeRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
+    this._barkT = this.add.text(this.W / 2, this.H - 285, '“' + text + '”', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontStyle: 'italic', color: '#d7f5e3', wordWrap: { width: w - 16 } }).setOrigin(0.5).setScrollFactor(0).setDepth(71);
+    this.tweens.add({ targets: [this._barkG, this._barkT], alpha: 0, delay: 3600, duration: 600, onComplete: () => { if (this._barkT && this._barkT.active) { this._barkT.destroy(); this._barkT = null; } if (this._barkG && this._barkG.active) { this._barkG.destroy(); this._barkG = null; } } });
+  }
+
+  // 57) minimap strategic zoom: wheel over the minimap scales it, remembered
+  mmZoomWheel(px, py, dy) {
+    if (px < this.mmX || px > this.mmX + this.mmSize || py < this.mmY || py > this.mmY + this.mmSize) return false;
+    const sizes = [140, 190, 240];
+    const cur = sizes.indexOf(this.mmSize);
+    const nxt = Phaser.Math.Clamp(cur < 0 ? 1 : (dy > 0 ? cur - 1 : cur + 1), 0, sizes.length - 1);
+    if (sizes[nxt] === this.mmSize) return true;
+    const nz = sizes[nxt];
+    const oldX = this.mmX, oldY = this.mmY, os = this.mmSize;
+    this.mmSize = nz; this.mmX = this.W - nz - 8;
+    this.mmBG.setSize(nz, nz); this.mmBG.setPosition(this.mmX, this.mmY);
+    this.mmFrame.setSize(nz, nz); this.mmFrame.setPosition(this.mmX, this.mmY);
+    if (this.mmZone) { this.mmZone.setSize(nz, nz); this.mmZone.setPosition(this.mmX, this.mmY); }
+    this.mmG.setScale(1);
+    const b = this.scene.get('Battle');
+    if (b && b.playSounds && b.playSounds.zoom) b.playSounds.zoom();
+    this._mmZoomPop = { t: this.time.now };
+    return true;
+  }
+
+  // 58) fleet census: top-bar silhouette counts, click selects all of type on screen
+  censusTick(b) {
+    if (!b || b.gameOver) { if (this._census) this._census.setVisible(false); return; }
+    const sc = b.units.filter(u => !u.dead && u.team === (b.activeTeam ?? 0));
+    const tally = {};
+    for (const u of sc) tally[u.kind] = (tally[u.kind] || 0) + 1;
+    const keys = Object.keys(tally).sort((a, b2) => tally[b2] - tally[a]).slice(0, 6);
+    if (!keys.length) { if (this._census) this._census.setVisible(false); return; }
+    if (!this._census) {
+      this._census = this.add.container(70, 40).setScrollFactor(0).setDepth(60);
+      this._censusBG = this.add.graphics();
+      this._census.add(this._censusBG);
+      this._censusList = [];
+    }
+    // rebuild rows on kind change only
+    const sig = keys.join(',');
+    if (this._censusSig === sig) {
+      keys.forEach((k, i) => { const row = this._censusList[i]; if (row) row.num.setText(String(tally[k])); });
+      return;
+    }
+    this._censusSig = sig;
+    for (const c of this._censusList) { c.bg.destroy(); c.ic.destroy(); c.num.destroy(); }
+    this._censusList = [];
+    this._censusBG.clear();
+    this._censusBG.fillStyle(0x050a14, 0.75).fillRoundedRect(-4, -4, keys.length * 34 + 12, 34, 5);
+    keys.forEach((k, i) => {
+      const bx = i * 34;
+      const bg = this.add.rectangle(bx, 0, 28, 26, 0x0a1626, 0.9).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+      const ic = this.add.text(bx + 14, 7, (UNITS[k]?.name || k).slice(0, 2).toUpperCase(), { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#9fb3d8' }).setOrigin(0.5);
+      const num = this.add.text(bx + 14, 18, String(tally[k]), { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#ffd23f' }).setOrigin(0.5);
+      bg.on('pointerdown', () => {
+        const bb = this.scene.get('Battle');
+        if (!bb || !bb.clearSelection) return;
+        bb.clearSelection();
+        const vw = bb.cameras.main.worldView;
+        for (const u of bb.units) if (!u.dead && u.team === (bb.activeTeam ?? 0) && u.kind === k && vw.contains(u.x, u.y)) bb.addToSelection(u);
+      });
+      this._census.add([bg, ic, num]);
+      this._censusList.push({ bg, ic, num, k });
+    });
+  }
+
+  // 59) objective urgency recolor + sting at 10s on hold objectives
+  urgencyTick(b) {
+    if (!b || !b.mission || !b.mission.holdSeconds || !this.timeText) return;
+    const left = b.mission.holdSeconds - b.gameTime;
+    if (left <= 0) { if (!this._urgStung) { this._urgStung = true; b.audio?.alertSnd?.(); } return; }
+    if (left < 20) { this.timeText.setColor('#ff5c5c'); if (!this._urgPulse) { this._urgPulse = this.tweens.add({ targets: this.timeText, alpha: 0.45, yoyo: true, repeat: -1, duration: 300 }); } if (!this._urgStung && left <= 10) { this._urgStung = true; b.audio?.alertSnd?.(); this.banner('FINAL TEN SECONDS'); } }
+    else if (left < 60) this.timeText.setColor('#ffb04a');
+    else { this.timeText.setColor('#ffffff'); if (this._urgPulse) { this._urgPulse.stop(); this._urgPulse = null; this.timeText.setAlpha(1); } this._urgStung = false; }
   }
 
   handleResize() {

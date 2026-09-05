@@ -47,12 +47,13 @@ export class Audio2 {
   deselect() { this.tone(420, 0.06, 'square', 0.025); }
   move() { this.tone(320, 0.08, 'sine', 0.03, -80); }
   attackCmd() { this.tone(880, 0.06, 'square', 0.03, -200); }
-  attack(kind) {
-    if (kind === 'tank' || kind === 'turret') { this.noise(0.22, 0.09, 500); this.tone(90, 0.18, 'sawtooth', 0.05, -40); }
-    else if (kind === 'firebat') this.noise(0.18, 0.05, 1200);
-    else if (kind === 'zealot' || kind === 'darkTemplar' || kind === 'archon') this.tone(1400, 0.08, 'sawtooth', 0.03, -600);
+  attack(kind, vol = 1) {
+    const v = Math.max(0.04, Math.min(1, vol));
+    if (kind === 'tank' || kind === 'turret') { this.noise(0.22, 0.09 * v, 500); this.tone(90, 0.18, 'sawtooth', 0.05 * v, -40); }
+    else if (kind === 'firebat') this.noise(0.18, 0.05 * v, 1200);
+    else if (kind === 'zealot' || kind === 'darkTemplar' || kind === 'archon') this.tone(1400, 0.08, 'sawtooth', 0.03 * v, -600);
     else if (kind === 'stim') { this.tone(500, 0.1, 'square', 0.04, 300); }
-    else this.noise(0.05, 0.03, 2400);
+    else this.noise(0.05, 0.03 * v, 2400 - 1200 * (1 - v));
   }
   harvest() { this.tone(1100 + Math.random() * 200, 0.05, 'triangle', 0.02); }
   deposit() { this.tone(600, 0.09, 'triangle', 0.03, -150); }
@@ -308,6 +309,8 @@ export class Audio2 {
   }
 
   bark(text, pitch = 0.8, rate = 1.05) {
+    // v2.27: voiced barks mirror as styled subtitle cards in the HUD
+    if (this.scene && this.scene.events) this.scene.events.emit('hud:bark', text);
     if (!('speechSynthesis' in window)) return;
     try {
       // rate-limit: never overlap, min gap between barks

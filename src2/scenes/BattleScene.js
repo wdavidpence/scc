@@ -1333,9 +1333,17 @@ export class BattleScene extends Phaser.Scene {
     if (target.dead) return;
     const preHp = (target.hp || 0) + (target.shield || 0);
     const hadShield = (target.shield || 0) > 0;
+    target._lastHitFrom = attacker ? { x: attacker.x, y: attacker.y } : null;
+    target._lastHitBy = attacker || null;
     target.takeDamage(damage, attacker);
     target._lastHurtT = this.gameTime;
     const tx = target.x, ty = target.y;
+    // v2.27: directional vignette when your own units eat heavy fire
+    if (target.team === (this.activeTeam ?? 0) && target.def && !target.def.worker && damage >= 20 && this.camNear(tx, ty)) {
+      const camV = this.cameras.main;
+      const sp = attacker ? { x: (attacker.x - camV.worldView.x) * camV.zoom, y: (attacker.y - camV.worldView.y) * camV.zoom } : { x: camV.width / 2, y: 0 };
+      this.polish?.hitVignette(sp.x, sp.y, damage >= 45);
+    }
     // v2.26: floating damage numbers + overkill spark shower on light-unit splash kills
     if (this.camNear(tx, ty)) {
       const eff = Math.max(1, preHp - ((target.hp || 0) + (target.shield || 0)));
@@ -1427,6 +1435,7 @@ export class BattleScene extends Phaser.Scene {
   castUnitPsiStorm(caster, x, y) {
     caster.energy -= 75;
     this.audio?.psiCast?.();
+    this.polish?.castRing(x, y, 4000, 0xe0a0ff);
     const r = 55;
     const storm = this.add.circle(x, y, r, 0xc060ff, 0.16).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
     this.tweens.add({ targets: storm, alpha: 0, duration: 3800, onComplete: () => storm.destroy() });
@@ -1556,6 +1565,12 @@ export class BattleScene extends Phaser.Scene {
     if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
     // polish: kill pop + streak taunts when the enemy dies in your vision
     if (u.team === 1 && this.currentlyVisible(u.x, u.y)) this.polish?.killPop(u.x, u.y, !!u.isBoss || !!u.def.heavy);
+    // v2.27: kill log ticker + battle stats tally
+    this.kills = (this.kills || 0) + (u.team === 1 ? 1 : 0);
+    this.losses = (this.losses || 0) + (u.team === 0 ? 1 : 0);
+    const killerU = u._lastHitBy;
+    if (killerU && !killerU.dead) { killerU._kills = (killerU._kills || 0) + 1; }
+    if (this.currentlyVisible(u.x, u.y)) this.events.emit('hud:kill', { killer: killerU && killerU.kind ? (UNITS[killerU.kind]?.name || killerU.kind) : '—', victim: UNITS[u.kind]?.name || u.kind, mine: u.team === 1 });
     // v2.26: corpse decals — every death leaves a fading mark
     if (this.camNear(u.x, u.y)) this.polish?.registerCorpse(u.x, u.y, !!u.def.heavy || u.def.size === 'large', u.team === 1 ? 0x6b1f2f : 0x2f3a49);
     if (u.team === 0 && !this.gameOver) this.polish?.underAttack(u.x, u.y);
@@ -1968,8 +1983,13 @@ export class BattleScene extends Phaser.Scene {
       this.box.clear();
     });
 
-    // wheel zoom
+    // wheel zoom (v2.27: anchor-at-cursor eased glide)
     this.input.on('wheel', (p, go, dx, dy) => {
+      if (p.y < this.H * 0.5 && p.x > this.W * 0.55) {
+        const hud = this.scene.get('Hud');
+        if (hud && hud.isActive() && hud.mmZoomWheel && hud.mmZoomWheel(p.x, p.y, dy)) return;
+      }
+      if (this.polish) { this.polish.anchorZoom(p, dy); return; }
       const nz = Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.8, 2.6);
       this.cameras.main.setZoom(nz);
       if (this.hotseat && this.cam2) this.cam2.setZoom(nz);
@@ -2053,6 +2073,12 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-P', () => this.armPatrol());
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
     this.input.keyboard.on('keydown-F', () => this.stimSelected());
+    // v2.27: camera follow lock (X) — cam tracks the selected unit until re-press
+    this.input.keyboard.on('keydown-X', () => {
+      if (this.polish?._follow) { this.polish.stopFollow(); this.events.emit('hud:alert', 'CAM FOLLOW RELEASED'); return; }
+      const u = [...(this.selection || [])].find(x => !x.dead);
+      if (u) this.polish?.follow(u); else this.events.emit('hud:alert', 'SELECT A UNIT TO FOLLOW');
+    });
     this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
     this.input.keyboard.on('keydown-F6', () => this.polish?.cycleSpeed());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
@@ -2076,7 +2102,7 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:place', (buildId) => this.startPlacing(buildId));
     this.events.on('hud:queueUnit', ({ buildingId, kind }) => this.queueFromHud(buildingId, kind));
     this.events.on('hud:queueResearch', ({ buildingId, techId }) => this.queueResearchFromHud(buildingId, techId));
-    this.events.on('hud:camera', ({ x, y }) => this.cameras.main.centerOn(x, y));
+    this.events.on('hud:camera', ({ x, y }) => { this.polish?.stopFollow(); if (this.polish) this.polish.smoothCenter(x, y); else this.cameras.main.centerOn(x, y); });
     this.events.on('hud:attackMode', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.events.on('hud:cancelPlace', () => this.cancelPlacing());
     this.events.on('hud:stim', () => this.stimSelected());
@@ -2606,6 +2632,7 @@ export class BattleScene extends Phaser.Scene {
   castMaelstrom(caster, x, y) {
     caster.energy -= 100;
     this.audio?.psiCast?.();
+    this.polish?.castRing(x, y, 4500, 0x9a6bff);
     const r = 70;
     const ring = this.add.circle(x, y, r, 0x2b1a4a, 0.35).setStrokeStyle(2, 0x9a6bff, 0.9).setDepth(49);
     this.tweens.add({ targets: ring, alpha: 0.15, scale: 1.15, duration: 900, yoyo: true, repeat: 4, onComplete: () => ring.destroy() });

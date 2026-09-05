@@ -575,7 +575,16 @@ export class Unit {
       this.world.placeSpiderMine(this.x - (target.x > this.x ? 20 : -20), this.y - (target.y > this.y ? 20 : -20), this.team);
       this.world.events.emit('hud:alert', 'SPIDER MINE PLACED');
     }
-    this.world.audio?.attack(this.kind);
+    // v2.27: shot windup lean + distance-aware attack audio
+    if (this.world.camNear && this.world.camNear(this.x, this.y)) {
+      const wa = Math.atan2(target.y - this.y, target.x - this.x);
+      const lean = Math.cos(wa) * (this.def.size === 'large' ? 2 : 1.2);
+      this.container.x += lean;
+      this.world.tweens.add({ targets: this.container, x: this.x, duration: 130, ease: 'Back.easeOut' });
+      if (!this.def.flying && this.world.polish?.moveDust) this.world.polish.moveDust(this);
+    }
+    const cd = Math.hypot(target.x - this.x, target.y - this.y);
+    this.world.audio?.attack(this.kind, this.world.camNear ? (Math.hypot(target.x - this.world.cameras.main.midPoint.x, target.y - this.world.cameras.main.midPoint.y) < 300 ? 1 : 0.35) : 1);
   }
 
   // ---------- harvesting ----------
@@ -806,7 +815,10 @@ export class Unit {
       corp.setTint(0x6a6258); corp.setAlpha(0.9);
       corp.setScale((this.baseScale || 1) * 0.94, (this.baseScale || 1) * 0.62); // flattened
       corp.setRotation((Math.random() * 0.7 - 0.35) + (this.sprite.flipX ? Math.PI : 0) * 0.0);
-      this.world.tweens.add({ targets: corp, angle: corp.angle + (Math.random() < 0.5 ? 75 : -75), duration: 260, ease: 'Quad.easeOut' });
+      // v2.27: tumble away from the shot direction when known
+      const dir = this._lastHitFrom ? Math.sign(Math.cos(Math.atan2(this.y - this._lastHitFrom.y, this.x - this._lastHitFrom.x))) : (Math.random() < 0.5 ? 1 : -1);
+      this.world.tweens.add({ targets: corp, angle: corp.angle + dir * (70 + Math.random() * 40), duration: 260, ease: 'Quad.easeOut' });
+      if (this._lastHitFrom && this.world.camNear(this.x, this.y)) this.world.polish?.ragdoll({ x: this.x, y: this.y, sprite: corp }, this._lastHitFrom.x, this._lastHitFrom.y);
       this.world.tweens.add({ targets: corp, alpha: 0.28, duration: 24000 });
     }
     // debris shards
