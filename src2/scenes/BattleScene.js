@@ -1662,16 +1662,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   assignGeyserWorkers(b) {
+    // v2.28 gas assignment UI: SC1-style — workers NO LONGER auto-swarm the
+    // geyser. The player routes them (right-click refinery, or click a worker
+    // while hovering one). Feedback: crew badge + hint banner.
     const g = b.geyser;
     if (!g) return;
-    const workers = this.units.filter(u => !u.dead && u.team === b.team && u.def.worker);
-    for (const w of workers) {
-      if (g.workers.length >= 3) break;
-      if (!g.workers.includes(w)) {
-        g.workers.push(w);
-        w.gasTarget = g;
-        w.setOrder({ type: 'harvestGas' });
-      }
+    if (b.team === (this.activeTeam ?? 0)) {
+      if (this.camNear(g.x, g.y)) this.polish?.gasAssignFX(g);
+      this.events.emit('hud:alert', 'SELECT WORKERS · RIGHT-CLICK REFINERY TO ASSIGN GAS');
     }
   }
 
@@ -1718,6 +1716,8 @@ export class BattleScene extends Phaser.Scene {
         u.flowField = field; u.issueMove(t.x, t.y, attackMove); i++;
       }
       this.flowsDirty = true;
+      // v2.28 formation-engage visual: flash where the line will form
+      if (attackMove && useFormation) this.polish?.formationGhosts(list, x, y);
     } else {
       for (const u of list) { u.flowField = null; u.issueMove(x, y, attackMove); }
     }
@@ -2281,11 +2281,38 @@ export class BattleScene extends Phaser.Scene {
       const foe = this.enemyUnitAt(wp.x, wp.y);
       if (foe) { workers.forEach(w => w.setOrder({ type: 'attackTarget', target: foe })); return; }
       const b = this.buildingAt(wp.x, wp.y);
-      if (b && b.team === (this.activeTeam ?? 0) && b.def.onGeyser) { workers.forEach(w => { if (b.geyser && b.geyser.workers.length < 3) { b.geyser.workers.push(w); w.gasTarget = b.geyser; w.setOrder({ type: 'harvestGas' }); } }); this.audio?.move(); return; }
+      if (b && b.team === (this.activeTeam ?? 0) && b.def.onGeyser && b.geyser) {
+        const gey = b.geyser;
+        // toggle: workers already mining THIS geyser get freed; fresh ones fill slots
+        const already = workers.filter(w => w.gasTarget === gey);
+        if (already.length === workers.length) {
+          for (const w of already) { gey.workers = (gey.workers || []).filter(x => x !== w); w.gasTarget = null; w.setOrder({ type: 'harvest' }); }
+          this.polish?.gasAssignFX(gey);
+          this.events.emit('hud:alert', `GAS CREW ${gey.workers.length}/3`);
+          this.audio?.move();
+          return;
+        }
+        let n = 0;
+        workers.forEach(w => { if (w.gasTarget !== gey && gey.workers.length < 3 && !gey.workers.includes(w)) { gey.workers.push(w); w.gasTarget = gey; w.setOrder({ type: 'harvestGas' }); n++; } });
+        if (n) { this.audio?.move(); this.polish?.gasAssignFX(gey); this.events.emit('hud:alert', `GAS CREW ${gey.workers.length}/3`); }
+        else this.audio?.move();
+        return;
+      }
       if (b && b.team === (this.activeTeam ?? 0) && !b.built) { workers.forEach(w => w.setOrder({ type: 'build', building: b })); return; }
       // SC1 repair: own damaged completed structure
       if (b && b.team === (this.activeTeam ?? 0) && b.built && b.hp < b.maxHp) { workers.forEach(w => w.setOrder({ type: 'repair', repairTarget: b })); this.audio?.orderPing?.(); this.events.emit('hud:alert', 'SCVs REPAIRING'); return; }
-      workers.forEach(w => w.issueMove(wp.x, wp.y, false));
+      workers.forEach(w => {
+        // v2.28 gas unassign: right-click near the geyser they're assigned to frees them
+        if (w.gasTarget && Math.hypot(w.gasTarget.x - wp.x, w.gasTarget.y - wp.y) < TILE * 2.5) {
+          const g = w.gasTarget;
+          g.workers = (g.workers || []).filter(x => x !== w);
+          w.gasTarget = null;
+          this.polish?.gasAssignFX(g);
+          this.audio?.move();
+          return;
+        }
+        w.issueMove(wp.x, wp.y, false);
+      });
       this.audio?.move();
       return;
     }

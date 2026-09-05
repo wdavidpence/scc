@@ -145,10 +145,12 @@ const { chromium } = require(PW);
   }));
 
   // 13) veteran kill tally + chevron render after a visible kill
+  // v2.28 gate fix: use an explicit combat unit (not workers — no status chip slot)
+  // and poll for the chevron instead of a fixed sleep (20Hz rebuild + glyph render).
   const vet = await page.evaluate(async () => {
     const g = window.__SCC2.scene.getScene('Battle');
     const foe = g.units.find(x => !x.dead && x.team === 1);
-    const mine = g.units.find(x => !x.dead && x.team === 0);
+    const mine = g.units.find(x => !x.dead && x.team === 0 && !x.def.worker && x.def.attack) || g.units.find(x => !x.dead && x.team === 0 && !x.def.worker);
     if (!foe || !mine) return 'skip';
     g.cameras.main.centerOn(mine.x, mine.y);
     if (g.clearSelection) g.clearSelection();
@@ -156,11 +158,16 @@ const { chromium } = require(PW);
     await new Promise(r => setTimeout(r, 500));
     mine._kills = 3;
     g.applyHit(foe, 9999, 0, mine);
-    await new Promise(r => setTimeout(r, 300));
-    const chevrons = g.children.list.filter(c => c.depth === 55 && c.text && c.text.includes('▲')).length;
-    return { killsTallied: mine._kills >= 4, chevrons };
+    let chevrons = 0;
+    for (let k = 0; k < 14 && chevrons === 0; k++) {
+      await new Promise(r => setTimeout(r, 100));
+      g.polish.statusIcons(mine);
+      chevrons = g.children.list.filter(c => c.depth === 55 && c.text && c.text.includes('▲')).length;
+    }
+    return { killsTallied: mine._kills >= 4, chevrons, mineDead: !!mine.dead, selHas: !!(g.selection && g.selection.has(mine)) };
   });
   chk('veteran tally + chevrons', vet === 'skip' || (vet && vet.killsTallied === true && vet.chevrons >= 1));
+  if (vet !== 'skip' && !(vet.killsTallied && vet.chevrons >= 1)) console.log('   vet-diag:', JSON.stringify(vet));
 
   // 14) materialize blur when a cloaked enemy appears in view
   chk('cloak materialize blur', await page.evaluate(async () => {

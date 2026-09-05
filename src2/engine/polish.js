@@ -294,12 +294,19 @@ export class PolishFX {
   _cheap(s) { return s && s.children.list.length < 850; }
 
   // 21) weapon-class identity: phosphor trails under live projectiles
+  // v2.28 trail density tuning: shells (slow) get dense dots, fast bolts sparse
+  // ones with longer life (same visual length, fewer nodes), global clutter cap.
   projTrail(sp) {
     const s = this.s;
     if (!s || s.gameOver || !this._cheap(s) || !s.camNear(sp.x, sp.y)) return;
     const pr = sp._proj; if (!pr) return;
     pr._trN = (pr._trN || 0) + 1;
-    if (pr._trN % 2) return;
+    const fast = (pr.speed || 0) >= 700;
+    if (pr.shell) { /* dense: every frame */ }
+    else if (fast) { if (pr._trN % 3) return; }
+    else if (pr._trN % 2) return;
+    this._tn = this._tn || 0;
+    if (this._tn > 48) return; // global cap: heavy battles stop adding trails
     const kind = pr.kind;
     const col = kind === 'hydralisk' || kind === 'hydra' ? 0x9dff7a
       : kind === 'dragoon' || kind === 'archon' ? 0x9fd0ff
@@ -307,7 +314,8 @@ export class PolishFX {
       : kind === 'vulture' || kind === 'goliath' || kind === 'tank' ? 0xffd27a
       : 0xbfe0ff;
     const d = s.add.circle(sp.x, sp.y, kind === 'tank' ? 2.6 : 1.7, col, 0.55).setDepth(43).setBlendMode(Phaser.BlendModes.ADD);
-    s.tweens.add({ targets: d, alpha: 0, scale: 0.35, duration: 240, onComplete: () => d.destroy() });
+    this._tn++;
+    s.tweens.add({ targets: d, alpha: 0, scale: 0.35, duration: 240, onComplete: () => { this._tn = Math.max(0, (this._tn || 1) - 1); d.destroy(); } });
   }
 
   // 22) flinch: squash-and-stretch on any unit taking a hit
@@ -797,6 +805,82 @@ export class PolishFX {
     s.tweens.add({ targets: spr, x: u.x + Math.cos(a) * sp, y: u.y + Math.sin(a) * sp * 0.6 - 4, rotation: spr.rotation + (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random()), duration: 260, ease: 'Quad.easeOut' });
   }
 
+  // 49) v2.28 gas assignment UI: worker-count badge + depletion ring hovering
+  // over every owned refinery-bearing geyser; rebuilt only when state changes.
+  gasBadgesTick(dt) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    this._gbT = (this._gbT || 0) - dt;
+    if (this._gbT > 0) return;
+    this._gbT = 0.5;
+    this._gb = this._gb || new Map();
+    const live = new Set();
+    const team = s.activeTeam ?? 0;
+    for (const g of s.geysers || []) {
+      const b = g.building;
+      if (!b || b.dead || b.team !== team || !b.built) continue;
+      if (!s.camNear(g.x, g.y)) continue;
+      live.add(g.id);
+      const n = (g.workers || []).filter(w => !w.dead).length;
+      const pct = Math.max(0, Math.round(100 * (g.gas / (g.full || g.gas || 1))));
+      const sig = `${n}:${pct}`;
+      const prev = this._gb.get(g.id);
+      if (prev && prev.sig === sig) continue;
+      if (prev) for (const c of prev.nodes) c.destroy();
+      const nodes = [];
+      const bx = g.x, by = g.y - 16;
+      nodes.push(s.add.rectangle(bx, by, 26, 12, 0x050a14, 0.88).setDepth(79).setStrokeStyle(1, n > 0 ? 0x6ee7a0 : 0x5a6b7f, 0.9));
+      nodes.push(s.add.text(bx - 4, by, `${n}/3`, { fontFamily: 'Menlo, monospace', fontSize: '8px', fontWeight: 'bold', color: n > 0 ? '#9fffff' : '#7c8ba0' }).setOrigin(0.5).setDepth(80));
+      // depletion ring: shrinks as gas runs out, amber when <25%
+      const col = pct < 25 ? 0xffb45c : 0x7dffd9;
+      const ring = s.add.circle(bx, by, 9.5, 0, 0).setStrokeStyle(1.5, col, 0.85).setAngle(-90).setDepth(79);
+      ring.setEndAngle(-90 + (pct / 100) * 360 - 0.001);
+      nodes.push(ring);
+      this._gb.set(g.id, { sig, nodes });
+    }
+    // sweep badges for geysers no longer eligible
+    if (this._gb.size) {
+      for (const [id, v] of this._gb) {
+        if (!live.has(id)) { for (const c of v.nodes) c.destroy(); this._gb.delete(id); }
+      }
+    }
+  }
+
+  // 50) v2.28 gas crew assignment pop: green worker-count stamp over refinery
+  gasAssignFX(g) {
+    const s = this.s;
+    if (!s || s.gameOver || !g) return;
+    const n = (g.workers || []).filter(w => !w.dead).length;
+    const t = s.add.text(g.x, g.y - 20, `GAS CREW ${n}/3`, { fontFamily: 'Menlo, monospace', fontSize: '10px', fontWeight: 'bold', color: '#9fffff', stroke: '#04070d', strokeThickness: 3 }).setOrigin(0.5).setDepth(120);
+    s.tweens.add({ targets: t, y: t.y - 14, alpha: 0, duration: 900, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
+    if (n >= 3) {
+      const full = s.add.circle(g.x, g.y - 16, 10, 0, 0).setStrokeStyle(2, 0x6ee7a0, 0.9).setDepth(119);
+      s.tweens.add({ targets: full, scale: 1.9, alpha: 0, duration: 420, ease: 'Cubic.easeOut', onComplete: () => full.destroy() });
+    }
+  }
+
+  // 51) v2.28 formation-engage visual: brief slot-ghosts where an attack-move
+  // war party will spread on arrival, so the player sees the line form.
+  formationGhosts(list, x, y) {
+    const s = this.s;
+    if (!s || s.gameOver || !list || list.length < 3 || !this._cheap(s)) return;
+    const combat = list.filter(u => !u.def.worker);
+    if (combat.length !== list.length) return;
+    const n = Math.min(list.length, 12);
+    const anchor = list[0];
+    const dx = x - anchor.x, dy = y - anchor.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len, py = dx / len;
+    const spacing = (s.TILE || 16) * 0.8;
+    for (let i = 0; i < n; i++) {
+      const k = i - (n - 1) / 2;
+      const gx = x + px * k * spacing - (dx / len) * ((Math.abs(k) % 2) * spacing * 0.4);
+      const gy = y + py * k * spacing - (dy / len) * ((Math.abs(k) % 2) * spacing * 0.4);
+      const gh = s.add.circle(gx, gy, 4.5, 0, 0).setStrokeStyle(1, 0xff8080, 0.55).setDepth(49);
+      s.tweens.add({ targets: gh, alpha: 0, scale: 0.4, delay: i * 25, duration: 380, onComplete: () => gh.destroy() });
+    }
+  }
+
   tick(dt, ctx) {
     // under-attack watchdog: ally units flashing recent damage
     const s = this.s;
@@ -808,6 +892,7 @@ export class PolishFX {
     this.ambient(dt);
     this.selGlowTick();
     this.queueChipsTick(dt);
+    this.gasBadgesTick(dt);
     // v2.27: camera follow + per-unit presentation upkeep
     this.followTick(dt);
     if (s.selection) {
