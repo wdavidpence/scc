@@ -3,20 +3,20 @@
 const KEY = 'starfr…n.v1';
 
 export const MISSIONS = [
-  { n: 1, name: 'CLEANUP OP', enemy: 'zerg', difficulty: 'easy', bonusMinerals: 200, brief: 'Scattered Zerg remains. Establish a base and purge the area.' },
-  { n: 2, name: 'FIRST CONTACT', enemy: 'zerg', difficulty: 'normal', bonusMinerals: 100, brief: 'A coordinated Zerg force has landed. Hold the line.' },
+  { n: 1, name: 'CLEANUP OP', enemy: 'skarn', difficulty: 'easy', bonusMinerals: 200, brief: 'Scattered Skarn remains. Establish a base and purge the area.' },
+  { n: 2, name: 'FIRST CONTACT', enemy: 'skarn', difficulty: 'normal', bonusMinerals: 100, brief: 'A coordinated Skarn force has landed. Hold the line.' },
   { n: 3, name: 'FIRE AND FURY', enemy: 'terran', difficulty: 'normal', bonusMinerals: 50, brief: 'Renegade Terran warlord contests the sector.' },
-  { n: 4, name: 'PSI STORM', enemy: 'protoss', difficulty: 'normal', bonusMinerals: 0, brief: 'The Templar have arrived. Their shields are strong; overwhelm them.' },
-  { n: 5, name: 'SWARM', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'A full brood nest. Survive 4 minutes of constant assault, then break them.', mods: { holdTime: 240 } },
+  { n: 4, name: 'PSI STORM', enemy: 'auraxis', difficulty: 'normal', bonusMinerals: 0, brief: 'The Adept have arrived. Their shields are strong; overwhelm them.' },
+  { n: 5, name: 'SWARM', enemy: 'skarn', difficulty: 'hard', bonusMinerals: 0, brief: 'A full brood nest. Survive 4 minutes of constant assault, then break them.', mods: { holdTime: 240 } },
   { n: 6, name: 'IRON WALL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 0, brief: 'Heavily fortified Terran position with a battlecruiser champion. Bring siege.', mods: { boss: 'battlecruiser' } },
-  { n: 7, name: 'JUDGEMENT', enemy: 'protoss', difficulty: 'hard', bonusMinerals: 0, brief: 'A Fleet assault led by a champion carrier. Their carriers will blot out the sun.', mods: { boss: 'carrier' } },
-  { n: 8, name: 'FINAL RECKONING', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The Overmind itself focuses on you. Hold 3 minutes, then slay the Ultralisk champion.', mods: { holdTime: 180, boss: 'ultralisk' } },
+  { n: 7, name: 'JUDGEMENT', enemy: 'auraxis', difficulty: 'hard', bonusMinerals: 0, brief: 'A Fleet assault led by a champion ark. Their arks will blot out the sun.', mods: { boss: 'ark' } },
+  { n: 8, name: 'FINAL RECKONING', enemy: 'skarn', difficulty: 'hard', bonusMinerals: 0, brief: 'The Hive Crown itself focuses on you. Hold 3 minutes, then slay the Tremorclaw champion.', mods: { holdTime: 180, boss: 'tremorclaw' } },
   { n: 9, name: 'GHOST PROTOCOL', enemy: 'terran', difficulty: 'hard', bonusMinerals: 100, brief: 'Ghost operatives and dropships hit your supply lines. Hold 3 minutes and purge the sector.', mods: { holdTime: 180, boss: 'ghost' } },
-  { n: 10, name: 'OVERMIND ASCENDANT', enemy: 'zerg', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: an Ultralisk champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'ultralisk' } },
+  { n: 10, name: 'HIVE CROWN ASCENDANT', enemy: 'skarn', difficulty: 'hard', bonusMinerals: 0, brief: 'The final brood: a Tremorclaw champion backed by a sustained swarm assault.', mods: { holdTime: 240, boss: 'tremorclaw' } },
   { n: 11, name: 'HELLFIRE EVAC', enemy: 'terran', difficulty: 'hard', bonusMinerals: 200, brief: 'The sector is being glassed at T-240. Survive until the evac shuttle reaches the green extraction zone, then get ANY units aboard.', mods: { escape: 240 }},
-  { n: 12, name: 'SUPPLY RUN', enemy: 'zerg', difficulty: 'normal', bonusMinerals: 0, brief: 'Salvage teams dropped 4 supply crates across the hotspot. Reclaim ALL FOUR crates to resupply the strike force — the swarm wants them too.', mods: { cratesWin: 4 }},
+  { n: 12, name: 'SUPPLY RUN', enemy: 'skarn', difficulty: 'normal', bonusMinerals: 0, brief: 'Salvage teams dropped 4 supply crates across the hotspot. Reclaim ALL FOUR crates to resupply the strike force — the swarm wants them too.', mods: { cratesWin: 4 }},
   { n: 13, name: 'CONVOY RESCUE', enemy: 'terran', difficulty: 'normal', bonusMinerals: 150, brief: 'Three loyalist transports are stranded mid-map with a reactor core aboard. Escort them to the extraction zone. If the convoy is wiped out, the sector is lost.', mods: { convoy: true }},
-  { n: 14, name: 'BLITZ STRIKE', enemy: 'protoss', difficulty: 'hard', bonusMinerals: 250, brief: 'Skip the fortified line. Their shield Pylon Nexus projects cover over the whole map — kill THAT structure and their base collapses. They will reinforce it constantly.', mods: { blitz: true }}
+  { n: 14, name: 'BLITZ STRIKE', enemy: 'auraxis', difficulty: 'hard', bonusMinerals: 250, brief: 'Skip the fortified line. Their shield Conduit Aegis projects cover over the whole map — kill THAT structure and their base collapses. They will reinforce it constantly.', mods: { blitz: true }}
 ];
 
 export const UPGRADES = [

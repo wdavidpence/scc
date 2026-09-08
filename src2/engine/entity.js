@@ -68,7 +68,7 @@ export class Unit {
     this.cloaked = !!this.def.cloak;
     this.patrolPoints = null; // [A,B] ping-pong
     this.waypoints = null;    // queued move points (shift-click)
-    this.interceptors = null; // carrier orbs
+    this.interceptors = null; // ark orbs
     this._chevrons = [];
     // transports / garrison / medic state
     this.carry = [];          // units loaded into a transport
@@ -111,13 +111,13 @@ export class Unit {
     if (this.loaded || this.state === 'garrisoned' || this.state === 'loaded' || this.garrisonedIn) { this.moving = false; this.drawHp(); return; } // sits inside bunker/transport; container fires
     this.moving = false;
     if (this.stunTimer > 0) { this.stunTimer -= dt; this.drawHp(); this.moving = false; this.animate(dt); return; }
-    // SC1 lurker: while burrowed it roots and spines at ground foes in a detonation line
+    // SC1 burrower: while burrowed it roots and spines at ground foes in a detonation line
     if (this.burrowed) {
       this.moving = false;
       this.attackTimer -= dt;
       if (this.attackTimer <= 0 && this.def.burrowAttack !== false && this.def.targets !== 'air') {
         const foe = this.world.acquireFor(this, (this.def.burrowRange || this.def.range + 4) * TILE);
-        if (foe) { this.attackTimer = this.def.cooldown; this.world.lurkerStrike(this, foe); }
+        if (foe) { this.attackTimer = this.def.cooldown; this.world.burrowerStrike(this, foe); }
       }
       this.animate(dt); this.drawHp(); return;
     }
@@ -131,7 +131,7 @@ export class Unit {
     // energy regen for casters (SC1: slow passive recharge)
     if (this.maxEnergy > 0 && this.energy < this.maxEnergy) this.energy = Math.min(this.maxEnergy, this.energy + dt * 0.8);
 
-    // cloak maintenance (dark templar): re-cloak 2s after last attack
+    // cloak maintenance (nightblade): re-cloak 2s after last attack
     if (this.def.cloak) {
       this._uncloakT = (this._uncloakT || 0) - dt;
       if (this._uncloakT <= 0 && !this.cloaked && this.state !== 'attackTarget') {
@@ -140,7 +140,7 @@ export class Unit {
       }
     }
 
-    // carrier interceptors orbit + auto-swarms
+    // ark interceptors orbit + auto-swarms
     if (this.def.interceptor) this.updateInterceptors(dt);
 
     switch (this.state) {
@@ -194,9 +194,9 @@ export class Unit {
     const wp = this.path[this.pathIndex];
     const dx = wp.x - this.x, dy = wp.y - this.y;
     const d = Math.hypot(dx, dy);
-    // SC1: zerg ground units surge faster on their creep
+    // SC1: skarn ground units surge faster on their blight
     let effSpeed = this.speed;
-    if (!this.flying && this.def.race === 'zerg' && this.world.creepSpeedAt && this.world.creepSpeedAt(this.team, this.x, this.y)) effSpeed *= 1.45;
+    if (!this.flying && this.def.race === 'skarn' && this.world.blightSpeedAt && this.world.blightSpeedAt(this.team, this.x, this.y)) effSpeed *= 1.45;
     // AAA movement feel: ramp speed (accel/decel) instead of instant start/stop
     const ramp = this.flying ? 2.6 : 3.4; // air units glide longer
     this._curSpeed = this._curSpeed || 0;
@@ -246,7 +246,7 @@ export class Unit {
   // rotate/facing: full rotation toward movement/attack vector + squash so troops look oriented
   face(dx, dy) {
     if (dx === 0 && dy === 0) return;
-    if (this.def.flying || this.def.size === 'large' || ['tank', 'vulture', 'wraith', 'battlecruiser', 'carrier', 'overlord', 'goliath', 'dropship'].includes(this.kind)) {
+    if (this.def.flying || this.def.size === 'large' || ['tank', 'duster', 'wraith', 'battlecruiser', 'ark', 'skywarden', 'ballista', 'dropship'].includes(this.kind)) {
       const a = Math.atan2(dy, dx);
       this.sprite.setFlipX(false);
       this.sprite.setRotation(Math.abs(a) > Math.PI / 2 ? a + Math.PI : a);
@@ -258,7 +258,7 @@ export class Unit {
   // per-frame procedural animation: walk bob + leg-frame cycle + idle breathing + attack recoil
   animate(dt) {
     this.animT += dt;
-    const rotKinds = ['wraith', 'battlecruiser', 'carrier', 'overlord']; // pure rotation vehicles: no squash, no leg frames
+    const rotKinds = ['wraith', 'battlecruiser', 'ark', 'skywarden']; // pure rotation vehicles: no squash, no leg frames
     if (this.moving) {
       const bob = Math.sin(this.animT * 12) * 1.4;
       this.sprite.setY(bob);
@@ -415,7 +415,7 @@ export class Unit {
     }
   }
 
-  // SC1 carriers launch interceptors that orbit and auto-strike nearby foes
+  // SC1 arks launch interceptors that orbit and auto-strike nearby foes
   updateInterceptors(dt) {
     if (!this.interceptors) {
       this.interceptors = [];
@@ -520,7 +520,7 @@ export class Unit {
 
   fireAt(target) {
     if (this.cloaked) { this.cloaked = false; this.sprite.setAlpha(1); this._uncloakT = 2; }
-    // SC1 dark archon feedback: drain target energy, 1 dmg per missing point
+    // SC1 dark radiant feedback: drain target energy, 1 dmg per missing point
     if (this.def.feedback && target && !target.dead && target.maxEnergy > 0 && this.energy >= 45) {
       this.energy -= 45;
       const drained = Math.max(0, target.maxEnergy - target.energy);
@@ -557,7 +557,7 @@ export class Unit {
       const m = this.world.add.image(this.x + (target.x > this.x ? 10 : -10), this.y - 2, 'spark').setDepth(55).setScale(this.sieged ? 2.4 : 1.3);
       this.world.tweens.add({ targets: m, scale: 0.2, alpha: 0, duration: 130, onComplete: () => m.destroy() });
       if (this.world.flash) {
-        const psionic = this.race === 'protoss' || ['zealot', 'dragoon', 'htemplar', 'dtemplar', 'highTemplar', 'darkTemplar', 'archon', 'carrier', 'reaver'].includes(this.kind);
+        const psionic = this.race === 'auraxis' || ['bladeguard', 'sentinel', 'caller', 'nblade', 'stormcaller', 'nightblade', 'radiant', 'ark', 'reaver'].includes(this.kind);
         this.world.flash(this.x + (target.x > this.x ? 12 : -12), this.y - 2, psionic ? 0x8fd0ff : (this.def.size === 'large' ? 0xffc24a : 0xffe9a0), this.def.size === 'large' ? 2.2 : 1.2);
       }
       if (this.sieged) this.world.shake?.(2.5, 0.15);
@@ -565,7 +565,7 @@ export class Unit {
     this.sprite.setScale((this.baseScale || 1) * (this.sieged ? 1.18 : 1), (this.sieged ? 1.18 : 1) * 0.92);
     this.world.time.delayedCall(90, () => { if (this.sprite && !this.dead) this.sprite.setScale(this.baseScale || (this.flying ? 1.06 : 1)); });
     if (this.def.castAbility === 'storm' && this.energy >= 75 && this.target === target) {
-      // high templar auto-casts psi storm at clustered foes
+      // stormcaller auto-casts psi storm at clustered foes
       const cluster = this.world.units.filter(u => !u.dead && u.team !== this.team && Math.hypot(u.x - target.x, u.y - target.y) < 60).length;
       if (cluster >= 3) { this.world.castUnitPsiStorm(this, target.x, target.y); }
     }
@@ -668,7 +668,7 @@ export class Unit {
     this.setOrder(this.gasTarget && wasGas ? { type: 'harvestGas' } : { type: 'harvest' });
   }
 
-  // SC1: SCV repair — right-click your own damaged structure
+  // SC1: Rigger repair — right-click your own damaged structure
   updateRepair(dt) {
     const b = this.order?.repairTarget;
     if (!b || b.dead || b.hp >= b.maxHp) { this.order = null; this.setOrder({ type: 'harvest' }); return; }
@@ -915,7 +915,7 @@ export class Building {
     if (this.morphedTo) bid = this.morphedTo;
     const team = this.team > 2 ? 2 : this.team;
     if (this.world.textures.exists(`b-${bid}-t${team}`)) return `b-${bid}-t${team}`;
-    if (this.world.textures.exists(`b-${bid}-t${this.def.race === 'zerg' ? 1 : this.def.race === 'protoss' ? 2 : 0}`)) return `b-${bid}-t${this.def.race === 'zerg' ? 1 : this.def.race === 'protoss' ? 2 : 0}`;
+    if (this.world.textures.exists(`b-${bid}-t${this.def.race === 'skarn' ? 1 : this.def.race === 'auraxis' ? 2 : 0}`)) return `b-${bid}-t${this.def.race === 'skarn' ? 1 : this.def.race === 'auraxis' ? 2 : 0}`;
     return `b-commandCenter-t0`;
   }
 
@@ -931,8 +931,8 @@ export class Building {
     this.world.nav.blockRect(this.id, this.tileX0(), this.tileY0(), this.tileX1(), this.tileY1()); // SC1: completed structures block ground paths
     this.workers.forEach(w => { if (w.order?.building === this) { w.order = null; if (w.def.worker) w.setOrder({ type: 'harvest' }); } });
     this.workers = [];
-    if (this.buildId === 'nexus') this.def.supply = 15;
-    if (this.buildId === 'commandCenter' || this.buildId === 'nexus') this.def.supply = this.buildId === 'commandCenter' ? 10 : 15;
+    if (this.buildId === 'aegis') this.def.supply = 15;
+    if (this.buildId === 'commandCenter' || this.buildId === 'aegis') this.def.supply = this.buildId === 'commandCenter' ? 10 : 15;
     // F5: completion spin-up flourish
     this.world.tweens.add({ targets: this.sprite, angle: { from: 0, to: 360 }, scale: { from: 1.12, to: 1 }, duration: 420, ease: 'Cubic.easeOut' });
     const ring = this.world.add.circle(this.x, this.y, 10, 0x6ee7a0, 0.0).setStrokeStyle(3, 0x6ee7a0, 0.8).setDepth(25);
@@ -989,8 +989,8 @@ export class Building {
     const unitDef = UNITS[kind];
     if (!unitDef) return false;
     if (!(unitDef.build === this.buildId || this.def.produces?.includes(kind))) return false;
-    if (this.buildId === 'barracks' && (kind === 'firebat') && !this.world.hasBuilding('academy', this.team)) return false;
-    if (this.buildId === 'factory' && kind === 'goliath' && !this.world.hasAddOn(this, 'machineShop')) return false;
+    if (this.buildId === 'barracks' && (kind === 'incinerator') && !this.world.hasBuilding('academy', this.team)) return false;
+    if (this.buildId === 'factory' && kind === 'ballista' && !this.world.hasAddOn(this, 'machineShop')) return false;
     if (this.buildId === 'starport' && kind === 'battlecruiser' && !this.world.hasAddOn(this, 'controlTower')) return false;
     if (unitDef.tech && !this.world.techResearched(this.team, unitDef.tech)) return false;
     return true;
@@ -1020,12 +1020,12 @@ export class Building {
 
   update(dt) {
     if (this.dead) return;
-    // AAA: structures breathe — zerg organic pulse, protoss crystal throb
-    if (this.built && this.def.race === 'zerg') {
+    // AAA: structures breathe — skarn organic pulse, auraxis crystal throb
+    if (this.built && this.def.race === 'skarn') {
       this._breathT = (this._breathT || Math.random() * 6.28) + dt * 1.6;
       const s = 1 + Math.sin(this._breathT) * 0.012;
       this.sprite.setScale(s, 1 + Math.sin(this._breathT + 1) * 0.018);
-    } else if (this.built && this.def.race === 'protoss' && (this.buildId === 'pylon' || this.buildId === 'nexus' || this.buildId === 'cyberneticsCore')) {
+    } else if (this.built && this.def.race === 'auraxis' && (this.buildId === 'conduit' || this.buildId === 'aegis' || this.buildId === 'synapseCore')) {
       const p = 0.85 + Math.sin((this.world?.time?.now || 0) / 700 + this.id) * 0.15;
       this.sprite.setAlpha(p);
     }

@@ -1,4 +1,4 @@
-// BattleScene — the SCC2 world: terrain, fog of war, creep, selection,
+// BattleScene — the SCC2 world: terrain, fog of war, blight, selection,
 // commands, economy, combat, and the AI commander.
 import Phaser from 'phaser';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE } from '../data/sc1.js';
@@ -23,7 +23,7 @@ export class BattleScene extends Phaser.Scene {
 
   init(data) {
     this.race = data.race || 'terran';
-    this.enemyRace = data.enemyRace || 'zerg';
+    this.enemyRace = data.enemyRace || 'skarn';
     this.difficulty = data.difficulty || 'normal';
     this.hotseat = !!data.hotseat;
     this.mission = data.mission || null;
@@ -32,12 +32,12 @@ export class BattleScene extends Phaser.Scene {
     this.mods = data.mods || (this.mission ? this.mission.mods : null) || {};
     // F5: difficulty profiles — build orders/aggression, not just stat multipliers
     this.aiProfile = data.difficulty === 'hard'
-      ? { income: 2.2, armyCap: 34, threshold: 0.8, attackGap: 30, harassAt: 40, rushBuilds: ['spawningPool', 'barracks', 'gateway'], rushAt: 140, workers: 16, flankSplit: 0.55 }
+      ? { income: 2.2, armyCap: 34, threshold: 0.8, attackGap: 30, harassAt: 40, rushBuilds: ['clawPit', 'barracks', 'portal'], rushAt: 140, workers: 16, flankSplit: 0.55 }
       : data.difficulty === 'easy'
         ? { income: 0.4, armyCap: 8, threshold: 1.5, attackGap: 60, harassAt: 110, rushBuilds: [], rushAt: 1e9, workers: 8, flankSplit: 0.8 }
         : { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
     // AAA: AI personality tiers — each difficulty rolls a NAMED commander doctrine
-    this.aiCommander = pickCommander(this.enemyRace || 'zerg', data.difficulty);
+    this.aiCommander = pickCommander(this.enemyRace || 'skarn', data.difficulty);
     if (this.aiCommander) {
       Object.assign(this.aiProfile, this.aiCommander.mods);
       this.aiProfile.doctrine = this.aiCommander.id;
@@ -87,7 +87,7 @@ export class BattleScene extends Phaser.Scene {
     this.paused = false;          // F8 tactical pause
     this.threats = [];            // F3 incoming-wave pings {x,y,t}
     this._threatTimer = 0;
-    this.spiderMines = [];        // SC1 vulture mines
+    this.spiderMines = [];        // SC1 duster mines
     this.patrolMode = false;      // P two-click patrol
     this._patrolAnchor = null;
     this._scanCd = 0;             // scanner sweep cooldown
@@ -96,7 +96,7 @@ export class BattleScene extends Phaser.Scene {
     this.tut = null;             // F10 tutorial state
     // AAA: AI personality — named commander doctrine rolled per race+difficulty
     try {
-      this.aiCommander = pickCommander(this.enemyRace || 'zerg', this.difficulty);
+      this.aiCommander = pickCommander(this.enemyRace || 'skarn', this.difficulty);
       if (this.aiCommander) {
         Object.assign(this.aiProfile, this.aiCommander.mods);
         this.aiProfile.doctrine = this.aiCommander.id;
@@ -107,8 +107,8 @@ export class BattleScene extends Phaser.Scene {
     this.mods = this.applyMissionMods();
     // AAA: data-driven mission triggers (time-based reinforcement drops, zone alerts)
     this.triggers = new Triggers([
-      { id: 'mid-reinforce', when: 'time', t: 150, msg: 'Sensors detect warp-in signatures — enemy reinforcements dropping.', bark: true, barkPitch: 0.7, spawn: [{ kind: this.enemyRace === 'zerg' ? 'zergling' : this.enemyRace === 'protoss' ? 'zealot' : 'marine', team: 1, fx: 0.82, fy: 0.14 }, { kind: this.enemyRace === 'zerg' ? 'zergling' : this.enemyRace === 'protoss' ? 'zealot' : 'marine', team: 1, fx: 0.86, fy: 0.18 }, { kind: this.enemyRace === 'zerg' ? 'hydralisk' : this.enemyRace === 'protoss' ? 'dragoon' : 'firebat', team: 1, fx: 0.84, fy: 0.22 }] },
-      { id: 'late-reinforce', when: 'time', t: 300, msg: 'Massive bio/contact signature inbound. Hold the line.', bark: true, barkPitch: 0.6, spawn: [{ kind: this.enemyRace === 'zerg' ? 'hydralisk' : this.enemyRace === 'protoss' ? 'darkTemplar' : 'tank', team: 1, fx: 0.8, fy: 0.12 }, { kind: this.enemyRace === 'zerg' ? 'mutalisk' : this.enemyRace === 'protoss' ? 'carrier' : 'wraith', team: 1, fx: 0.88, fy: 0.1 }] },
+      { id: 'mid-reinforce', when: 'time', t: 150, msg: 'Sensors detect warp-in signatures — enemy reinforcements dropping.', bark: true, barkPitch: 0.7, spawn: [{ kind: this.enemyRace === 'skarn' ? 'skarnling' : this.enemyRace === 'auraxis' ? 'bladeguard' : 'marine', team: 1, fx: 0.82, fy: 0.14 }, { kind: this.enemyRace === 'skarn' ? 'skarnling' : this.enemyRace === 'auraxis' ? 'bladeguard' : 'marine', team: 1, fx: 0.86, fy: 0.18 }, { kind: this.enemyRace === 'skarn' ? 'razorspine' : this.enemyRace === 'auraxis' ? 'sentinel' : 'incinerator', team: 1, fx: 0.84, fy: 0.22 }] },
+      { id: 'late-reinforce', when: 'time', t: 300, msg: 'Massive bio/contact signature inbound. Hold the line.', bark: true, barkPitch: 0.6, spawn: [{ kind: this.enemyRace === 'skarn' ? 'razorspine' : this.enemyRace === 'auraxis' ? 'nightblade' : 'tank', team: 1, fx: 0.8, fy: 0.12 }, { kind: this.enemyRace === 'skarn' ? 'vexwing' : this.enemyRace === 'auraxis' ? 'ark' : 'wraith', team: 1, fx: 0.88, fy: 0.1 }] },
       { id: 'near-base-alert', when: 'near:0.30,0.30,140', msg: 'Hostiles inside our perimeter!', bark: true, barkPitch: 1.05 },
     ]);
     this.audio = new Audio2(this);
@@ -124,7 +124,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.aiCommander && !this.hotseat) {
       this.time.delayedCall(2200, () => {
         this.events.emit('hud:radio', this.aiCommander.radio, this.aiCommander.name.toUpperCase());
-        this.audio.bark(this.aiCommander.radio, this.enemyRace === 'zerg' ? 0.55 : this.enemyRace === 'protoss' ? 1.25 : 0.7, 1.0);
+        this.audio.bark(this.aiCommander.radio, this.enemyRace === 'skarn' ? 0.55 : this.enemyRace === 'auraxis' ? 1.25 : 0.7, 1.0);
       });
     }
     try { window.__SCC2.audio2 = this.audio; } catch (e) { /* noop */ }
@@ -141,7 +141,7 @@ export class BattleScene extends Phaser.Scene {
     this.flows.nav = this.nav;
     this.blockTerrain();
     this.createFog();
-    this.createCreepLayers();
+    this.createBlightLayers();
     this.spawnBase(0, this.race);
     this.spawnBase(1, this.enemyRace);
     this.setupMissionObjectives();
@@ -175,7 +175,7 @@ export class BattleScene extends Phaser.Scene {
     else if (this.mods && this.mods.escape) objs.push({ id: 'escape', text: `EVACUATE at T-${this.mods.escape} — survive, then board the LZ`, done: false });
     else objs.push({ id: 'kill', text: 'Destroy the enemy base', done: false });
     if (this.mods && this.mods.convoy) objs.push({ id: 'convoy', text: 'Escort the convoy transports to the extraction zone', done: false });
-    if (this.mods && this.mods.blitz) objs.push({ id: 'blitz', text: 'Destroy the shield Pylon Nexus (marked ⌬)', done: false });
+    if (this.mods && this.mods.blitz) objs.push({ id: 'blitz', text: 'Destroy the shield Conduit Aegis (marked ⌬)', done: false });
     if (this.crates && this.crates.length) objs.push({ id: 'crates', text: 'OPTIONAL: recover 3 power-up crates (+300)', done: false });
     if (this.mission && this.mission.mods && this.mission.mods.holdTime) {
       objs.push({ id: 'hold', text: `HOLD THE LINE for ${this.mission.mods.holdTime}s`, done: false });
@@ -246,14 +246,14 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(800, () => {
         const cands = this.buildings.filter(b => b.team === 1 && !b.dead);
         if (!cands.length) return;
-        const nx = cands.find(b => b.buildId === 'pylon') || cands.find(b => b.def.supplyBonus) || cands[0];
+        const nx = cands.find(b => b.buildId === 'conduit') || cands.find(b => b.def.supplyBonus) || cands[0];
         nx.isBlitzTarget = true;
         nx.maxHp = Math.round(nx.maxHp * 2); nx.hp = nx.maxHp;
-        this._nexusMark = this.add.text(nx.x, nx.y - 26, '⌬ NEXUS', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#ff5c8a', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(48);
-        this._nexusRing = this.add.circle(nx.x, nx.y, 34, 0xff5c8a, 0.12).setStrokeStyle(2, 0xff5c8a, 0.8).setDepth(47);
-        this.tweens.add({ targets: this._nexusRing, scale: 1.35, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
-        this.events.emit('hud:alert', 'HIGH-VALUE TARGET MARKED — SHIELD PYLON NEXUS');
-        this.events.emit('hud:radio', 'One pylon feeds their shield matrix. Bring it down and the base goes dark.', 'TECH OFFICER');
+        this._aegisMark = this.add.text(nx.x, nx.y - 26, '⌬ AEGIS', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#ff5c8a', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(48);
+        this._aegisRing = this.add.circle(nx.x, nx.y, 34, 0xff5c8a, 0.12).setStrokeStyle(2, 0xff5c8a, 0.8).setDepth(47);
+        this.tweens.add({ targets: this._aegisRing, scale: 1.35, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
+        this.events.emit('hud:alert', 'HIGH-VALUE TARGET MARKED — SHIELD CONDUIT AEGIS');
+        this.events.emit('hud:radio', 'One conduit feeds their shield matrix. Bring it down and the base goes dark.', 'TECH OFFICER');
       });
     }
   }
@@ -337,7 +337,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   spawnMissionBoss() {
-    const kind = this.enemyRace === 'protoss' ? 'carrier' : this.enemyRace === 'zerg' ? 'ultralisk' : 'battlecruiser';
+    const kind = this.enemyRace === 'auraxis' ? 'ark' : this.enemyRace === 'skarn' ? 'tremorclaw' : 'battlecruiser';
     const base = this.buildings.find(b => b.team === 1 && b.def.primary);
     if (!base) return;
     const u = this.spawnUnit(1, kind, base.x + 60, base.y + 60, { arriveReady: true });
@@ -362,7 +362,7 @@ export class BattleScene extends Phaser.Scene {
     const num = this.add.text(0, -46, `MISSION ${this.mission.n}`, { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#ffd23f' }).setOrigin(0.5);
     const ttl = this.add.text(0, -16, this.mission.name, { fontFamily: 'Menlo, monospace', fontSize: '34px', color: '#e8f1ff', fontStyle: 'bold' }).setOrigin(0.5);
     const brf = this.add.text(0, 24, this.mission.brief, { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#9fb3d8', align: 'center', wordWrap: { width: Math.min(520, W - 80) } }).setOrigin(0.5);
-    const objLine = this.mods.cratesWin ? `RECLAIM ${this.mods.cratesWin} SUPPLY CRATES` : this.mods.convoy ? 'ESCORT THE CONVOY TO EXTRACTION' : this.mods.blitz ? 'DESTROY THE SHIELD PYLON NEXUS ⌬' : this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE';
+    const objLine = this.mods.cratesWin ? `RECLAIM ${this.mods.cratesWin} SUPPLY CRATES` : this.mods.convoy ? 'ESCORT THE CONVOY TO EXTRACTION' : this.mods.blitz ? 'DESTROY THE SHIELD CONDUIT AEGIS ⌬' : this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE';
     const obj = this.add.text(0, 56, objLine + '   ·   G = ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0' }).setOrigin(0.5);
     cont.add([bg, num, ttl, brf, obj]);
     this.tweens.add({ targets: cont, alpha: 1, duration: 500, onComplete: () => {
@@ -415,7 +415,7 @@ export class BattleScene extends Phaser.Scene {
     const layer = this.add.container(0, 0).setDepth(8).setScrollFactor(0);
     this.ambientLayer = layer;
     this._ambient = [];
-    const cols = this.race === 'zerg' ? [0xff9c7c, 0xd8785c] : this.race === 'protoss' ? [0xbfe0ff, 0x8ab4ff] : [0xffd8a0, 0xc8b890];
+    const cols = this.race === 'skarn' ? [0xff9c7c, 0xd8785c] : this.race === 'auraxis' ? [0xbfe0ff, 0x8ab4ff] : [0xffd8a0, 0xc8b890];
     for (let i = 0; i < 26; i++) {
       const p = this.add.circle(Math.random() * this.scale.width, Math.random() * this.scale.height, 1 + Math.random() * 1.5, cols[i % 2], 0.35 + Math.random() * 0.3);
       layer.add(p);
@@ -574,12 +574,12 @@ export class BattleScene extends Phaser.Scene {
       { text: 'LEFT-CLICK a WORKER to select it', check: () => this.selection.size >= 1 && [...this.selection].some(u => u.def.worker) },
       { text: 'RIGHT-CLICK a MINERAL to harvest', check: () => [...this.selection].some(u => u.order?.type === 'harvest' || u.harvestTarget) },
       { text: 'Open the BUILD menu (B) and place a BARRACKS near your base', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'barracks') },
-      { text: 'Select the BARRACKS and train a MARINE', check: () => this.units.some(u => u.team === 0 && (u.kind === 'marine' || u.kind === 'firebat')) },
+      { text: 'Select the BARRACKS and train a MARINE', check: () => this.units.some(u => u.team === 0 && (u.kind === 'marine' || u.kind === 'incinerator')) },
       { text: 'Build a BUNKER (B menu) — your infantry fortress', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'bunker') },
       { text: 'Select Marines and RIGHT-CLICK the BUNKER to garrison them — they fire from inside, invisible and healed', check: () => this.buildings.some(b => b.team === 0 && b.buildId === 'bunker' && b.garrison?.length) },
       { text: 'Select your BUNKER and press U to unload your marines', check: () => this.units.some(u => u.team === 0 && u.kind === 'marine' && !u.loaded && !u.dead && u.state !== 'training') },
       { text: 'Build an ACADEMY, research COMBAT MEDICS, train a MEDIC — idle medics auto-heal nearby troops', check: () => this.units.some(u => u.team === 0 && u.kind === 'medic') },
-      { text: 'STARGATE + dropship incoming! Build a STARPORT and train a DROPSHIP to airlift troops over terrain', check: () => this.units.some(u => u.team === 0 && u.kind === 'dropship') },
+      { text: 'SKY PORTAL + dropship incoming! Build a STARPORT and train a DROPSHIP to airlift troops over terrain', check: () => this.units.some(u => u.team === 0 && u.kind === 'dropship') },
       { text: 'Right-click Marines to LOAD the dropship, click it + press U over enemy ground to DROP them behind lines!', check: () => (this.units.find(u => u.team === 0 && u.kind === 'dropship')?.carry?.length || 0) > 0 || this._droppedOnce },
       { text: 'Select your Marine and right-click an enemy to attack!', check: () => !this.gameOver && this.units.some(u => u.team === 0 && u.target && !u.target.dead) }
     ];
@@ -614,7 +614,7 @@ export class BattleScene extends Phaser.Scene {
       const dropship = this.units.find(x => x.team === 0 && x.kind === 'dropship');
       const medic = this.units.find(x => x.team === 0 && x.kind === 'medic');
       const b = this.buildings.find(x => x.team === 0 && x.buildId === 'barracks' && !x.built) || this.buildings.find(x => x.team === 0 && x.buildId === 'barracks');
-      const u = this.units.find(x => x.team === 0 && (x.kind === 'marine' || x.kind === 'firebat'));
+      const u = this.units.find(x => x.team === 0 && (x.kind === 'marine' || x.kind === 'incinerator'));
       const foe = this.units.find(x => x.team === 1 && !x.dead);
       const tgt = (i >= 8 && dropship) ? dropship : (i >= 7 && medic) ? medic : (i >= 4 && bunker) ? bunker : (i >= 4 && starport) ? starport : (i >= 4 && academy) ? academy : b || u || foe;
       if (tgt) { this.cameras.main.centerOn(tgt.x, tgt.y); this.events.emit('tutorial:pos', tgt.x, tgt.y); }
@@ -625,7 +625,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- ultimate abilities (F7) ----------------
-  ultKind() { return this.race === 'terran' ? 'nuke' : this.race === 'protoss' ? 'storm' : 'surge'; }
+  ultKind() { return this.race === 'terran' ? 'nuke' : this.race === 'auraxis' ? 'storm' : 'surge'; }
   ultReady() { return this.ultimateEnergy >= this.ultimateMax && !this.ultMode && !this.gameOver; }
 
   armUltimate() {
@@ -747,10 +747,10 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(4600, () => iv.remove());
       this.events.emit('hud:alert', 'PSIONIC STORM');
     } else if (kind === 'surge') {
-      // zerg: brood surge — spawn extra zerglings at target + speed/attack buff to nearby swarm
+      // skarn: brood surge — spawn extra skarnlings at target + speed/attack buff to nearby swarm
       const pool = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
       for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); this.time.delayedCall(12000, () => { if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } }); } }
-      // pulsing brood sacs erupt at the target, each hatching a zergling
+      // pulsing brood sacs erupt at the target, each hatching a skarnling
       for (let i = 0; i < 8; i++) {
         const sx = wx + Math.random() * 90 - 45, sy = wy + Math.random() * 90 - 45;
         const sac = this.add.circle(sx, sy, 6, 0x8a3a22, 0.95).setStrokeStyle(2, 0xff7b2e, 0.8).setDepth(48);
@@ -759,7 +759,7 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(340 + i * 90, () => {
           const burst = this.add.image(sx, sy, 'glow').setTint(0xff7b2e).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.3);
           this.tweens.add({ targets: burst, scale: 0.3, alpha: 0, duration: 300, onComplete: () => burst.destroy() });
-          const u = this.spawnUnit(0, 'zergling', sx, sy, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true);
+          const u = this.spawnUnit(0, 'skarnling', sx, sy, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true);
         });
       }
       // organic tendrils spreading from center
@@ -1094,9 +1094,9 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  // SC1: zerg ground units sprint across their own creep
-  creepSpeedAt(team, x, y) {
-    const cc = this.creepCanvases && this.creepCanvases[team];
+  // SC1: skarn ground units sprint across their own blight
+  blightSpeedAt(team, x, y) {
+    const cc = this.blightCanvases && this.blightCanvases[team];
     if (!cc) return false;
     const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
@@ -1157,25 +1157,25 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:alert', 'ROCK DESTROYED — PATH OPEN');
   }
 
-  // ---------------- creep ----------------
-  createCreepLayers() {
-    this.creepCanvases = {};
-    this.creepTextures = {};
+  // ---------------- blight ----------------
+  createBlightLayers() {
+    this.blightCanvases = {};
+    this.blightTextures = {};
     for (const t of [0, 1]) {
       const c = document.createElement('canvas'); c.width = MAP_W; c.height = MAP_H;
       const ctx = c.getContext('2d');
-      this.creepCanvases[t] = { c, ctx, cells: new Uint8Array(MAP_W * MAP_H) };
-      const tex = this.textures.addCanvas(`creep-t${t}`, c);
-      this.creepTextures[t] = tex;
-      const img = this.add.image(PXW / 2, PXH / 2, `creep-t${t}`);
+      this.blightCanvases[t] = { c, ctx, cells: new Uint8Array(MAP_W * MAP_H) };
+      const tex = this.textures.addCanvas(`blight-t${t}`, c);
+      this.blightTextures[t] = tex;
+      const img = this.add.image(PXW / 2, PXH / 2, `blight-t${t}`);
       img.setOrigin(0.5).setScale(TILE).setDepth(5).setAlpha(t === 0 ? 0.75 : 0.8);
     }
-    this.creepDirty = false;
-    this.creepTimer = 0;
+    this.blightDirty = false;
+    this.blightTimer = 0;
   }
 
-  addCreep(team, cx, cy, radius) {
-    const { ctx, cells } = this.creepCanvases[team];
+  addBlight(team, cx, cy, radius) {
+    const { ctx, cells } = this.blightCanvases[team];
     const tx = Math.round(cx / TILE), ty = Math.round(cy / TILE);
     let changed = false;
     for (let dy = -radius; dy <= radius; dy++) {
@@ -1187,13 +1187,13 @@ export class BattleScene extends Phaser.Scene {
         if (!cells[i]) { cells[i] = 1; ctx.fillStyle = team === 0 ? '#2f4e8f' : '#5a2340'; ctx.fillRect(x, y, 1, 1); changed = true; }
       }
     }
-    if (changed) this.textures.get(`creep-t${team}`).refresh();
+    if (changed) this.textures.get(`blight-t${team}`).refresh();
   }
 
-  hasCreep(team, x, y) {
+  hasBlight(team, x, y) {
     const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
-    return this.creepCanvases[team].cells[ty * MAP_W + tx] === 1;
+    return this.blightCanvases[team].cells[ty * MAP_W + tx] === 1;
   }
 
   // ---------------- base spawn ----------------
@@ -1207,22 +1207,22 @@ export class BattleScene extends Phaser.Scene {
     for (let i = 0; i < 4; i++) {
       const u = this.spawnUnit(team, workerKinds[0], bx + 40 + Math.random() * 40, by + 40 + Math.random() * 40, { arriveReady: true });
     }
-    if (race === 'zerg') {
-      this.addCreep(team, bx, by, b.def.creepRadius || 8);
-      // overlord
-      this.spawnUnit(team, 'overlord', bx + 30, by - 40, { arriveReady: true });
+    if (race === 'skarn') {
+      this.addBlight(team, bx, by, b.def.blightRadius || 8);
+      // skywarden
+      this.spawnUnit(team, 'skywarden', bx + 30, by - 40, { arriveReady: true });
     }
-    if (race === 'protoss') {
-      // starting pylon
-      const py = new Building(this, team, 'pylon', bx + TILE * 5, by + TILE * 2, { instant: true });
+    if (race === 'auraxis') {
+      // starting conduit
+      const py = new Building(this, team, 'conduit', bx + TILE * 5, by + TILE * 2, { instant: true });
       this.buildings.push(py);
     }
     // starting barracks for enemy
     if (team === 1) {
-      const bid = race === 'zerg' ? 'spawningPool' : race === 'protoss' ? 'gateway' : 'barracks';
+      const bid = race === 'skarn' ? 'clawPit' : race === 'auraxis' ? 'portal' : 'barracks';
       const eb = new Building(this, team, bid, bx + TILE * 4 * (team === 1 ? -1 : 1), by + TILE * 3, { instant: true });
       this.buildings.push(eb);
-      if (race === 'zerg') this.addCreep(team, bx, by, 9);
+      if (race === 'skarn') this.addBlight(team, bx, by, 9);
     }
     this.players[team].supplyCap = this.computeSupplyCap(team);
   }
@@ -1243,8 +1243,8 @@ export class BattleScene extends Phaser.Scene {
     // apply weapon upgrades
     u.bonusDamage = this.getWeaponLevel(team) * (def.targets !== 'air' ? 2 : 0);
     u.bonusArmor = this.getArmorLevel(team);
-    if (this.techResearched(team, 'vehiclePlating1') && ['tank', 'vulture', 'goliath', 'wraith', 'battlecruiser', 'carrier', 'reaver', 'devourer'].includes(kind)) u.bonusArmor += 2;
-    if (this.techResearched(team, 'zealotSpeed') && kind === 'zealot') u.speed *= 1.18;
+    if (this.techResearched(team, 'vehiclePlating1') && ['tank', 'duster', 'ballista', 'wraith', 'battlecruiser', 'ark', 'reaver', 'corroder'].includes(kind)) u.bonusArmor += 2;
+    if (this.techResearched(team, 'bladeguardSpeed') && kind === 'bladeguard') u.speed *= 1.18;
     // F7 perks + F2 upgrade visuals on birth
     if (team === 0) {
       if (this.perks?.flag && !def.worker) this.veteranFlag(u);
@@ -1271,7 +1271,7 @@ export class BattleScene extends Phaser.Scene {
       if (kind === 'tank') this.shake(1.6, 0.12);
       // brass ejecta — clinks and comes to rest on the ground
       this.ejectBrass(from.x, from.y, ang, kind === 'tank' ? 1 : 0.6);
-    } else if (kind === 'firebat') {
+    } else if (kind === 'incinerator') {
       // AAA: flame cone with licking tongues instead of static blobs
       const ang = Math.atan2(target.y - from.y, target.x - from.x);
       const g = this.add.graphics().setDepth(45);
@@ -1285,23 +1285,23 @@ export class BattleScene extends Phaser.Scene {
       }
       this.applyHit(target, damage, splash || 18);
     } else {
-      const sp = this.add.image(from.x, from.y, kind === 'vulture' || kind === 'goliath' ? 'shell' : 'spark').setDepth(45);
-      if (kind === 'vulture' || kind === 'goliath') { sp.setScale(kind === 'goliath' ? 1.3 : 1); this.ejectBrass(from.x, from.y, Math.atan2(target.y - from.y, target.x - from.x), 0.5); }
-      if (kind === 'zealot' || kind === 'darkTemplar' || kind === 'archon') {
+      const sp = this.add.image(from.x, from.y, kind === 'duster' || kind === 'ballista' ? 'shell' : 'spark').setDepth(45);
+      if (kind === 'duster' || kind === 'ballista') { sp.setScale(kind === 'ballista' ? 1.3 : 1); this.ejectBrass(from.x, from.y, Math.atan2(target.y - from.y, target.x - from.x), 0.5); }
+      if (kind === 'bladeguard' || kind === 'nightblade' || kind === 'radiant') {
         const g = this.add.graphics().setDepth(45);
-        g.lineStyle(2, kind === 'darkTemplar' ? 0xc060ff : 0x9fd0ff, 0.9);
+        g.lineStyle(2, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.9);
         g.lineBetween(from.x, from.y, target.x, target.y);
         this.tweens.add({ targets: g, alpha: 0, duration: 100, onComplete: () => g.destroy() });
         // blade trail afterglow
-        const glow = this.add.circle((from.x + target.x) / 2, (from.y + target.y) / 2, 8, kind === 'darkTemplar' ? 0xc060ff : 0x9fd0ff, 0.35).setDepth(44);
+        const glow = this.add.circle((from.x + target.x) / 2, (from.y + target.y) / 2, 8, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.35).setDepth(44);
         this.tweens.add({ targets: glow, alpha: 0, scale: 1.8, duration: 220, onComplete: () => glow.destroy() });
         this.applyHit(target, damage, splash);
         sp.destroy();
         return;
       }
       // plasma bolts leave a fading trail dot
-      if (kind === 'muta' || kind === 'dragoon' || kind === 'corsair' || kind === 'mutalisk' || kind === 'hydra' || kind === 'hydralisk') {
-        const trail = this.add.circle(from.x, from.y, 2.5, kind === 'muta' || kind === 'mutalisk' ? 0xb090ff : 0x9fd0ff, 0.7).setDepth(44);
+      if (kind === 'muta' || kind === 'sentinel' || kind === 'voidlance' || kind === 'vexwing' || kind === 'razor' || kind === 'razorspine') {
+        const trail = this.add.circle(from.x, from.y, 2.5, kind === 'muta' || kind === 'vexwing' ? 0xb090ff : 0x9fd0ff, 0.7).setDepth(44);
         this.tweens.add({ targets: trail, alpha: 0, duration: 260, onComplete: () => trail.destroy() });
       }
       sp._proj = { target, damage, splash, speed, team, attacker, kind };
@@ -1431,7 +1431,7 @@ export class BattleScene extends Phaser.Scene {
     this.spiderMines = this.spiderMines.filter(m => { if (m.dead) { m.spr?.destroy(); } return !m.dead; });
   }
 
-  // ---------------- SC1: high templar psionic storm (unit cast) ----------------
+  // ---------------- SC1: stormcaller psi storm (unit cast) ----------------
   castUnitPsiStorm(caster, x, y) {
     caster.energy -= 75;
     this.audio?.psiCast?.();
@@ -1510,7 +1510,7 @@ export class BattleScene extends Phaser.Scene {
   garrisonInto(b, u) {
     if (!b.def.garrison || b.dead || !b.built || u.dead || u.loaded) return false;
     if (b.garrison.length >= b.def.garrison) return false;
-    if (['scv', 'drone', 'probe'].includes(u.kind)) return false;
+    if (['rigger', 'skarling', 'artificer'].includes(u.kind)) return false;
     b.garrison.push(u);
     u.garrison(b);
     if (this.selection) this.selection.delete(u);
@@ -1608,12 +1608,12 @@ export class BattleScene extends Phaser.Scene {
     if (this.selectedBuilding === b) this.selectedBuilding = null;
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
     const info = RACE_INFO[this.players[b.team].race];
-    // blitz mission: killing the marked nexus wins, razing the base does not
+    // blitz mission: killing the marked aegis wins, razing the base does not
     if (b.isBlitzTarget && b.team === 1 && this.mods && this.mods.blitz) {
       const k = this.objectives.find(o => o.id === 'blitz'); if (k) k.done = true;
       this.events.emit('hud:objectives', this.objectives);
-      if (this._nexusMark) { this._nexusMark.destroy(); this._nexusMark = null; }
-      if (this._nexusRing) { this._nexusRing.destroy(); this._nexusRing = null; }
+      if (this._aegisMark) { this._aegisMark.destroy(); this._aegisMark = null; }
+      if (this._aegisRing) { this._aegisRing.destroy(); this._aegisRing = null; }
       this.shake(12, 0.8);
       this.polish?.zapFX();
       this.events.emit('hud:alert', 'SHIELD MATRIX COLLAPSED — FINISH THEM');
@@ -1643,7 +1643,7 @@ export class BattleScene extends Phaser.Scene {
       const g = this.geysers.find(g => Math.hypot(g.x - b.x, g.y - b.y) < TILE * 2.2 && !g.building);
       if (g) { g.building = b; b.geyser = g; this.assignGeyserWorkers(b); }
     }
-    if (b.def.creepGrowth) this.addCreep(b.team, b.x, b.y, b.def.creepRadius || 8);
+    if (b.def.blightGrowth) this.addBlight(b.team, b.x, b.y, b.def.blightRadius || 8);
     if (b.def.power) { b.powerRadius = TILE * 10; this.drawPowerField(b); }
     this.addBuildingLights(b);
     // SC1: production buildings get a default rally flag just below the footprint
@@ -1681,8 +1681,8 @@ export class BattleScene extends Phaser.Scene {
       if (b.def.supply) cap += b.def.supply;
       if (b.buildId === 'supplyDepot') cap += 8;
     }
-    if (this.players[team].race === 'zerg') {
-      for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'overlord') cap += 8;
+    if (this.players[team].race === 'skarn') {
+      for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'skywarden') cap += 8;
     }
     return cap;
   }
@@ -1760,7 +1760,7 @@ export class BattleScene extends Phaser.Scene {
     let best = null, bd = Infinity;
     for (const b of this.buildings) {
       if (b.team !== u.team || b.dead || !b.built) continue;
-      if (b.def.produces?.includes(u.kind) || ['commandCenter', 'nexus', 'hatchery', 'refinery', 'extractor', 'assimilator'].includes(b.buildId)) {
+      if (b.def.produces?.includes(u.kind) || ['commandCenter', 'aegis', 'broodNest', 'refinery', 'gasSiphon', 'essenceTap'].includes(b.buildId)) {
         const d = Math.hypot(b.x - u.x, b.y - u.y);
         if (d < bd) { bd = d; best = b; }
       }
@@ -1833,25 +1833,25 @@ export class BattleScene extends Phaser.Scene {
     if (/InfantryWeapons/.test(techId)) {
       const lvl = t?.level || this.players[team].upgrades.weapons;
       this.players[team].upgrades.weapons = lvl;
-      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'firebat', 'ghost', 'zereling', 'hydralisk', 'mutalisk', 'ultralisk', 'zealot', 'darkTemplar', 'htemplar'].includes(u.kind)) u.bonusDamage = Math.max(u.bonusDamage || 0, lvl * 2);
+      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'incinerator', 'ghost', 'skarnling', 'razorspine', 'vexwing', 'tremorclaw', 'bladeguard', 'nightblade', 'caller'].includes(u.kind)) u.bonusDamage = Math.max(u.bonusDamage || 0, lvl * 2);
     }
     if (/InfantryArmor/.test(techId)) {
       const lvl = t?.level || this.players[team].upgrades.armor;
       this.players[team].upgrades.armor = lvl;
-      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'firebat', 'ghost', 'zereling', 'hydralisk', 'mutalisk', 'ultralisk', 'zealot', 'darkTemplar', 'htemplar'].includes(u.kind)) u.bonusArmor = Math.max(u.bonusArmor || 0, lvl);
+      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'incinerator', 'ghost', 'skarnling', 'razorspine', 'vexwing', 'tremorclaw', 'bladeguard', 'nightblade', 'caller'].includes(u.kind)) u.bonusArmor = Math.max(u.bonusArmor || 0, lvl);
     }
-    if (techId === 'vehiclePlating1') for (const u of this.units) if (!u.dead && u.team === team && ['tank', 'vulture', 'goliath', 'wraith', 'battlecruiser', 'carrier', 'reaver', 'devourer'].includes(u.kind)) u.bonusArmor += 2;
-    if (techId === 'zealotSpeed') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'zealot') u.speed *= 1.18;
-    if (techId === 'dragoonRange') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'dragoon') u.def = { ...u.def, range: u.def.range + 1 };
-    if (techId === 'lair' || techId === 'hive') {
-      const b = this.buildings.find(b => b.team === team && (b.buildId === 'hatchery' || b.buildId === 'lair') && b.def.morphTo !== false);
+    if (techId === 'vehiclePlating1') for (const u of this.units) if (!u.dead && u.team === team && ['tank', 'duster', 'ballista', 'wraith', 'battlecruiser', 'ark', 'reaver', 'corroder'].includes(u.kind)) u.bonusArmor += 2;
+    if (techId === 'bladeguardSpeed') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'bladeguard') u.speed *= 1.18;
+    if (techId === 'sentinelRange') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'sentinel') u.def = { ...u.def, range: u.def.range + 1 };
+    if (techId === 'deepWarren' || techId === 'hive') {
+      const b = this.buildings.find(b => b.team === team && (b.buildId === 'broodNest' || b.buildId === 'deepWarren') && b.def.morphTo !== false);
     }
-    if (techId === 'zergMeleeAttacks1') this.players[team].upgrades.weapons++;
-    if (techId === 'zergCarapace1') this.players[team].upgrades.armor++;
+    if (techId === 'skarnMeleeAttacks1') this.players[team].upgrades.weapons++;
+    if (techId === 'skarnCarapace1') this.players[team].upgrades.armor++;
     if (techId === 'terranInfantryWeapons1') this.players[team].upgrades.weapons++;
     if (techId === 'terranInfantryArmor1') this.players[team].upgrades.armor++;
-    if (techId === 'protossGroundWeapons1') this.players[team].upgrades.weapons++;
-    if (techId === 'protossGroundPlating1') this.players[team].upgrades.armor++;
+    if (techId === 'auraxisGroundWeapons1') this.players[team].upgrades.weapons++;
+    if (techId === 'auraxisGroundPlating1') this.players[team].upgrades.armor++;
     // F2: visible research effects — unit tint flash + glow ring on the lab
     if (team === 0) {
       const tint = t?.affects?.toLowerCase?.().includes('weapon') || /weapon|attack/i.test(techId) ? 0xffe08a : 0x8ad4ff;
@@ -1903,7 +1903,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.ultMode) { this.castUltimate(wp.x, wp.y); return; }
       if (this.scanMode) { this.scannerSweep(wp.x, wp.y); this.cancelScan(); return; }
       if (this.castMode) {
-        const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'devourer' && u.energy >= 75) : (this.castMode === 'storm' ? (u.def.castAbility === 'storm' && u.energy >= 75) : ((u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100))))[0];
+        const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'corroder' && u.energy >= 75) : (this.castMode === 'storm' ? (u.def.castAbility === 'storm' && u.energy >= 75) : ((u.kind === 'voidlance' || u.kind === 'umbral') && u.energy >= 100))))[0];
         if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, wp.x, wp.y); else if (this.castMode === 'storm') this.castUnitPsiStorm(caster, wp.x, wp.y); else this.castMaelstrom(caster, wp.x, wp.y); }
         this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost();
         return;
@@ -2002,7 +2002,7 @@ export class BattleScene extends Phaser.Scene {
     let _hoverLast = 0;
     this.input.on('pointermove', (p) => {
       const now = performance.now();
-      if (now - _hoverLast < 80) return; // 12Hz probe, cheap
+      if (now - _hoverLast < 80) return; // 12Hz artificer, cheap
       _hoverLast = now;
       if (this.placing || this.scanMode || this.castMode || this.ultMode) { this._hoverTip.setAlpha(0); return; }
       // don't compete with the command card or minimap panels
@@ -2087,9 +2087,9 @@ export class BattleScene extends Phaser.Scene {
       // AAA hot-seat: TAB passes controls to the other commander
       this.input.keyboard.on('keydown-TAB', (e) => { if (e.preventDefault) e.preventDefault(); this.switchActiveTeam(); });
     }
-    this.input.keyboard.on('keydown-M', () => this.summonArchon(this.keys.SHIFT?.isDown ? 'darkArchon' : 'archon'));
-    this.input.keyboard.on('keydown-O', () => this.morphSelected('guardian'));
-    this.input.keyboard.on('keydown-L', () => this.morphSelected('devourer'));
+    this.input.keyboard.on('keydown-M', () => this.summonRadiant(this.keys.SHIFT?.isDown ? 'umbral' : 'radiant'));
+    this.input.keyboard.on('keydown-O', () => this.morphSelected('sporecaster'));
+    this.input.keyboard.on('keydown-L', () => this.morphSelected('corroder'));
     this.input.keyboard.on('keydown-I', () => this.cycleIdleWorker());
     this._groupSelectH = (e) => { if (/^Digit[1-8]$/.test(e.code) && !e.shiftKey && !e.ctrlKey && !e.metaKey) this.selectGroup(parseInt(e.code.slice(5), 10)); };
     this._groupAssignH = (e) => { if (/^Digit[1-8]$/.test(e.code) && (e.shiftKey || e.ctrlKey || e.metaKey)) this.assignGroup(parseInt(e.code.slice(5), 10)); };
@@ -2111,10 +2111,10 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:patrol', () => this.armPatrol());
     this.events.on('hud:scan', () => this.armScan());
     this.events.on('hud:cloak', () => this.toggleCloakSelected());
-    this.events.on('hud:mergeArchon', () => this.summonArchon('archon'));
-    this.events.on('hud:mergeDarkArchon', () => this.summonArchon('darkArchon'));
-    this.events.on('hud:morphGuardian', () => this.morphSelected('guardian'));
-    this.events.on('hud:morphDevourer', () => this.morphSelected('devourer'));
+    this.events.on('hud:mergeRadiant', () => this.summonRadiant('radiant'));
+    this.events.on('hud:mergeDarkRadiant', () => this.summonRadiant('umbral'));
+    this.events.on('hud:morphSporecaster', () => this.morphSelected('sporecaster'));
+    this.events.on('hud:morphCorroder', () => this.morphSelected('corroder'));
     this.events.on('hud:maelstrom', () => this.armVoidCast());
     this.events.on('hud:caustic', () => this.armCausticCast());
     this.events.on('hud:castStorm', () => {
@@ -2430,7 +2430,7 @@ export class BattleScene extends Phaser.Scene {
     this.activeTeam = this.activeTeam === 0 ? 1 : 0;
     this.clearSelection();
     this.selectBuilding(null);
-    // turrets, radar detection nets, and creep growth stand down for the human side
+    // turrets, radar detection nets, and blight growth stand down for the human side
     this.events.emit('hud:activeTeam', this.activeTeam);
     const label = 'COMMANDER ' + String.fromCharCode(65 + this.activeTeam);
     this.events.emit('hud:alert', label + ' — CONTROLS YOUR FORCES');
@@ -2545,7 +2545,7 @@ export class BattleScene extends Phaser.Scene {
     this.audio?.orderPing?.();
   }
 
-  // SC1: manual cloak toggle for dark templar etc.
+  // SC1: manual cloak toggle for nightblade etc.
   toggleCloakSelected() {
     let did = false;
     for (const u of this.selection) {
@@ -2555,7 +2555,7 @@ export class BattleScene extends Phaser.Scene {
       u.sprite.setAlpha(u.cloaked ? 0.22 : 1);
       u._uncloakT = u.cloaked ? 0 : 2;
     }
-    if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT DARK TEMPLARS'); this.audio?.error(); return; }
+    if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT NIGHTBLADES'); this.audio?.error(); return; }
     this.audio?.psiCast?.() ; this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.cloaked) ? 'CLOAKED' : 'DECLOAKED');
   }
 
@@ -2572,12 +2572,12 @@ export class BattleScene extends Phaser.Scene {
     if (did) { this.audio?.orderPing?.(); this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.burrowed) ? 'BURROWED — IMMOBILE, UNSEEN' : 'UNBURROWED'); }
   }
 
-  // ---------------- SC1: archon convergence, spire morphs, void/caustic casts ----------------
-  summonArchon(darkKind = 'archon') {
-    const techGate = darkKind === 'darkArchon' ? 'darkArchonMerge' : null;
+  // ---------------- SC1: radiant convergence, aerie morphs, void/caustic casts ----------------
+  summonRadiant(darkKind = 'radiant') {
+    const techGate = darkKind === 'umbral' ? 'umbralConvergence' : null;
     if (techGate && !this.techResearched(0, techGate)) { this.events.emit('hud:alert', 'REQUIRES CONVERGENCE RESEARCH'); this.audio?.error(); return; }
-    const dts = [...this.selection].filter(u => u.kind === 'darkTemplar' && !u.dead);
-    if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'archon' ? 'CONVERGENCE: SELECT 2+ DARK TEMPLARS' : 'DARK CONVERGENCE: SELECT 2+ DARK TEMPLARS'); this.audio?.error(); return; }
+    const dts = [...this.selection].filter(u => u.kind === 'nightblade' && !u.dead);
+    if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'radiant' ? 'CONVERGENCE: SELECT 2+ NIGHTBLADES' : 'DARK CONVERGENCE: SELECT 2+ NIGHTBLADES'); this.audio?.error(); return; }
     let merged = 0;
     const pool = [...dts];
     while (pool.length >= 2) {
@@ -2599,12 +2599,12 @@ export class BattleScene extends Phaser.Scene {
         merged++;
       }
     }
-    if (merged) { this.cmdCount++; this.events.emit('hud:alert', darkKind === 'archon' ? 'ARCHON CONVERGENCE' : 'DARK ARCHON CONVERGENCE'); this.events.emit('hud:selection', this.selectionInfo()); }
+    if (merged) { this.cmdCount++; this.events.emit('hud:alert', darkKind === 'radiant' ? 'RADIANT CONVERGENCE' : 'UMBRAL CONVERGENCE'); this.events.emit('hud:selection', this.selectionInfo()); }
   }
 
   morphSelected(toKind) {
-    const list = [...this.selection].filter(u => u.kind === 'mutalisk' && !u.dead);
-    if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT MUTALISKS`); this.audio?.error(); return; }
+    const list = [...this.selection].filter(u => u.kind === 'vexwing' && !u.dead);
+    if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT VEXWINGS`); this.audio?.error(); return; }
     const t = TECHS[toKind];
     if (!this.techResearched(0, toKind)) { this.events.emit('hud:alert', `REQUIRES ${t?.name?.toUpperCase() || toKind.toUpperCase()} RESEARCH`); this.audio?.error(); return; }
     let done = 0;
@@ -2619,11 +2619,11 @@ export class BattleScene extends Phaser.Scene {
       this.spawnUnit(0, toKind, x, y, { arriveReady: true });
       done++;
     }
-    if (done) { this.cmdCount++; this.audio?.morph?.() || this.audio?.buildStart?.(); this.events.emit('hud:alert', `MORPHED ${done} ${toKind === 'guardian' ? 'GUARDIANS' : 'DEVOURERS'}`); this.events.emit('hud:selection', this.selectionInfo()); }
+    if (done) { this.cmdCount++; this.audio?.morph?.() || this.audio?.buildStart?.(); this.events.emit('hud:alert', `MORPHED ${done} ${toKind === 'sporecaster' ? 'GUARDIANS' : 'DEVOURERS'}`); this.events.emit('hud:selection', this.selectionInfo()); }
   }
 
   armVoidCast() {
-    const list = [...this.selection].filter(u => (u.kind === 'corsair' || u.kind === 'darkArchon') && u.energy >= 100 && !u.dead);
+    const list = [...this.selection].filter(u => (u.kind === 'voidlance' || u.kind === 'umbral') && u.energy >= 100 && !u.dead);
     if (!list.length) { this.events.emit('hud:alert', 'MAELSTROM: NEED 100 ENERGY AIR CASTERS'); this.audio?.error(); return; }
     this.castMode = 'maelstrom';
     this._castArmTime = this.gameTime;
@@ -2633,7 +2633,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   armCausticCast() {
-    const list = [...this.selection].filter(u => u.kind === 'devourer' && u.energy >= 75 && !u.dead);
+    const list = [...this.selection].filter(u => u.kind === 'corroder' && u.energy >= 75 && !u.dead);
     if (!list.length) { this.events.emit('hud:alert', 'CAUSTIC MIST: NEED 75 ENERGY DEVOURERS'); this.audio?.error(); return; }
     this.castMode = 'cloud';
     this._castArmTime = this.gameTime;
@@ -2677,31 +2677,31 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:alert', caught ? `MAELSTROM — ${caught} AIRBORNE GROUNDED` : 'MAELSTROM — NO TARGETS CAUGHT');
   }
 
-  // SC1 lurker spike: line attack that detonates through ground units between lurker and target
-  lurkerStrike(lurker, target) {
-    const dmg = Math.max(1, effectiveDamage(lurker, target));
-    const dx = target.x - lurker.x, dy = target.y - lurker.y;
+  // SC1 burrower spike: line attack that detonates through ground units between burrower and target
+  burrowerStrike(burrower, target) {
+    const dmg = Math.max(1, effectiveDamage(burrower, target));
+    const dx = target.x - burrower.x, dy = target.y - burrower.y;
     const dist = Math.hypot(dx, dy) || 1;
     const nx = dx / dist, ny = dy / dist;
     // spike visual: rising spines + fast line tracer
-    if (this.camNear && this.camNear(lurker.x, lurker.y)) {
+    if (this.camNear && this.camNear(burrower.x, burrower.y)) {
       for (let i = 0; i < 3; i++) {
-        const sp = this.add.rectangle(lurker.x + nx * (10 + i * 12), lurker.y + ny * (10 + i * 12), 3, 14 + i * 4, 0xc2385c).setDepth(56).setRotation(Math.atan2(ny, nx) + Math.PI / 2).setAlpha(0.9);
+        const sp = this.add.rectangle(burrower.x + nx * (10 + i * 12), burrower.y + ny * (10 + i * 12), 3, 14 + i * 4, 0xc2385c).setDepth(56).setRotation(Math.atan2(ny, nx) + Math.PI / 2).setAlpha(0.9);
         this.tweens.add({ targets: sp, scaleY: 0.2, alpha: 0, duration: 260, onComplete: () => sp.destroy() });
       }
-      const line = this.add.rectangle(lurker.x + dx / 2, lurker.y + dy / 2, dist, 2.5, 0xff8fa3, 0.85).setDepth(55).setRotation(Math.atan2(dy, dx));
+      const line = this.add.rectangle(burrower.x + dx / 2, burrower.y + dy / 2, dist, 2.5, 0xff8fa3, 0.85).setDepth(55).setRotation(Math.atan2(dy, dx));
       this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
       this.audio?.zap?.();
     }
     // splash along the detonation line (SC1: hits everything in the path)
     const hitR = 14;
     for (const u of this.units) {
-      if (u.dead || u.team === lurker.team || u.flying) continue;
-      const ux = u.x - lurker.x, uy = u.y - lurker.y;
+      if (u.dead || u.team === burrower.team || u.flying) continue;
+      const ux = u.x - burrower.x, uy = u.y - burrower.y;
       const t = (ux * nx + uy * ny);
       if (t < 0 || t > dist + hitR) continue;
       const px = ux - nx * t, py = uy - ny * t;
-      if (Math.hypot(px, py) <= hitR) u.takeDamage(t === dist ? dmg : Math.round(dmg * 0.8), lurker);
+      if (Math.hypot(px, py) <= hitR) u.takeDamage(t === dist ? dmg : Math.round(dmg * 0.8), burrower);
     }
   }
 
@@ -2920,12 +2920,12 @@ export class BattleScene extends Phaser.Scene {
       if (this.nav.solid[i]) return false;
       if (this.rockTiles.some(r => r.tx === tx && r.ty === ty)) return false;
     }
-    // zerg creep requirement
-    if (this.race === 'zerg' && def.creep) {
-      if (!this.hasCreep(0, x, y)) return false;
+    // skarn blight requirement
+    if (this.race === 'skarn' && def.blight) {
+      if (!this.hasBlight(0, x, y)) return false;
     }
-    // protoss power field requirement
-    if (this.race === 'protoss' && !['pylon', 'nexus'].includes(buildId)) {
+    // auraxis power field requirement
+    if (this.race === 'auraxis' && !['conduit', 'aegis'].includes(buildId)) {
       const powered = this.buildings.some(b => b.team === 0 && b.def.power && !b.dead && Math.hypot(b.x - x, b.y - y) < TILE * 10);
       if (!powered) return false;
     }
@@ -2946,7 +2946,7 @@ export class BattleScene extends Phaser.Scene {
       const workers = [...this.selection].filter(u => u.def.worker);
       workers.forEach(w => w.setOrder({ type: 'build', building: b }));
     }
-    if (race === 'protoss') { this.players[T].supplyCap = this.computeSupplyCap(T); }
+    if (race === 'auraxis') { this.players[T].supplyCap = this.computeSupplyCap(T); }
     this.audio?.buildStart();
     this.cancelPlacing();
   }
@@ -3079,17 +3079,17 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.units) u.update(dt);
     // buildings
     for (const b of this.buildings) b.update(dt);
-    // creep growth (zerg)
-    this.creepTimer -= dt;
-    if (this.creepTimer <= 0) {
-      this.creepTimer = 0.9;
+    // blight growth (skarn)
+    this.blightTimer -= dt;
+    if (this.blightTimer <= 0) {
+      this.blightTimer = 0.9;
       for (const b of this.buildings) {
-        if (!b.dead && b.built && b.def.creepGrowth) this.addCreep(b.team, b.x, b.y, (b.def.creepRadius || 8));
-        else if (!b.dead && b.team === 1 && this.enemyRace === 'zerg' && b.buildId === 'hatchery') this.addCreep(b.team, b.x, b.y, 8);
+        if (!b.dead && b.built && b.def.blightGrowth) this.addBlight(b.team, b.x, b.y, (b.def.blightRadius || 8));
+        else if (!b.dead && b.team === 1 && this.enemyRace === 'skarn' && b.buildId === 'broodNest') this.addBlight(b.team, b.x, b.y, 8);
       }
-      // creep follows structures passively
-      if (this.enemyRace === 'zerg') this.growCreep(1);
-      if (this.race === 'zerg') this.growCreep(0);
+      // blight follows structures passively
+      if (this.enemyRace === 'skarn') this.growBlight(1);
+      if (this.race === 'skarn') this.growBlight(0);
     }
 
     // projectiles (spark-based)
@@ -3144,7 +3144,7 @@ export class BattleScene extends Phaser.Scene {
         if (u.dead || u.team === 0 || u.cloaked || u.burrowed) continue;
         if (this.currentlyVisible(u.x, u.y)) {
           this._contacted = true;
-          this.events.emit('hud:radio', 'We have contact! Hostile units on sensors.', 'SCV');
+          this.events.emit('hud:radio', 'We have contact! Hostile units on sensors.', 'Rigger');
           this.addEventPing(u.x, u.y, 0xff5c5c, true);
           break;
         }
@@ -3228,22 +3228,22 @@ export class BattleScene extends Phaser.Scene {
 
     // income trickle from assigned gas (simplification: gas income via worker returns only)
     // supply check
-    for (const b of this.buildings) { if (b.team === 1 && b.built && this.enemyRace === 'zerg' && !b._overlordChecked) { b._overlordChecked = true; } }
-    // zerg needs overlords
+    for (const b of this.buildings) { if (b.team === 1 && b.built && this.enemyRace === 'skarn' && !b._skywardenChecked) { b._skywardenChecked = true; } }
+    // skarn needs skywardens
     if (this.players[1].supplyUsed >= this.players[1].supplyCap - 1) {
-      const pool = this.buildings.find(b => b.team === 1 && b.buildId === 'hatchery' && b.queue.length === 0);
-      if (pool) pool.queueUnit('overlord');
+      const pool = this.buildings.find(b => b.team === 1 && b.buildId === 'broodNest' && b.queue.length === 0);
+      if (pool) pool.queueUnit('skywarden');
     }
-    if (this.players[0].supplyUsed >= this.players[0].supplyCap - 1 && this.race === 'zerg') {
-      const pool = this.buildings.find(b => b.team === 0 && b.buildId === 'hatchery' && b.queue.length === 0);
-      if (pool && this.canAfford(0, UNITS.overlord.minerals)) pool.queueUnit('overlord');
+    if (this.players[0].supplyUsed >= this.players[0].supplyCap - 1 && this.race === 'skarn') {
+      const pool = this.buildings.find(b => b.team === 0 && b.buildId === 'broodNest' && b.queue.length === 0);
+      if (pool && this.canAfford(0, UNITS.skywarden.minerals)) pool.queueUnit('skywarden');
     }
 
     this.events.emit('hud:tick');
   }
 
-  growCreep(team) {
-    const { cells, ctx } = this.creepCanvases[team];
+  growBlight(team) {
+    const { cells, ctx } = this.blightCanvases[team];
     let changed = false;
     const next = Uint8Array.from(cells);
     for (let ty = 1; ty < MAP_H - 1; ty++) {
@@ -3252,7 +3252,7 @@ export class BattleScene extends Phaser.Scene {
         if (cells[i]) continue;
         if (cells[i - 1] || cells[i + 1] || cells[i - MAP_W] || cells[i + MAP_W]) {
           if (Math.random() < 0.06) {
-            // don't creep over rocks/water handled downstream in placement check
+            // don't blight over rocks/water handled downstream in placement check
             next[i] = 1;
             ctx.fillStyle = team === 0 ? '#2f4e8f' : '#5a2340';
             ctx.fillRect(tx, ty, 1, 1);
@@ -3261,7 +3261,7 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     }
-    if (changed) { this.creepCanvases[team].cells = next; this.textures.get(`creep-t${team}`).refresh(); }
+    if (changed) { this.blightCanvases[team].cells = next; this.textures.get(`blight-t${team}`).refresh(); }
   }
 
   // ---------------- AI ----------------
@@ -3271,7 +3271,7 @@ export class BattleScene extends Phaser.Scene {
       const p = this.players[1];
       const prof = this.aiProfile || this.aiProfileFallback();
       p.minerals += dt * (this.hotseat ? 1.0 : prof.income);
-      const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'extractor' || b.buildId === 'assimilator' || b.buildId === 'refinery'));
+      const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'gasSiphon' || b.buildId === 'essenceTap' || b.buildId === 'refinery'));
       p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
       return;
     }
@@ -3280,7 +3280,7 @@ export class BattleScene extends Phaser.Scene {
     const p = this.players[1];
     const prof = this.aiProfile || this.aiProfileFallback();
     p.minerals += dt * prof.income;
-    const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'extractor' || b.buildId === 'assimilator' || b.buildId === 'refinery'));
+    const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'gasSiphon' || b.buildId === 'essenceTap' || b.buildId === 'refinery'));
     p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
 
     s.lastThink -= dt;
@@ -3293,8 +3293,8 @@ export class BattleScene extends Phaser.Scene {
 
     // keep workers up to profile cap
     if (workerCount < prof.workers && p.minerals >= 50 && p.supplyUsed + 1 <= p.supplyCap) {
-      const cc = eb.find(b => b.def.produces?.includes(race === 'zerg' ? 'drone' : race === 'protoss' ? 'probe' : 'scv'));
-      cc?.queueUnit(race === 'zerg' ? 'drone' : race === 'protoss' ? 'probe' : 'scv');
+      const cc = eb.find(b => b.def.produces?.includes(race === 'skarn' ? 'skarling' : race === 'auraxis' ? 'artificer' : 'rigger'));
+      cc?.queueUnit(race === 'skarn' ? 'skarling' : race === 'auraxis' ? 'artificer' : 'rigger');
     }
     // assign idle workers to harvest
     for (const w of this.units) { if (!w.dead && w.team === team && w.def.worker && w.state === 'idle') w.setOrder({ type: 'harvest' }); }
@@ -3320,8 +3320,8 @@ export class BattleScene extends Phaser.Scene {
           this.spend(team, def.minerals, def.gas);
           const b = new Building(this, team, bid, x, y, { instant: race !== 'terran' });
           this.buildings.push(b);
-          if (race === 'zerg') this.addCreep(team, x, y, 4);
-          if (race === 'protoss') { }
+          if (race === 'skarn') this.addBlight(team, x, y, 4);
+          if (race === 'auraxis') { }
           if (race === 'terran') {
             const w = this.units.find(u => !u.dead && u.team === team && u.def.worker && u.state !== 'build');
             if (w) w.setOrder({ type: 'build', building: b });
@@ -3336,12 +3336,12 @@ export class BattleScene extends Phaser.Scene {
       if (x - w / 2 < TILE || y - h / 2 < TILE || x + w / 2 > PXW - TILE || y + h / 2 > PXH - TILE) return false;
       if (this.buildingAt(x, y)) return false;
       if (def.onGeyser) { const g = this.geysers.find(g => Math.hypot(g.x - x, g.y - y) < TILE * 2 && !g.building); return !!g; }
-      if (race === 'zerg' && def.creep) { if (!this.hasCreep(team, x, y)) return false; }
-      if (race === 'protoss' && !['pylon', 'nexus'].includes(buildId)) {
+      if (race === 'skarn' && def.blight) { if (!this.hasBlight(team, x, y)) return false; }
+      if (race === 'auraxis' && !['conduit', 'aegis'].includes(buildId)) {
         const powered = this.buildings.some(b => b.team === team && b.def.power && !b.dead && Math.hypot(b.x - x, b.y - y) < TILE * 10);
         if (!powered) return false;
       }
-      if (race === 'protoss' && this.units.some(u => u.team === team && u.def.worker)) {
+      if (race === 'auraxis' && this.units.some(u => u.team === team && u.def.worker)) {
         const py = this.units.find(u => u.team === team && u.def.worker && u.state !== 'build');
         if (py) py.setOrder({ type: 'move', point: { x, y } });
       }
@@ -3355,21 +3355,21 @@ export class BattleScene extends Phaser.Scene {
     };
 
     // build order
-    if (race === 'zerg') {
-      if (!this.hasBuilding('evolutionChamber', team)) buildIfPossible('evolutionChamber');
-      if (this.hasBuilding('hatchery', team)) {
-        if (!this.hasBuilding('spawningPool', team)) buildIfPossible('spawningPool');
-        if (!this.hasBuilding('extractor', team) && this.gameTime > 35) buildIfPossible('extractor');
-        if (!this.hasBuilding('hydraliskDen', team) && this.gameTime > 40) buildIfPossible('hydraliskDen');
-        if (!this.hasBuilding('spire', team) && this.gameTime > 80) buildIfPossible('spire');
+    if (race === 'skarn') {
+      if (!this.hasBuilding('geneForge', team)) buildIfPossible('geneForge');
+      if (this.hasBuilding('broodNest', team)) {
+        if (!this.hasBuilding('clawPit', team)) buildIfPossible('clawPit');
+        if (!this.hasBuilding('gasSiphon', team) && this.gameTime > 35) buildIfPossible('gasSiphon');
+        if (!this.hasBuilding('spineWarren', team) && this.gameTime > 40) buildIfPossible('spineWarren');
+        if (!this.hasBuilding('aerie', team) && this.gameTime > 80) buildIfPossible('aerie');
       }
-    } else if (race === 'protoss') {
-      if (!this.hasBuilding('pylon', team)) buildIfPossible('pylon');
-      if (!this.hasBuilding('assimilator', team)) buildIfPossible('assimilator');
-      if (!this.hasBuilding('cyberneticsCore', team) && this.gameTime > 30) buildIfPossible('cyberneticsCore');
-      if (!this.hasBuilding('roboticsFacility', team) && this.gameTime > 70) buildIfPossible('roboticsFacility');
-      if (!this.hasBuilding('photonCannon', team) && this.gameTime > 60) buildIfPossible('photonCannon');
-      if (!this.hasBuilding('stargate', team) && this.gameTime > 140) buildIfPossible('stargate');
+    } else if (race === 'auraxis') {
+      if (!this.hasBuilding('conduit', team)) buildIfPossible('conduit');
+      if (!this.hasBuilding('essenceTap', team)) buildIfPossible('essenceTap');
+      if (!this.hasBuilding('synapseCore', team) && this.gameTime > 30) buildIfPossible('synapseCore');
+      if (!this.hasBuilding('fabricator', team) && this.gameTime > 70) buildIfPossible('fabricator');
+      if (!this.hasBuilding('lanceTurret', team) && this.gameTime > 60) buildIfPossible('lanceTurret');
+      if (!this.hasBuilding('skyPortal', team) && this.gameTime > 140) buildIfPossible('skyPortal');
     } else {
       if (!this.hasBuilding('supplyDepot', team) && p.supplyCap - p.supplyUsed < 4) buildIfPossible('supplyDepot');
       if (!this.hasBuilding('refinery', team)) buildIfPossible('refinery');
@@ -3391,7 +3391,7 @@ export class BattleScene extends Phaser.Scene {
           this.spend(team, BUILDINGS[prim].minerals, BUILDINGS[prim].gas || 0);
           const xb = new Building(this, team, prim, nat.x, nat.y, { instant: race !== 'terran' });
           this.buildings.push(xb);
-          if (race === 'zerg') this.addCreep(team, nat.x, nat.y, 8);
+          if (race === 'skarn') this.addBlight(team, nat.x, nat.y, 8);
           this.players[team].supplyCap = this.computeSupplyCap(team);
           const idleW = this.units.filter(u => !u.dead && u.team === team && u.def.worker);
           idleW.slice(0, 4).forEach(w => { w.harvestTarget = null; w.setOrder({ type: 'harvest' }); });
@@ -3403,9 +3403,9 @@ export class BattleScene extends Phaser.Scene {
     // ---- SC1-style research agenda: labs continuously upgrade the army ----
     const agenda = race === 'terran'
       ? ['terranInfantryWeapons1', 'terranInfantryArmor1', 'combatMedics', 'terranInfantryWeapons2', 'vehiclePlating1', 'terranInfantryArmor2', 'terranInfantryWeapons3']
-      : race === 'zerg'
-        ? ['zergMeleeAttacks1', 'zergCarapace1', 'lurkerEgg', 'greaterSpire']
-        : ['protossGroundWeapons1', 'protossGroundPlating1', 'zealotSpeed', 'dragoonRange'];
+      : race === 'skarn'
+        ? ['skarnMeleeAttacks1', 'skarnCarapace1', 'burrowChrysalis', 'greaterAerie']
+        : ['auraxisGroundWeapons1', 'auraxisGroundPlating1', 'bladeguardSpeed', 'sentinelRange'];
     for (const tid of agenda) {
       const t = TECHS[tid];
       if (!t || this.techResearched(team, tid)) continue;
@@ -3421,7 +3421,7 @@ export class BattleScene extends Phaser.Scene {
     const blockedProducers = this.buildings.filter(b => b.team === 0 && b.built && !b.dead && b.def.produces?.length && b.queue.length > 0 && pMine.supplyUsed >= pMine.supplyCap);
     if (blockedProducers.length && !pMine._supAlertShown) {
       pMine._supAlertShown = true;
-      this.events.emit('hud:alert', this.race === 'zerg' ? 'NEED MORE OVERLORDS' : 'SUPPLY BLOCKED');
+      this.events.emit('hud:alert', this.race === 'skarn' ? 'NEED MORE SKYWARDENS' : 'SUPPLY BLOCKED');
       this.audio?.error();
       this.audio?.adminBark();
       this.time.delayedCall(15000, () => { pMine._supAlertShown = false; });
@@ -3433,7 +3433,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const value = (u) => (UNITS[u.kind]?.minerals || 50) + (UNITS[u.kind]?.gas || 0) * 1.4;
-    const army = this.units.filter(u => !u.dead && u.team === team && !u.def.worker && u.kind !== 'overlord');
+    const army = this.units.filter(u => !u.dead && u.team === team && !u.def.worker && u.kind !== 'skywarden');
     const playerArmy = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
     const myValue = army.reduce((a, u) => a + value(u), 0) + eb.reduce((a, b) => a + (b.def.minerals || 0) * 0.3, 0);
     const foeValue = playerArmy.reduce((a, u) => a + value(u), 0) + 400; // base insurance
@@ -3450,8 +3450,8 @@ export class BattleScene extends Phaser.Scene {
       for (const b of eb) {
         if (b.queue.length >= 2) continue;
         let kinds = (b.def.produces || []).filter(k => b.canProduce(k));
-        // SC1: AI trains lurkers from its hydra den once the Lurker Aspect is researched
-        if (race === 'zerg' && b.buildId === 'hydraliskDen' && this.techResearched(team, 'lurkerEgg') && b.canProduce('lurker')) kinds.push('lurker');
+        // SC1: AI trains burrowers from its razor den once the Burrower Chrysalis is researched
+        if (race === 'skarn' && b.buildId === 'spineWarren' && this.techResearched(team, 'burrowChrysalis') && b.canProduce('burrower')) kinds.push('burrower');
         if (!kinds.length) continue;
         // score kinds: counter bias + supply efficiency
         kinds = kinds.sort((a, c) => {
@@ -3462,11 +3462,11 @@ export class BattleScene extends Phaser.Scene {
             if (d.targets === 'air' || d.targets === 'both') sc += s.counter.air * 2.2;
             if (d.targets !== 'air') sc += s.counter.ground * 1.4;
             if (d.splash) sc += s.counter.ground * 0.8; // anti-cluster
-            if (k === 'lurker') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + marine blob shredder
+            if (k === 'burrower') sc += 45 + s.counter.ground * 3.2; // SC1 AI: baseline spike appetite + marine blob shredder
             // AAA: commander doctrine — preferred composition bias (canonical kind keys)
             if (prof.compBias && k.toLowerCase() === String(prof.compBias).toLowerCase()) sc += 60;
-            if (prof.compBias === 'zergling' && k === 'zereling') sc += 60;
-            if (prof.lurkerEarly && k === 'lurker') sc += 80;
+            if (prof.compBias === 'skarnling' && k === 'skarnling') sc += 60;
+            if (prof.burrowerEarly && k === 'burrower') sc += 80;
             return sc;
           };
           const effA = anti(a) / ((da.minerals + (da.gas || 0) * 1.4) + 1);
@@ -3525,16 +3525,16 @@ export class BattleScene extends Phaser.Scene {
       s.harvestSquad = s.harvestSquad.filter(u => !u.dead);
     }
 
-    // ---- scouts: drop an overlord/scout toward player base periodically ----
+    // ---- scouts: drop an skywarden/scout toward player base periodically ----
     s.scoutAt = (s.scoutAt ?? 40) - 1;
     if (s.scoutAt <= 0) {
       s.scoutAt = 55;
-      if (race === 'zerg') {
-        const ov = army.find(u => u.kind === 'overlord');
+      if (race === 'skarn') {
+        const ov = army.find(u => u.kind === 'skywarden');
         if (ov) { ov.issueMove(PXW * 0.25, PXH * 0.28, false); }
-        else { const pool = eb.find(b => b.buildId === 'hatchery' && b.queue.length === 0); pool?.queueUnit('overlord'); }
+        else { const pool = eb.find(b => b.buildId === 'broodNest' && b.queue.length === 0); pool?.queueUnit('skywarden'); }
       } else {
-        const sc = army.find(u => !u.def.worker && (u.flying || u.kind === 'vulture' || u.kind === 'scout'));
+        const sc = army.find(u => !u.def.worker && (u.flying || u.kind === 'duster' || u.kind === 'scout'));
         sc?.issueMove(PXW * 0.22 + Math.random() * 100, PXH * 0.22 + Math.random() * 100, false);
       }
     }
@@ -3626,7 +3626,7 @@ export class BattleScene extends Phaser.Scene {
         const near = this.units.some(u => !u.dead && u.team === 0 && Math.hypot(u.x - eb.x, u.y - eb.y) < TILE * 13);
         if (near && mine(eb.x, eb.y)) {
           this._chatter.enemyBase = true;
-          this.events.emit('hud:radio', 'Sensors detect heavy structure ahead — that is their base. Proceed with caution.', 'SCV');
+          this.events.emit('hud:radio', 'Sensors detect heavy structure ahead — that is their base. Proceed with caution.', 'Rigger');
         }
       }
     }
@@ -3636,7 +3636,7 @@ export class BattleScene extends Phaser.Scene {
         if (g.building) continue;
         if (mine(g.x, g.y) && this.units.some(u => !u.dead && u.team === 0 && u.def.worker && Math.hypot(u.x - g.x, u.y - g.y) < TILE * 6)) {
           this._chatter.geyser = true;
-          this.events.emit('hud:radio', 'Vespene geyser detected. We could tap that for gas.', 'SCV');
+          this.events.emit('hud:radio', 'Volcite geyser detected. We could tap that for gas.', 'Rigger');
           break;
         }
       }
@@ -3646,22 +3646,22 @@ export class BattleScene extends Phaser.Scene {
       for (const cr of (this.crates || [])) {
         if (mine(cr.x, cr.y) && this.units.some(u => !u.dead && u.team === 0 && u.def.worker && Math.hypot(u.x - cr.x, u.y - cr.y) < TILE * 5)) {
           this._chatter.crate = true;
-          this.events.emit('hud:radio', 'Unknown container on sensors — military signature. Ordering a pick-up.', 'SCV');
+          this.events.emit('hud:radio', 'Unknown container on sensors — military signature. Ordering a pick-up.', 'Rigger');
           break;
         }
       }
     }
-    // creep field warning: first player unit stepping onto enemy creep
-    if (!this._chatter.creep && this.creepCanvases && this.creepCanvases[1]) {
-      const cells = this.creepCanvases[1].cells;
+    // blight field warning: first player unit stepping onto enemy blight
+    if (!this._chatter.blight && this.blightCanvases && this.blightCanvases[1]) {
+      const cells = this.blightCanvases[1].cells;
       const hit = this.units.some(u => {
         if (u.dead || u.team !== 0 || u.flying) return false;
         const tx = Math.floor(u.x / TILE), ty = Math.floor(u.y / TILE);
         return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && cells[this.nav.idx(tx, ty)] === 1;
       });
       if (hit) {
-        this._chatter.creep = true;
-        this.events.emit('hud:radio', 'Organic mass underfoot... sensors are going haywire. Zerg creep.', 'MARINE');
+        this._chatter.blight = true;
+        this.events.emit('hud:radio', 'Organic mass underfoot... sensors are going haywire. Skarn blight.', 'MARINE');
       }
     }
   }

@@ -7,14 +7,14 @@
   "move": 4,
   "attack": 4
  },
- "zerg": {
+ "skarn": {
   "ready": 2,
   "select": 1,
   "build": 1,
   "move": 3,
   "attack": 3
  },
- "protoss": {
+ "auraxis": {
   "ready": 2,
   "boss": 3,
   "select": 1,

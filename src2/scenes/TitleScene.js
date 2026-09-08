@@ -8,15 +8,15 @@ import { INTRO_SCRIPT, BRIEFS, TITLE_INTRO_SEEN_KEY } from '../engine/cutscenes.
 import { preloadCinematic } from './CutScene.js';
 import * as cin from '../engine/cinematicAudio.js';
 
-const RACE_ORDER = ['terran', 'zerg', 'protoss'];
+const RACE_ORDER = ['terran', 'skarn', 'auraxis'];
 const MONO = 'Menlo, monospace';
 const DISPLAY = 'Orbitron';
 const BODY = 'Rajdhani';
-const HERO = { terran: 'assets/hero/terran.jpg', zerg: 'assets/hero/zerg.jpg', protoss: 'assets/hero/protoss.jpg' };
+const HERO = { terran: 'assets/hero/terran.jpg', skarn: 'assets/hero/skarn.jpg', auraxis: 'assets/hero/auraxis.jpg' };
 const LORE = {
   terran: 'Roughneck colonists. Tough steel, cheap bullets.',
-  zerg: 'The swarm. Overwhelming numbers, endless hunger.',
-  protoss: 'Ancient psy-tech. Few, devastating, arrogant.',
+  skarn: 'The swarm. Overwhelming numbers, endless hunger.',
+  auraxis: 'Ancient psy-tech. Few, devastating, arrogant.',
 };
 
 export class TitleScene extends Phaser.Scene {
@@ -79,7 +79,7 @@ export class TitleScene extends Phaser.Scene {
     this.add.text(this.W / 2, logoY, 'STARFRONT', { fontFamily: DISPLAY, fontSize: '54px', color: '#f4f9ff', fontWeight: '900' }).setOrigin(0.5).setDepth(5);
     const rule = this.add.rectangle(this.W / 2, logoY + 38, 0, 1.5, 0x4ea1ff, 0.8).setDepth(5);
     this.tweens.add({ targets: rule, width: Math.min(560, this.W - 120), duration: 900, ease: 'Cubic.easeOut' });
-    this.add.text(this.W / 2, logoY + 52, 'C O N F L I C T   ·   a StarCraft-inspired RTS', { fontFamily: BODY, fontSize: '15px', color: '#8fa9cf', fontWeight: '700' }).setOrigin(0.5).setDepth(5);
+    this.add.text(this.W / 2, logoY + 52, 'C O N F L I C T   ·   an original sci-fi RTS', { fontFamily: BODY, fontSize: '15px', color: '#8fa9cf', fontWeight: '700' }).setOrigin(0.5).setDepth(5);
 
     // ---- campaign status + briefing ----
     this.campText = this.add.text(this.W / 2, logoY + 84, `MISSION ${this.camp.mission}/${MISSIONS.length}  ·  ${m.name}  ·  CREDITS ${this.camp.credits}`, { fontFamily: BODY, fontSize: '16px', color: '#ffd23f', fontWeight: '700', letterSpacing: 1 }).setOrigin(0.5).setDepth(5);
@@ -144,7 +144,7 @@ export class TitleScene extends Phaser.Scene {
   // ---------- hero card ----------
   buildCard(race, x, y, w) {
     const rc = RACES[race];
-    const col = { terran: 0x4ea1ff, zerg: 0xff8a4c, protoss: 0xffd23f }[race];
+    const col = { terran: 0x4ea1ff, skarn: 0xff8a4c, auraxis: 0xffd23f }[race];
     const h = 168;
     const layer = this.add.container(0, 0).setDepth(5); // world-space parent (no local transform)
     const frame = this.add.graphics();
@@ -186,7 +186,7 @@ export class TitleScene extends Phaser.Scene {
 
   setRace(race) {
     this.pick.race = race;
-    if (this.pick.enemy === race) this.pick.enemy = race === 'zerg' ? 'terran' : 'zerg';
+    if (this.pick.enemy === race) this.pick.enemy = race === 'skarn' ? 'terran' : 'skarn';
     for (const [k, card] of Object.entries(this.cards)) {
       card.sel = k === race;
       card.drawFrame(card.sel);
@@ -222,7 +222,7 @@ export class TitleScene extends Phaser.Scene {
   buildChoiceRow(label, x, y, field) {
     this.add.text(x, y, label, { fontFamily: BODY, fontSize: '13px', color: '#7d93ba', fontWeight: '700', letterSpacing: 2 }).setOrigin(0, 0.5).setDepth(5);
     const opts = field === 'diff' ? ['easy', 'normal', 'hard'] : RACE_ORDER;
-    const labels = field === 'diff' ? { easy: 'EASY', normal: 'NORMAL', hard: 'BRUTAL' } : { terran: 'TERRAN', zerg: 'ZERG', protoss: 'PROTOSS' };
+    const labels = field === 'diff' ? { easy: 'EASY', normal: 'NORMAL', hard: 'BRUTAL' } : { terran: 'TERRAN', skarn: 'SKARN', auraxis: 'AURAXIS' };
     if (!this.choices) this.choices = [];
     opts.forEach((o, i) => {
       const bx = x + 118 + i * 128, by = y;
@@ -232,7 +232,7 @@ export class TitleScene extends Phaser.Scene {
       r.on('pointerdown', () => {
         cin.click(0.4);
         this.pick[field === 'race' ? 'race' : field === 'enemy' ? 'enemy' : 'difficulty'] = o;
-        if (field === 'enemy' && this.pick.enemy === this.pick.race) this.pick.enemy = this.pick.race === 'zerg' ? 'terran' : 'zerg';
+        if (field === 'enemy' && this.pick.enemy === this.pick.race) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
         this.refreshChoice(field);
         this.updateSubtitle();
         this.tweens.add({ targets: t, scale: { from: 1.15, to: 1 }, duration: 140 });
@@ -411,7 +411,7 @@ export class TitleScene extends Phaser.Scene {
 
   launchMissionNum(n) {
     this.closeMissionSelect();
-    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'zerg' ? 'terran' : 'zerg';
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
     const m = MISSIONS[Math.min(MISSIONS.length, Math.max(1, n)) - 1];
     const isReplay = n < this.camp.mission;
     this.camp.credits = Math.max(0, this.camp.credits - (isReplay ? Math.ceil(UPKEEP / 2) : UPKEEP));
@@ -429,7 +429,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   launch() {
-    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'zerg' ? 'terran' : 'zerg';
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
     const m = missionFor(this.camp);
     this.camp.credits = Math.max(0, this.camp.credits - UPKEEP);
     saveCampaign(this.camp);

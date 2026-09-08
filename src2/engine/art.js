@@ -63,7 +63,7 @@ function finishSprite(canvas, race, teamCol) {
   const shade = document.createElement('canvas'); shade.width = F; shade.height = F;
   const shctx = shade.getContext('2d');
   const rimCol = teamCol;
-  const accentCol = race === 'zerg' ? '#c9ff5a' : race === 'protoss' ? '#7ad7ff' : '#ffd23f';
+  const accentCol = race === 'skarn' ? '#c9ff5a' : race === 'auraxis' ? '#7ad7ff' : '#ffd23f';
   const img = octx.getImageData(0, 0, F, F);
   const d = img.data;
   const rimD = rctx.createImageData(F, F).data;
@@ -110,7 +110,7 @@ export const TEAM_COLORS = [[0x4ea1ff, 0xff7b2e, 0xff4fa3], [0xff7b2e, 0xffd23f,
 export function createAllTextures(scene) {
   createTerrain(scene);
   createResources(scene);
-  createCreep(scene);
+  createBlight(scene);
   createUnitTextures(scene);
   createBuildingTextures(scene);
   createFx(scene);
@@ -167,7 +167,7 @@ function createResources(scene) {
     crystal(2, 12, 7, 12, '#356bbd', '#69a6ff');
     px(ctx, 8, 10, 2, 3, '#cfe6ff'); px(ctx, 18, 6, 2, 4, '#cfe6ff'); px(ctx, 24, 12, 1, 3, '#bcd9ff');
   });
-  // vespene geyser
+  // volcite geyser
   makeTex(scene, 'geyser', T, T, (ctx) => {
     px(ctx, 0, 0, T, T, '#1a2024');
     ctx.fillStyle = '#2e3840'; ctx.beginPath(); ctx.arc(16, 18, 11, 0, Math.PI * 2); ctx.fill();
@@ -178,8 +178,8 @@ function createResources(scene) {
   });
 }
 
-function createCreep(scene) {
-  makeTex(scene, 'creep', T, T, (ctx) => {
+function createBlight(scene) {
+  makeTex(scene, 'blight', T, T, (ctx) => {
     px(ctx, 0, 0, T, T, '#5c3048');
     for (let i = 0; i < 30; i++) {
       px(ctx, (Math.random() * T) | 0, (Math.random() * T) | 0, 2, 2, Math.random() < 0.5 ? '#713b55' : '#472537');
@@ -189,7 +189,7 @@ function createCreep(scene) {
     ctx.beginPath(); ctx.arc(22, 20, 2.5, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(15, 26, 2, 0, 7); ctx.fill();
   });
-  makeTex(scene, 'creep-node', T, T, (ctx) => {
+  makeTex(scene, 'blight-node', T, T, (ctx) => {
     px(ctx, 0, 0, T, T, '#452434');
     ctx.fillStyle = '#7a4060'; ctx.beginPath(); ctx.arc(16, 16, 6, 0, 7); ctx.fill();
     ctx.fillStyle = '#a85c84'; ctx.beginPath(); ctx.arc(16, 16, 3, 0, 7); ctx.fill();
@@ -199,7 +199,7 @@ function createCreep(scene) {
 function createUnitTextures(scene) {
   // Each unit: 20x20 canvas top-down sprite per team tint.
   const defs = {
-    scv: (ctx, col) => {
+    rigger: (ctx, col) => {
       px(ctx, 5, 4, 10, 12, '#697079'); px(ctx, 6, 5, 8, 6, col); // torso + visor
       px(ctx, 3, 6, 2, 6, '#525860'); px(ctx, 15, 6, 2, 6, '#525860'); // arms
       px(ctx, 6, 16, 3, 3, '#3c4248'); px(ctx, 11, 16, 3, 3, '#3c4248'); // feet
@@ -212,7 +212,7 @@ function createUnitTextures(scene) {
       px(ctx, 7, 17, 2, 2, '#222831'); px(ctx, 11, 17, 2, 2, '#222831');
       px(ctx, 7, 2, 6, 2, '#ffffff'); // helmet stripe
     },
-    firebat: (ctx, col) => {
+    incinerator: (ctx, col) => {
       px(ctx, 5, 3, 10, 14, '#8a3b1e'); px(ctx, 6, 4, 8, 4, '#ff9d3c');
       px(ctx, 3, 7, 2, 6, '#6e2f17'); px(ctx, 15, 7, 2, 6, '#6e2f17');
       px(ctx, 16, 8, 5, 3, '#ffb03c'); // flame nozzle
@@ -225,13 +225,13 @@ function createUnitTextures(scene) {
       px(ctx, 2, 5, 16, 2, '#727c8a'); px(ctx, 2, 15, 16, 2, '#727c8a'); // tread edges
       px(ctx, 8, 10, 4, 4, '#8b95a3');
     },
-    vulture: (ctx, col) => {
+    duster: (ctx, col) => {
       px(ctx, 3, 7, 14, 8, col); px(ctx, 13, 5, 6, 4, '#3c434c'); // gun pod
       px(ctx, 4, 15, 3, 3, '#1e2229'); px(ctx, 12, 15, 3, 3, '#1e2229'); // wheels
       px(ctx, 5, 8, 8, 3, '#ffd9a0');
       px(ctx, 17, 6, 4, 2, '#ff7b2e');
     },
-    goliath: (ctx, col) => {
+    ballista: (ctx, col) => {
       // bipedal walker: coroutine hull, cluster rocket pods with lit tips, chaingun
       px(ctx, 4, 5, 12, 10, '#3d4653'); px(ctx, 5, 6, 10, 3, '#525d6c'); // hull + highlight
       px(ctx, 6, 8, 8, 3, col); // team chest band
@@ -262,7 +262,7 @@ function createUnitTextures(scene) {
       px(ctx, 8, 9, 4, 1, '#ff5a5a'); px(ctx, 9, 8, 2, 3, '#ff5a5a'); // red cross
       px(ctx, 15, 6, 4, 2, '#6ee7a0'); // med-injector
     },
-    bc: (ctx, col) => {
+    battlecruiser: (ctx, col) => {
       // NGV battleship: layered grey hull, forward battery, team-lit spine, burning engines
       ctx.fillStyle = '#39424e'; ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(16, 2); ctx.lineTo(18, 10); ctx.lineTo(14, 16); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#4b5563'; ctx.beginPath(); ctx.moveTo(5, 5); ctx.lineTo(15, 3.5); ctx.lineTo(16.5, 9.5); ctx.lineTo(13, 14); ctx.lineTo(3.5, 11); ctx.closePath(); ctx.fill();
@@ -279,34 +279,34 @@ function createUnitTextures(scene) {
       px(ctx, 15, 9, 5, 2, '#20252c'); // sniper
       px(ctx, 7, 2, 6, 2, '#5f6c7d');
     },
-    drone: (ctx, col) => {
+    skarling: (ctx, col) => {
       ctx.fillStyle = '#7a4520'; ctx.beginPath(); ctx.arc(10, 11, 6, 0, 7); ctx.fill();
       px(ctx, 7, 5, 6, 3, col); // carapace top
       px(ctx, 2, 8, 3, 2, '#5e3517'); px(ctx, 15, 8, 3, 2, '#5e3517'); // side legs
       px(ctx, 4, 14, 2, 3, '#5e3517'); px(ctx, 14, 14, 2, 3, '#5e3517');
       px(ctx, 8, 3, 4, 2, '#f0b060');
     },
-    zergling: (ctx, col) => {
+    skarnling: (ctx, col) => {
       ctx.fillStyle = '#8f4a1e'; ctx.beginPath(); ctx.arc(10, 12, 5, 0, 7); ctx.fill();
       ctx.fillStyle = '#c96a24'; ctx.beginPath(); ctx.arc(10, 6, 4, 0, 7); ctx.fill(); // head
       px(ctx, 5, 3, 2, 3, '#ffe9c2'); px(ctx, 13, 3, 2, 3, '#ffe9c2'); // claws
       px(ctx, 8, 5, 4, 2, col); // back spine tint
       px(ctx, 3, 12, 2, 2, '#6b3513'); px(ctx, 15, 12, 2, 2, '#6b3513');
     },
-    hydra: (ctx, col) => {
+    razor: (ctx, col) => {
       ctx.fillStyle = '#3c6b40'; ctx.beginPath(); ctx.arc(9, 12, 5, 0, 7); ctx.fill();
       ctx.fillStyle = '#5d8f52'; ctx.beginPath(); ctx.arc(10, 6, 3.5, 0, 7); ctx.fill(); // head
       px(ctx, 14, 5, 6, 2, '#8bbf7a'); // spined ridge
       px(ctx, 13, 7, 4, 1, col);
       px(ctx, 4, 14, 2, 3, '#2f5233'); px(ctx, 12, 14, 2, 3, '#2f5233');
     },
-    muta: (ctx, col) => {
+    vex: (ctx, col) => {
       ctx.fillStyle = '#4a3b6e'; ctx.beginPath(); ctx.moveTo(10, 2); ctx.lineTo(16, 8); ctx.lineTo(13, 15); ctx.lineTo(5, 13); ctx.lineTo(2, 7); ctx.closePath(); ctx.fill();
       px(ctx, 6, 5, 6, 3, col);
       ctx.fillStyle = '#6b55a0'; ctx.fillRect(0, 9, 6, 2); ctx.fillRect(14, 9, 6, 2); // wings
       px(ctx, 8, 13, 3, 3, '#37284f');
     },
-    ultra: (ctx, col) => {
+    tremor: (ctx, col) => {
       // hulking champion: armored carapace ridges, massive glow-tipped tusks, spiked forelegs
       ctx.fillStyle = '#5c2c19'; ctx.beginPath(); ctx.arc(10, 11, 8, 0, 7); ctx.fill(); // shadow body
       ctx.fillStyle = '#7a3a22'; ctx.beginPath(); ctx.arc(10, 10, 7, 0, 7); ctx.fill();
@@ -320,7 +320,7 @@ function createUnitTextures(scene) {
       px(ctx, 1, 11, 1, 1, '#ffe9c2'); px(ctx, 18, 11, 1, 1, '#ffe9c2'); // claw points
       px(ctx, 4, 16, 3, 3, '#472214'); px(ctx, 13, 16, 3, 3, '#472214'); // rear legs
     },
-    overlord: (ctx, col) => {
+    skywarden: (ctx, col) => {
       ctx.fillStyle = '#7a5030'; ctx.beginPath(); ctx.arc(10, 9, 7, 0, 7); ctx.fill();
       ctx.fillStyle = '#5e3b20'; ctx.beginPath(); ctx.arc(10, 12, 4, 0, 7); ctx.fill(); // lower pouch
       px(ctx, 6, 6, 8, 3, col);
@@ -328,47 +328,47 @@ function createUnitTextures(scene) {
       ctx.beginPath(); ctx.arc(3, 12, 3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(17, 12, 3, 0, 7); ctx.fill();
       ctx.globalAlpha = 1;
     },
-    scourge: (ctx, col) => {
+    airstinger: (ctx, col) => {
       ctx.fillStyle = '#556b2f'; ctx.beginPath(); ctx.arc(10, 10, 4.5, 0, 7); ctx.fill();
       px(ctx, 6, 2, 2, 5, '#88aa44'); px(ctx, 12, 2, 2, 5, '#88aa44');
       px(ctx, 8, 14, 4, 3, col);
     },
-    lurker: (ctx, col) => {
+    burrower: (ctx, col) => {
       ctx.fillStyle = '#6b4a2a'; ctx.beginPath(); ctx.ellipse(10, 12, 7, 5, 0, 0, 7); ctx.fill();
       px(ctx, 8, 4, 4, 8, '#8a6238');
       px(ctx, 7, 2, 6, 2, '#d9c290'); // spikes
       px(ctx, 8, 7, 4, 2, col);
     },
-    probe: (ctx, col) => {
+    artificer: (ctx, col) => {
       ctx.fillStyle = '#5a5f7a'; ctx.beginPath(); ctx.arc(10, 10, 5, 0, 7); ctx.fill();
       px(ctx, 8, 3, 4, 4, col);
       ctx.fillStyle = '#7d84a8'; ctx.fillRect(2, 9, 3, 2); ctx.fillRect(15, 9, 3, 2);
       ctx.globalAlpha = 0.7; px(ctx, 8, 15, 4, 3, '#9fb0ff'); ctx.globalAlpha = 1; // hover glow
     },
-    zealot: (ctx, col) => {
+    bladeguard: (ctx, col) => {
       px(ctx, 6, 4, 8, 12, '#7d6bc4');
       px(ctx, 7, 5, 6, 3, col); // face guard
       ctx.fillStyle = '#9f8fe0'; ctx.fillRect(1, 7, 3, 2); ctx.fillRect(16, 7, 3, 2); // arm blades mount
       px(ctx, 0, 6, 2, 6, '#cfe0ff'); px(ctx, 18, 6, 2, 6, '#cfe0ff'); // vibro blades glow
       px(ctx, 7, 16, 2, 3, '#4b3f7e'); px(ctx, 11, 16, 2, 3, '#4b3f7e');
     },
-    dragoon: (ctx, col) => {
+    sentinel: (ctx, col) => {
       px(ctx, 4, 8, 12, 8, '#4b5563'); px(ctx, 5, 9, 10, 3, col);
       px(ctx, 14, 8, 6, 3, '#333a45'); // blaster
       ctx.fillStyle = '#6b7686'; ctx.fillRect(2, 14, 4, 3); ctx.fillRect(14, 14, 4, 3); // legs
       px(ctx, 7, 5, 6, 4, '#8b95a3'); px(ctx, 8, 6, 4, 2, '#aef');
     },
-    htemplar: (ctx, col) => {
+    caller: (ctx, col) => {
       px(ctx, 6, 4, 8, 12, '#e8e4d8'); px(ctx, 7, 5, 6, 3, col);
       px(ctx, 3, 8, 2, 5, '#cfc9b8'); px(ctx, 15, 8, 2, 5, '#cfc9b8');
       px(ctx, 8, 2, 4, 2, '#b0a888'); // headpiece
     },
-    dtemplar: (ctx, col) => {
+    nblade: (ctx, col) => {
       px(ctx, 6, 4, 8, 12, '#2c2440'); px(ctx, 7, 5, 6, 3, col);
       px(ctx, 3, 7, 2, 6, '#1e1830'); px(ctx, 15, 7, 2, 6, '#1e1830');
       px(ctx, 16, 6, 5, 2, '#b060ff'); // warp blade
     },
-    archon: (ctx, col) => {
+    radiant: (ctx, col) => {
       ctx.fillStyle = '#8fb4ff'; ctx.globalAlpha = 0.85;
       ctx.beginPath(); ctx.arc(10, 10, 7, 0, 7); ctx.fill();
       ctx.globalAlpha = 1;
@@ -376,8 +376,8 @@ function createUnitTextures(scene) {
       px(ctx, 6, 8, 8, 2, col);
       px(ctx, 8, 2, 4, 3, '#ffffff');
     },
-    carrier: (ctx, col) => {
-      // protoss carrier: cathedral-ship silhouette, interceptor bay glow, thruster corona
+    ark: (ctx, col) => {
+      // auraxis ark: cathedral-ship silhouette, interceptor bay glow, thruster corona
       ctx.fillStyle = '#55657a'; ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(18, 3); ctx.lineTo(20, 12); ctx.lineTo(4, 16); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#6f7f95'; ctx.beginPath(); ctx.moveTo(3, 6.5); ctx.lineTo(17, 4); ctx.lineTo(18.5, 11); ctx.lineTo(5, 15); ctx.closePath(); ctx.fill();
       px(ctx, 4, 7, 12, 3, col); // team-lit superstructure
@@ -387,15 +387,15 @@ function createUnitTextures(scene) {
       ctx.fillStyle = 'rgba(159,200,255,0.35)'; ctx.beginPath(); ctx.arc(17, 13, 3, 0, 7); ctx.fill(); // thruster corona
       px(ctx, 15, 2, 4, 2, '#8fa2bc');
     },
-    corsair: (ctx, col) => {
-      // sleek protoss hunter: swept wings, glowing void emitter
+    voidlance: (ctx, col) => {
+      // sleek auraxis hunter: swept wings, glowing void emitter
       ctx.fillStyle = '#5d6f8f'; ctx.beginPath(); ctx.moveTo(10, 2); ctx.lineTo(16, 10); ctx.lineTo(10, 18); ctx.lineTo(4, 10); ctx.closePath(); ctx.fill();
       px(ctx, 8, 7, 5, 6, col); // hull core
       px(ctx, 9, 9, 3, 2, '#bfe0ff'); // void lens
       px(ctx, 2, 9, 3, 2, '#7186a8'); px(ctx, 15, 9, 3, 2, '#7186a8'); // wing tips
       px(ctx, 10, 4, 1, 2, '#e6f2ff');
     },
-    darkArchon: (ctx, col) => {
+    umbral: (ctx, col) => {
       // twin dark flame bodies merged at the base
       px(ctx, 5, 3, 4, 9, '#241a3a'); px(ctx, 11, 3, 4, 9, '#241a3a');
       px(ctx, 4, 12, 12, 5, '#1a1230'); // merged skirt
@@ -404,7 +404,7 @@ function createUnitTextures(scene) {
       px(ctx, 9, 15, 2, 2, '#c9a0ff');
       px(ctx, 6, 1, 2, 2, '#3a2a5a'); px(ctx, 12, 1, 2, 2, '#3a2a5a'); // flame tips
     },
-    guardian: (ctx, col) => {
+    sporecaster: (ctx, col) => {
       // bloated spore-carrying flyer with long neck
       ctx.fillStyle = '#8a9a4a'; ctx.beginPath(); ctx.ellipse(10, 11, 7, 5, 0, 0, 7); ctx.fill();
       px(ctx, 3, 8, 14, 2, '#6b7a38'); // wing membrane
@@ -413,7 +413,7 @@ function createUnitTextures(scene) {
       px(ctx, 7, 13, 2, 3, '#4d5a28'); px(ctx, 11, 13, 2, 3, '#4d5a28'); // spore pods
       px(ctx, 6, 10, 1, 1, col);
     },
-    devourer: (ctx, col) => {
+    corroder: (ctx, col) => {
       // caustic flyer: hunched body dripping corrosion sacs
       ctx.fillStyle = '#5f8a6a'; ctx.beginPath(); ctx.ellipse(10, 10, 6.5, 5.5, 0, 0, 7); ctx.fill();
       px(ctx, 4, 7, 12, 2, '#48684f');
@@ -424,11 +424,11 @@ function createUnitTextures(scene) {
     }
   };
 
-  const raceOf = { scv: 'terran', marine: 'terran', firebat: 'terran', tank: 'terran', vulture: 'terran', goliath: 'terran', wraith: 'terran', bc: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran',
-    drone: 'zerg', zergling: 'zerg', zereling: 'zerg', hydra: 'zerg', hydralisk: 'zerg', muta: 'zerg', mutalisk: 'zerg', ultra: 'zerg', ultralisk: 'zerg', overlord: 'zerg', scourge: 'zerg', lurker: 'zerg', queen: 'zerg', broodling: 'zerg',
-    probe: 'protoss', zealot: 'protoss', dragoon: 'protoss', htemplar: 'protoss', highTemplar: 'protoss', dtemplar: 'protoss', darkTemplar: 'protoss', archon: 'protoss', carrier: 'protoss', reaver: 'protoss', shuttle: 'protoss', corsair: 'protoss', darkArchon: 'protoss',
-    guardian: 'zerg', devourer: 'zerg' };
-  const largeKinds = ['tank', 'bc', 'ultra', 'carrier', 'goliath', 'overlord', 'lurker', 'dragoon', 'reaver', 'battleship', 'battlecruiser'];
+  const raceOf = { rigger: 'terran', marine: 'terran', incinerator: 'terran', tank: 'terran', duster: 'terran', ballista: 'terran', wraith: 'terran', battlecruiser: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran',
+    skarling: 'skarn', skarnling: 'skarn', skarnling: 'skarn', razor: 'skarn', razorspine: 'skarn', vex: 'skarn', vexwing: 'skarn', tremor: 'skarn', tremorclaw: 'skarn', skywarden: 'skarn', airstinger: 'skarn', burrower: 'skarn', queen: 'skarn', hatchling: 'skarn',
+    artificer: 'auraxis', bladeguard: 'auraxis', sentinel: 'auraxis', caller: 'auraxis', stormcaller: 'auraxis', nblade: 'auraxis', nightblade: 'auraxis', radiant: 'auraxis', ark: 'auraxis', reaver: 'auraxis', shuttle: 'auraxis', voidlance: 'auraxis', umbral: 'auraxis',
+    sporecaster: 'skarn', corroder: 'skarn' };
+  const largeKinds = ['tank', 'battlecruiser', 'tremor', 'ark', 'ballista', 'skywarden', 'burrower', 'sentinel', 'reaver', 'battleship', 'battlecruiser'];
   for (const [kind, fn] of Object.entries(defs)) {
     for (let team = 0; team < 3; team++) {
       const col = team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
@@ -437,7 +437,7 @@ function createUnitTextures(scene) {
       const finished = finishSprite(raw, raceOf[kind] || 'terran', col);
       if (!scene.textures.exists(`u-${kind}-t${team}`)) scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
       // AAA: walk-cycle frames — cut the FINISHED sprite halves and offset them (finishSprite re-centers raw, so cutting raw would cancel the shift)
-      if (kind === 'scv' || kind === 'drone' || kind === 'probe' || kind === 'overlord' || kind === 'bc' || kind === 'carrier' || kind === 'guardian' || kind === 'devourer') continue; // wheeled/hovering/flying: no leg cycle
+      if (kind === 'rigger' || kind === 'skarling' || kind === 'artificer' || kind === 'skywarden' || kind === 'battlecruiser' || kind === 'ark' || kind === 'sporecaster' || kind === 'corroder') continue; // wheeled/hovering/flying: no leg cycle
       const FH = finished.height;
       for (let fr = 0; fr < 3; fr++) {
         if (scene.textures.exists(`u-${kind}-t${team}-w${fr}`)) continue;
@@ -477,8 +477,8 @@ function createBuildingTextures(scene) {
       px(ctx, 6, 6, w - 12, 3, '#8fa2ff'); // glow strip
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 4, 8, 0, 7); ctx.fill();
     });
-    // hatchery 4x4
-    makeTex(scene, 'b-hatchery-t1', 4 * T, 4 * T, (ctx) => {
+    // broodNest 4x4
+    makeTex(scene, 'b-broodNest-t1', 4 * T, 4 * T, (ctx) => {
       const w = 4 * T, h = 4 * T;
       ctx.fillStyle = '#5e3320'; ctx.beginPath(); ctx.arc(w / 2, h / 2 + 4, w / 2 - 2, 0, 7); ctx.fill();
       ctx.fillStyle = '#7c4527'; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 8, 0, 7); ctx.fill();
@@ -486,8 +486,8 @@ function createBuildingTextures(scene) {
       px(ctx, 4, h - 10, 10, 6, '#40222f'); // ramp
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 8, 5, 0, 7); ctx.fill();
     });
-    // nexus 5x4
-    makeTex(scene, 'b-nexus-t2', 5 * T, 4 * T, (ctx) => {
+    // aegis 5x4
+    makeTex(scene, 'b-aegis-t2', 5 * T, 4 * T, (ctx) => {
       const w = 5 * T, h = 4 * T;
       ctx.fillStyle = '#4a586b'; ctx.beginPath(); ctx.moveTo(w / 2, 4); ctx.lineTo(w - 8, h / 2); ctx.lineTo(w / 2, h - 6); ctx.lineTo(8, h / 2); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#65758c'; ctx.beginPath(); ctx.moveTo(w / 2, 12); ctx.lineTo(w - 22, h / 2); ctx.lineTo(w / 2, h - 16); ctx.lineTo(22, h / 2); ctx.closePath(); ctx.fill();
@@ -497,8 +497,8 @@ function createBuildingTextures(scene) {
 
     // generic sized buildings per race/size
     const sizes = { supplyDepot: [2, 2], refinery: [4, 3], barracks: [4, 3], factory: [4, 3], starport: [4, 3], academy: [3, 3], missileTurret: [2, 2], engineeringBay: [2, 2], scienceFacility: [4, 3], machineShop: [2, 2], bunker: [2, 2],
-      evolutionChamber: [3, 3], spawningPool: [3, 3], hydraliskDen: [3, 3], spire: [3, 3], ultraliskCavern: [3, 3], sporeColony: [2, 2], extractor: [4, 3], lair: [4, 4], hive: [4, 4], creepColony: [2, 2],
-      pylon: [2, 2], gateway: [3, 3], roboticsFacility: [4, 3], cyberneticsCore: [3, 3], roboticsTechFacility: [3, 3], templarArchives: [3, 3], council: [3, 3], stargate: [4, 3], photonCannon: [2, 2], forge: [2, 2], assimulator: [4, 3], fleetBeacon: [3, 3], controlTower: [2, 2] };
+      geneForge: [3, 3], clawPit: [3, 3], spineWarren: [3, 3], aerie: [3, 3], tremorCavern: [3, 3], stingerColony: [2, 2], gasSiphon: [4, 3], deepWarren: [4, 4], hive: [4, 4], blightNode: [2, 2],
+      conduit: [2, 2], portal: [3, 3], fabricator: [4, 3], synapseCore: [3, 3], runeworks: [3, 3], psiVault: [3, 3], convocation: [3, 3], skyPortal: [4, 3], lanceTurret: [2, 2], forge: [2, 2], essenceTap: [4, 3], skyAnchor: [3, 3], controlTower: [2, 2] };
 
     for (const [bid, [tw, th]] of Object.entries(sizes)) {
       for (let team = 0; team < 3; team++) {
@@ -510,13 +510,13 @@ function createBuildingTextures(scene) {
         if (scene.textures.exists(key)) continue;
         makeTex(scene, key, tw * T, th * T, (ctx) => {
           const w = tw * T, h = th * T;
-          if (bid === 'pylon') {
+          if (bid === 'conduit') {
             ctx.fillStyle = tcol; ctx.fillRect(w / 2 - 4, 2, 8, h - 4);
             ctx.fillStyle = '#8b95a3'; ctx.fillRect(w / 2 - 6, h / 2 - 3, 12, 6);
             ctx.globalAlpha = 0.4; ctx.fillStyle = '#ffffff'; ctx.fillRect(w / 2 - 2, 4, 4, h - 8); ctx.globalAlpha = 1;
             return;
           }
-          if (bid === 'photonCannon' || bid === 'missileTurret' || bid === 'sporeColony') {
+          if (bid === 'lanceTurret' || bid === 'missileTurret' || bid === 'stingerColony') {
             ctx.fillStyle = edge; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 1, 0, 7); ctx.fill();
             ctx.fillStyle = base; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 4, 0, 7); ctx.fill();
             ctx.fillStyle = roof; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 2, w / 2 - 9, 0, 7); ctx.fill();
@@ -525,17 +525,17 @@ function createBuildingTextures(scene) {
             return;
           }
           drawPanel(ctx, w, h, base, edge, roof, tcol);
-          if (bid === 'barracks' || bid === 'factory' || bid === 'starport' || bid === 'gateway' || bid === 'roboticsFacility' || bid === 'stargate') {
+          if (bid === 'barracks' || bid === 'factory' || bid === 'starport' || bid === 'portal' || bid === 'fabricator' || bid === 'skyPortal') {
             px(ctx, 6, h - 10, 12, 6, '#101418'); // door
             px(ctx, 7, h - 9, 10, 4, '#1c222a');
           }
-          if (bid === 'spire' || bid === 'cyberneticsCore' || bid === 'templarArchives') {
+          if (bid === 'aerie' || bid === 'synapseCore' || bid === 'psiVault') {
             ctx.globalAlpha = 0.8; ctx.fillStyle = tcol; ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
           }
         });
       }
     }
-    // terran command center exists; hatchery/nexus exist. skip duplicates.
+    // terran command center exists; broodNest/aegis exist. skip duplicates.
   }
 }
 
@@ -583,7 +583,7 @@ function createFx(scene) {
     ctx.fillStyle = '#8f2b24'; ctx.fillRect(2, 4, 2, 2); ctx.fillRect(7, 6, 2, 1);
   });
   // SC1 persistent per-race gore/carnage decals
-  makeTex(scene, 'gore-zerg', 28, 28, (ctx) => {
+  makeTex(scene, 'gore-skarn', 28, 28, (ctx) => {
     ctx.fillStyle = 'rgba(70,120,40,0.65)'; ctx.beginPath(); ctx.ellipse(14, 14, 12, 9, 0.4, 0, 7); ctx.fill();
     ctx.fillStyle = 'rgba(150,60,80,0.55)'; ctx.beginPath(); ctx.ellipse(10, 12, 5, 4, 0, 0, 7); ctx.fill();
     ctx.fillStyle = 'rgba(190,220,120,0.5)'; ctx.fillRect(16, 16, 3, 2); ctx.fillRect(8, 18, 2, 2); ctx.fillRect(18, 8, 2, 2);
@@ -595,7 +595,7 @@ function createFx(scene) {
     ctx.fillStyle = 'rgba(60,60,64,0.55)'; ctx.fillRect(6, 8, 3, 2); ctx.fillRect(17, 7, 2, 2); // oil/soot
     ctx.fillStyle = 'rgba(200,190,180,0.4)'; ctx.fillRect(10, 18, 2, 2); // shrapnel
   });
-  makeTex(scene, 'gore-protoss', 26, 26, (ctx) => {
+  makeTex(scene, 'gore-auraxis', 26, 26, (ctx) => {
     ctx.fillStyle = 'rgba(70,140,220,0.45)'; ctx.beginPath(); ctx.ellipse(13, 13, 11, 7, 0.2, 0, 7); ctx.fill();
     ctx.fillStyle = 'rgba(140,200,255,0.5)'; ctx.fillRect(8, 10, 2, 2); ctx.fillRect(15, 14, 2, 2); ctx.fillRect(12, 17, 3, 1); // ionized residue
     ctx.fillStyle = 'rgba(30,40,60,0.5)'; ctx.beginPath(); ctx.ellipse(13, 12, 5, 3, 0.9, 0, 7); ctx.fill();

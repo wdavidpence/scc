@@ -308,10 +308,10 @@ export class PolishFX {
     this._tn = this._tn || 0;
     if (this._tn > 48) return; // global cap: heavy battles stop adding trails
     const kind = pr.kind;
-    const col = kind === 'hydralisk' || kind === 'hydra' ? 0x9dff7a
-      : kind === 'dragoon' || kind === 'archon' ? 0x9fd0ff
-      : kind === 'corsair' || kind === 'darkTemplar' ? 0xb060ff
-      : kind === 'vulture' || kind === 'goliath' || kind === 'tank' ? 0xffd27a
+    const col = kind === 'razorspine' || kind === 'razor' ? 0x9dff7a
+      : kind === 'sentinel' || kind === 'radiant' ? 0x9fd0ff
+      : kind === 'voidlance' || kind === 'nightblade' ? 0xb060ff
+      : kind === 'duster' || kind === 'ballista' || kind === 'tank' ? 0xffd27a
       : 0xbfe0ff;
     const d = s.add.circle(sp.x, sp.y, kind === 'tank' ? 2.6 : 1.7, col, 0.55).setDepth(43).setBlendMode(Phaser.BlendModes.ADD);
     this._tn++;
@@ -441,8 +441,8 @@ export class PolishFX {
     s.addEventPing?.(x, y, 0xffd23f, false);
   }
 
-  // 32) creep ambient: slow bubbles rising and popping across live creep
-  creepBubbles(dt) {
+  // 32) blight ambient: slow bubbles rising and popping across live blight
+  blightBubbles(dt) {
     const s = this.s;
     if (!s || s.gameOver) return;
     this._cbT = (this._cbT || 0) - dt;
@@ -451,7 +451,7 @@ export class PolishFX {
     if (!this._cheap(s)) return;
     const vw = s.cameras.main.worldView;
     for (const t of [0, 1]) {
-      const cc = s.creepCanvases && s.creepCanvases[t];
+      const cc = s.blightCanvases && s.blightCanvases[t];
       if (!cc) continue;
       for (let tries = 0; tries < 10; tries++) {
         const tx = Phaser.Math.Clamp(((vw.x + Math.random() * vw.width) / 16) | 0, 0, 95);
@@ -887,7 +887,7 @@ export class PolishFX {
     if (!s || s.gameOver) return;
     const hurt = (ctx.units || []).filter(u => !u.dead && u.team === 0 && u._lastHurtT && (ctx.gameTime - u._lastHurtT) < 1.2).length;
     if (hurt >= 2) this.underAttack(ctx.units.find(u => !u.dead && u.team === 0 && u._lastHurtT)?.x);
-    this.creepBubbles(dt);
+    this.blightBubbles(dt);
     this.cloakScan(dt);
     this.ambient(dt);
     this.selGlowTick();
@@ -917,4 +917,4 @@ export class PolishFX {
 }
 
 // short labels for queue chips
-const UNITS_SHORT = { marine: 'M', firebat: 'F', tank: 'T', medic: '+', ghost: 'G', vulture: 'V', goliath: 'G', scv: 'W', zealot: 'Z', dragoon: 'D', stalker: 'S', darkTemplar: 'D', archon: 'A', probe: 'W', mutalisk: 'M', hydralisk: 'H', lurker: 'L', broodling: 'B', scourge: 'S', ultralisk: 'U', infestor: 'I', defiler: 'D', drone: 'W', queen: 'Q', overlord: 'O', tauRifle: 'T' };
+const UNITS_SHORT = { marine: 'M', incinerator: 'F', tank: 'T', medic: '+', ghost: 'G', duster: 'V', ballista: 'G', rigger: 'W', bladeguard: 'Z', sentinel: 'D', stalker: 'S', nightblade: 'D', radiant: 'A', artificer: 'W', vexwing: 'M', razorspine: 'H', burrower: 'L', hatchling: 'B', airstinger: 'S', tremorclaw: 'U', infestor: 'I', defiler: 'D', skarling: 'W', queen: 'Q', skywarden: 'O', tauRifle: 'T' };

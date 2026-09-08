@@ -59,7 +59,7 @@ export class CutScene extends Phaser.Scene {
     this.makeGrain();
     this.makeDust();
 
-    // audio beds: cinematic drone + faint radio static (real assets)
+    // audio beds: cinematic skarling + faint radio static (real assets)
     cin.resume();
     cin.preloadAll('');
     this._audioNodes.push(cin.bed(0.5));

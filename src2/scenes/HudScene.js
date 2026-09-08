@@ -135,9 +135,9 @@ export class HudScene extends Phaser.Scene {
     const t = TECHS[techId];
     const race = b?.hotseat ? (b.players[b.activeTeam ?? 0]?.race || 'terran') : (b?.race || 'terran');
     const raceTech = {
-      terran: ['terranInfantryWeapons', 'terranInfantryArmor', 'vehiclePlating', 'radar', 'controlTower', 'caduceusReactor', 'combatMedics', 'machineShop'],
-      zerg: ['zergMeleeAttacks', 'zergCarapace', 'lurkerEgg', 'chitinousPlating', 'greaterSpire', 'lair', 'hive', 'guardian', 'devourer'],
-      protoss: ['gatewayWarp', 'zealotSpeed', 'dragoonRange', 'roboticsFacilityTech', 'psionicStorm', 'darkTemplar', 'fleetBeacon', 'protossGround', 'darkArchonMerge'],
+      terran: ['terranInfantryWeapons', 'terranInfantryArmor', 'vehiclePlating', 'radar', 'controlTower', 'vitaReactor', 'combatMedics', 'machineShop'],
+      skarn: ['skarnMeleeAttacks', 'skarnCarapace', 'burrowChrysalis', 'chitinousPlating', 'greaterAerie', 'deepWarren', 'hive', 'sporecaster', 'corroder'],
+      auraxis: ['portalPhase', 'bladeguardSpeed', 'sentinelRange', 'fabricatorCalibration', 'psionicStorm', 'nightblade', 'skyAnchor', 'auraxisGround', 'umbralConvergence'],
     };
     const match = raceTech[race] || raceTech.terran;
     return match.some(m => techId.startsWith(m) || techId === m);
@@ -412,7 +412,7 @@ export class HudScene extends Phaser.Scene {
     }
     const n = info?.count || 0;
     if (n > 0) {
-      const workers = info.units.filter(u => ['scv', 'drone', 'probe'].includes(u.kind)).length === n;
+      const workers = info.units.filter(u => ['rigger', 'skarling', 'artificer'].includes(u.kind)).length === n;
       this.cardTitle.setText(`${n} UNITS${workers ? ' (WORKERS)' : ''}`);
       const names = info.units.slice(0, 3).map(u => `${u.name} ${u.hp}/${u.maxHp}${u.cargo ? ' +' + u.cargo : ''}`).join('  ');
       this.selText.setText(names);
@@ -424,15 +424,15 @@ export class HudScene extends Phaser.Scene {
       const kinds = new Set((info.units || []).map(u => u.kind));
       if (!workers) {
         if (kinds.has('tank')) rows.push('__siege');
-        if (kinds.has('lurker')) rows.push('__burrow');
+        if (kinds.has('burrower')) rows.push('__burrow');
         if (kinds.has('marine')) rows.push('__stim');
-        if (kinds.has('darkTemplar')) rows.push('__cloak');
-        if (kinds.has('darkTemplar') && kinds.size === 1) { rows.push('__merge'); if (b.techResearched(0, 'darkArchonMerge')) rows.push('__mergeDark'); }
-        if (kinds.has('corsair')) rows.push('__mael');
-        if (kinds.has('darkArchon')) rows.push('__mael');
-        if (kinds.has('mutalisk')) { rows.push('__morphG'); rows.push('__morphD'); }
-        if (kinds.has('devourer')) rows.push('__caustic');
-        if (kinds.has('htemplar')) rows.push('__storm');
+        if (kinds.has('nightblade')) rows.push('__cloak');
+        if (kinds.has('nightblade') && kinds.size === 1) { rows.push('__merge'); if (b.techResearched(0, 'umbralConvergence')) rows.push('__mergeDark'); }
+        if (kinds.has('voidlance')) rows.push('__mael');
+        if (kinds.has('umbral')) rows.push('__mael');
+        if (kinds.has('vexwing')) { rows.push('__morphG'); rows.push('__morphD'); }
+        if (kinds.has('corroder')) rows.push('__caustic');
+        if (kinds.has('caller')) rows.push('__storm');
         rows.push('__patrol');
         rows.push('__hold');
         if (b.hasBuilding('scienceFacility', 0)) rows.push('__scan');
@@ -444,11 +444,11 @@ export class HudScene extends Phaser.Scene {
         __burrow: ['BURROW [B]', () => b.events.emit('hud:burrow')],
         __stim: ['STIM [F]', () => b.events.emit('hud:stim')],
         __cloak: ['CLOAK [K]', () => b.events.emit('hud:cloak')],
-        __merge: ['MERGE [M]', () => b.events.emit('hud:mergeArchon')],
-        __mergeDark: ['DARK MERGE', () => b.events.emit('hud:mergeDarkArchon')],
+        __merge: ['MERGE [M]', () => b.events.emit('hud:mergeRadiant')],
+        __mergeDark: ['DARK MERGE', () => b.events.emit('hud:mergeDarkRadiant')],
         __mael: ['MAELSTROM', () => b.events.emit('hud:maelstrom')],
-        __morphG: ['GUARDIAN', () => b.events.emit('hud:morphGuardian')],
-        __morphD: ['DEVOURER', () => b.events.emit('hud:morphDevourer')],
+        __morphG: ['GUARDIAN', () => b.events.emit('hud:morphSporecaster')],
+        __morphD: ['DEVOURER', () => b.events.emit('hud:morphCorroder')],
         __caustic: ['CAUSTIC', () => b.events.emit('hud:caustic')],
         __storm: ['PSI STORM [V]', () => b.events.emit('hud:castStorm')],
         __patrol: ['PATROL [P]', () => b.events.emit('hud:patrol')],
@@ -766,9 +766,9 @@ export class HudScene extends Phaser.Scene {
     // polish: rotating radar sweep + framed bezel
     b.polish?.radarSweep(g, this.mmX, this.mmY, this.mmSize);
     b.polish?.mmFrame(g, this.mmX, this.mmY, this.mmSize);
-    // creep
+    // blight
     for (const t of [0, 1]) {
-      const cells = b.creepCanvases[t].cells;
+      const cells = b.blightCanvases[t].cells;
       g.fillStyle(t === 0 ? 0x24406e : 0x5a2340, 0.85);
       for (let i = 0; i < cells.length; i++) if (cells[i]) { g.fillRect(this.mmX + ((i % 96) * 16) * s, this.mmY + (((i / 96) | 0) * 16) * s, 2, 2); }
     }

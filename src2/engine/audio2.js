@@ -50,8 +50,8 @@ export class Audio2 {
   attack(kind, vol = 1) {
     const v = Math.max(0.04, Math.min(1, vol));
     if (kind === 'tank' || kind === 'turret') { this.noise(0.22, 0.09 * v, 500); this.tone(90, 0.18, 'sawtooth', 0.05 * v, -40); }
-    else if (kind === 'firebat') this.noise(0.18, 0.05 * v, 1200);
-    else if (kind === 'zealot' || kind === 'darkTemplar' || kind === 'archon') this.tone(1400, 0.08, 'sawtooth', 0.03 * v, -600);
+    else if (kind === 'incinerator') this.noise(0.18, 0.05 * v, 1200);
+    else if (kind === 'bladeguard' || kind === 'nightblade' || kind === 'radiant') this.tone(1400, 0.08, 'sawtooth', 0.03 * v, -600);
     else if (kind === 'stim') { this.tone(500, 0.1, 'square', 0.04, 300); }
     else this.noise(0.05, 0.03 * v, 2400 - 1200 * (1 - v));
   }
@@ -75,8 +75,8 @@ export class Audio2 {
   setRace(race) {
     this.race = race;
     this.setRaceVoice(race);
-    this.raceChord = race === 'zerg' ? [110, 138, 164] : race === 'protoss' ? [196, 294, 392] : [131, 196, 262];
-    this.raceWave = race === 'zerg' ? 'sawtooth' : race === 'protoss' ? 'sine' : 'triangle';
+    this.raceChord = race === 'skarn' ? [110, 138, 164] : race === 'auraxis' ? [196, 294, 392] : [131, 196, 262];
+    this.raceWave = race === 'skarn' ? 'sawtooth' : race === 'auraxis' ? 'sine' : 'triangle';
   }
 
   // ================= adaptive multi-track music engine =================
@@ -85,8 +85,8 @@ export class Audio2 {
   // Race selects scale, waveform, and groove. Free, procedural, no assets.
   MUSIC_SCALES = {
     terran:  { root: 130.81, steps: [0, 3, 5, 7, 10], pad: 'triangle', lead: 'square',   bpm: 84,  groove: [1, 0, 0, 1, 0, 0, 1, 0] },
-    zerg:    { root: 110.00, steps: [0, 1, 5, 6, 8],  pad: 'sawtooth', lead: 'sawtooth', bpm: 116, groove: [1, 0, 1, 1, 0, 1, 0, 1] },
-    protoss: { root: 146.83, steps: [0, 2, 4, 7, 9],   pad: 'sine',     lead: 'sine',     bpm: 72,  groove: [1, 0, 0, 0, 1, 0, 0, 0] },
+    skarn:    { root: 110.00, steps: [0, 1, 5, 6, 8],  pad: 'sawtooth', lead: 'sawtooth', bpm: 116, groove: [1, 0, 1, 1, 0, 1, 0, 1] },
+    auraxis: { root: 146.83, steps: [0, 2, 4, 7, 9],   pad: 'sine',     lead: 'sine',     bpm: 72,  groove: [1, 0, 0, 0, 1, 0, 0, 0] },
   };
   freqAt(step) { const s = this.MUSIC_SCALES[this.race] || this.MUSIC_SCALES.terran; return s.root * Math.pow(2, step / 12); }
 
@@ -324,37 +324,37 @@ export class Audio2 {
       window.speechSynthesis.speak(u);
     } catch (e) { /* silent */ }
   }
-  // race-flavored player voice: Terran crisp-low, Zerg guttural, Protoss resonant
+  // race-flavored player voice: Terran crisp-low, Skarn guttural, Auraxis resonant
   setRaceVoice(race) {
-    this.racePitch = race === 'zerg' ? 0.55 : race === 'protoss' ? 1.25 : 0.85;
+    this.racePitch = race === 'skarn' ? 0.55 : race === 'auraxis' ? 1.25 : 0.85;
     // preload the pack after a user gesture lands (browser autoplay policy)
     if (this._preT) clearTimeout(this._preT);
     this._preT = setTimeout(() => { try { this.voPreload(); } catch (e) {} }, 2500);
   }
-  readyBark() { if (this.voPlay('ready', this.racePitch || 1)) return; const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], zerg: ['Yes master.', 'Hatching now.', 'Ready to kill.'], protoss: ['My life for Aiur.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
-  moveBark() { if (Math.random() < 0.5) { if (this.voPlay('move', this.racePitch || 1)) return; const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], zerg: ['Obey.', 'We move.', 'Hunting.'], protoss: ['It is done.', 'Advancing.', 'En taro Adun.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); } }
-  attackBark() { if (this.voPlay('attack', (this.racePitch || 1) * 1.05)) return; const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], zerg: ['KILL!', 'Slay them all!', 'For the Overmind!'], protoss: ['Attack!', 'Purge the enemy!', 'For the Daelaam!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
+  readyBark() { if (this.voPlay('ready', this.racePitch || 1)) return; const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], skarn: ['Yes master.', 'Hatching now.', 'Ready to kill.'], auraxis: ['My light endures.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
+  moveBark() { if (Math.random() < 0.5) { if (this.voPlay('move', this.racePitch || 1)) return; const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], skarn: ['Obey.', 'We move.', 'Hunting.'], auraxis: ['It is done.', 'Advancing.', 'The light ascends.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); } }
+  attackBark() { if (this.voPlay('attack', (this.racePitch || 1) * 1.05)) return; const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], skarn: ['KILL!', 'Slay them all!', 'For the Hive Crown!'], auraxis: ['Attack!', 'Purge the enemy!', 'For the Auraxis!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
   underAttackBark() { this.bark('We are under attack!', 1.1, 1.1); }
   buildBark() { if (this.voPlay('build', this.racePitch || 1)) return; const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
   groupBark(n) { this.bark('Group ' + n, 0.95, 1.15); }
-  ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Yamato, fire!'], zerg: ['The swarm descends!', 'Surge!'], protoss: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
+  ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Keystone lance, free!'], skarn: ['The swarm descends!', 'Surge!'], auraxis: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
 
   selectBark(unitKinds) {
     // selection-dependent voice groups with rotation (never repeats the same line twice in a row)
     const G = {
-      worker: { terran: ['Yes sir.', 'Working.', 'Reporting.'], zerg: ['Sss.', 'At service.', 'Yes.'], protoss: ['Affirmative.', 'Ready.', 'Awaiting.'] },
-      marine: { terran: ['Rock and stone!', 'Sir!', 'Marines up!', 'Let\'s rock!'], zerg: ['Ready.', 'Kill.', 'Here.'], protoss: ['Ready.', 'For Aiur.', 'Adept standing.'] },
-      tank: { terran: ['Artillery in position.', 'Give me a target.', 'Locked and loaded.'], zerg: ['Siege ready.', 'Fire soon.'], protoss: ['Target locked.', 'Ready to fire.'] },
-      air: { terran: ['Airborne.', 'Flight ready.', 'Wings up.'], zerg: ['Wings up.', 'Soaring.'], protoss: ['Squadrons ready.', 'Eyes skyward.'] },
-      default: { terran: ['Ready.', 'Orders?', 'Standing by.'], zerg: ['Ready.', 'Waiting.', 'Yes.'], protoss: ['Ready.', 'Command?', 'Standing by.'] }
+      worker: { terran: ['Yes sir.', 'Working.', 'Reporting.'], skarn: ['Sss.', 'At service.', 'Yes.'], auraxis: ['Affirmative.', 'Ready.', 'Awaiting.'] },
+      marine: { terran: ['Lock and load!', 'Sir!', 'Marines up!', 'Let\'s rock!'], skarn: ['Ready.', 'Kill.', 'Here.'], auraxis: ['Ready.', 'For Auraxis.', 'Adept standing.'] },
+      tank: { terran: ['Artillery in position.', 'Give me a target.', 'Locked and loaded.'], skarn: ['Siege ready.', 'Fire soon.'], auraxis: ['Target locked.', 'Ready to fire.'] },
+      air: { terran: ['Airborne.', 'Flight ready.', 'Wings up.'], skarn: ['Wings up.', 'Soaring.'], auraxis: ['Squadrons ready.', 'Eyes skyward.'] },
+      default: { terran: ['Ready.', 'Orders?', 'Standing by.'], skarn: ['Ready.', 'Waiting.', 'Yes.'], auraxis: ['Ready.', 'Command?', 'Standing by.'] }
     };
     let group = 'default';
-    if (unitKinds.includes('scv') || unitKinds.includes('drone') || unitKinds.includes('probe')) group = 'worker';
-    else if (unitKinds.includes('marine') || unitKinds.includes('firebat') || unitKinds.includes('zereling') || unitKinds.includes('hydralisk') || unitKinds.includes('zealot')) group = 'marine';
-    else if (unitKinds.includes('tank') || unitKinds.includes('goliath') || unitKinds.includes('siege')) group = 'tank';
-    else if (unitKinds.some(k => ['wraith', 'banshee', 'corsair', 'phoenix', 'mutalisk', 'viper', 'carrier', 'battlecruiser', 'observer', 'overlord', 'scout', 'raven', 'medic', 'darktemplar'].includes(k))) group = 'air';
+    if (unitKinds.includes('rigger') || unitKinds.includes('skarling') || unitKinds.includes('artificer')) group = 'worker';
+    else if (unitKinds.includes('marine') || unitKinds.includes('incinerator') || unitKinds.includes('skarnling') || unitKinds.includes('razorspine') || unitKinds.includes('bladeguard')) group = 'marine';
+    else if (unitKinds.includes('tank') || unitKinds.includes('ballista') || unitKinds.includes('siege')) group = 'tank';
+    else if (unitKinds.some(k => ['wraith', 'banshee', 'voidlance', 'phoenix', 'vexwing', 'viper', 'ark', 'battlecruiser', 'observer', 'skywarden', 'scout', 'raven', 'medic', 'nightblade'].includes(k))) group = 'air';
     const race = this.race || 'terran';
     // real recorded select vo when the pack has it
     if (this.voPlay('select', (group === 'worker' ? 1.0 : 0.75) * (this.racePitch || 1))) return;
