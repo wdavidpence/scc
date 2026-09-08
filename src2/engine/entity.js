@@ -46,12 +46,19 @@ export class Unit {
     this.trainingTarget = null;
     this.container = world.add.container(x, y);
     const key = `u-${this.def.icon}-t${team > 2 ? 2 : team}`;
-    this.sprite = world.add.image(0, 0, key);
+    // pseudo-3D: soft ground shadow beneath, sprite lifted off it (more lift when flying)
+    const shadowKey = this.def.size === 'large' ? 'shadow-l' : this.def.size === 'medium' ? 'shadow-m' : 'shadow-s';
+    if (world.textures.exists(shadowKey)) {
+      this.shadow = world.add.image(2, (this.def.size === 'large' ? 7 : 5), shadowKey);
+      this.shadow.setAlpha(this.flying ? 0.35 : 0.55);
+    }
+    this.sprite = world.add.image(0, this.flying ? -8 : 0, key);
     const sizeScale = this.def.size === 'large' ? 1.25 : this.def.size === 'medium' ? 1.08 : 1;
     if (this.flying) { this.sprite.setScale(1.06 * sizeScale); this.container.setDepth(40); } else { this.sprite.setScale(sizeScale); this.container.setDepth(30); }
+    if (this.shadow) this.shadow.setScale(sizeScale);
     this.baseScale = (this.flying ? 1.06 : 1) * sizeScale;
     this.hpBar = world.add.graphics();
-    this.container.add([this.sprite, this.hpBar]);
+    this.container.add([this.shadow || [], this.sprite, this.hpBar].flat());
     this.selected = false;
     this.radius = 8;
     this.stunTimer = 0;
@@ -897,6 +904,13 @@ export class Building {
     this.attackTimer = 0;
     this.container = world.add.container(x, y);
     const texKey = this.textureKey();
+    // pseudo-3D: wide soft contact shadow under the footprint
+    if (world.textures.exists('shadow-l') && this.def.w > 0) {
+      this.shadow = world.add.image(3, (this.def.h * TILE) / 2 - 4, 'shadow-l');
+      this.shadow.setScale(Math.max(1, (this.def.w * TILE) / 34), Math.max(1, (this.def.h * TILE) / 14));
+      this.shadow.setAlpha(0.5);
+      this.container.add(this.shadow);
+    }
     this.sprite = world.add.image(0, 0, texKey);
     this.container.add(this.sprite);
     this.container.setDepth(20);

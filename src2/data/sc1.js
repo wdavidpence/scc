@@ -82,6 +82,12 @@ export const UNITS = {
     supply: 1, minerals: 50, gas: 75, buildTime: 23, build: 'academy', tech: 'combatMedics',
     sight: 9, heal: { amount: 4, interval: 0.5, range: 3.2 }, icon: 'medic'
   },
+  drone: {
+    race: 'terran', name: 'Sentinel Drone', hp: 90, armor: 0, size: 'small', flying: true,
+    speed: 1.3, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
+    supply: 1, minerals: 100, gas: 50, buildTime: 20, build: 'starport',
+    sight: 12, detect: true, icon: 'drone', weaponless: true
+  },
   dropship: {
     race: 'terran', name: 'Dropship', hp: 200, armor: 1, size: 'large', flying: true,
     speed: 0.96, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
@@ -246,7 +252,7 @@ export const BUILDINGS = {
   },
   starport: {
     race: 'terran', name: 'Starport', hp: 300, armor: 1, size: 'large',
-    minerals: 150, gas: 100, buildTime: 64, w: 4, h: 3, sight: 6, produces: ['wraith', 'dropship'],
+    minerals: 150, gas: 100, buildTime: 64, w: 4, h: 3, sight: 6, produces: ['wraith', 'dropship', 'drone'],
     requires: ['factory']
   },
   controlTower: {

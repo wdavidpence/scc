@@ -23,9 +23,9 @@ function mix(c1, c2, t) {
 function darker(c, t = 0.35) { return mix(c, '#000000', t); }
 function lighter(c, t = 0.45) { return mix(c, '#ffffff', t); }
 
-// Post-process a 20x20 unit sprite: content auto-crops to its bounding box
-// and re-centers, then gets a dark drop-stencil outline, NW rim light,
-// SE shade, and a race-energy accent pixel.
+// Post-process a sprite into a pseudo-3D render: auto-crop + re-center,
+// hard silhouette outline, top-lit volume gradient (bright crown -> deep
+// bottom AO), NW rim light, SE shade, specular crown, race-energy accent.
 function finishSprite(canvas, race, teamCol) {
   const ctx = canvas.getContext('2d');
   const S = canvas.width;
@@ -55,6 +55,24 @@ function finishSprite(canvas, race, teamCol) {
   for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF]]) octx.drawImage(sil, ox + dx, oy + dy);
   // ---- body ----
   octx.drawImage(canvas, x0, y0, cw, ch, ox, oy, dw, dh);
+  // ---- top-lit volume pass: bright crown down to deep bottom AO ----
+  const vol = document.createElement('canvas'); vol.width = F; vol.height = F;
+  const vctx = vol.getContext('2d');
+  vctx.drawImage(oc, 0, 0);
+  vctx.globalCompositeOperation = 'source-atop';
+  const vg = vctx.createLinearGradient(0, oy, 0, oy + dh);
+  vg.addColorStop(0, 'rgba(255,250,230,0.16)');   // sunlit top
+  vg.addColorStop(0.42, 'rgba(255,255,255,0.03)');
+  vg.addColorStop(0.78, 'rgba(4,6,12,0.22)');      // terminator
+  vg.addColorStop(1, 'rgba(2,3,8,0.46)');           // bottom AO
+  vctx.fillStyle = vg; vctx.fillRect(0, 0, F, F);
+  // specular crown blob (offset NW of center) — kept faint so faces/visors stay readable
+  vctx.globalCompositeOperation = 'lighter';
+  const sp = vctx.createRadialGradient(F / 2 - 3, oy + 3, 0, F / 2 - 3, oy + 3, Math.max(3, dw * 0.32));
+  sp.addColorStop(0, 'rgba(255,255,255,0.12)');
+  sp.addColorStop(1, 'rgba(255,255,255,0)');
+  vctx.fillStyle = sp; vctx.fillRect(0, 0, F, F);
+  octx.drawImage(vol, 0, 0);
   // ---- rim/shade from the rendered body alpha ----
   const bd = octx.getImageData(ox, oy, dw, dh).data;
   const at = (x, y) => (x < 0 || y < 0 || x >= dw || y >= dh) ? 0 : bd[(y * dw + x) * 4 + 3];
@@ -73,10 +91,10 @@ function finishSprite(canvas, race, teamCol) {
     if (d[i + 3] < 10) continue;
     // NW edge => rim; SE edge => shade
     if (!at(x - ox - 1, y - oy - 1) || !at(x - ox, y - oy - 1)) {
-      rimD[i] = 255; rimD[i + 1] = 255; rimD[i + 2] = 255; rimD[i + 3] = 160;
+      rimD[i] = 255; rimD[i + 1] = 255; rimD[i + 2] = 255; rimD[i + 3] = 190;
     }
     if (!at(x - ox + 1, y - oy + 1) || !at(x - ox, y - oy + 1)) {
-      shD[i] = 0; shD[i + 1] = 0; shD[i + 2] = 0; shD[i + 3] = 110;
+      shD[i] = 0; shD[i + 1] = 0; shD[i + 2] = 0; shD[i + 3] = 140;
     }
   }
   rctx.putImageData(new ImageData(rimD, F, F), 0, 0);
@@ -98,6 +116,65 @@ function finishSprite(canvas, race, teamCol) {
   octx.globalAlpha = 1;
   octx.globalCompositeOperation = 'source-over';
   return oc;
+}
+
+// ---- terran exo-skeleton humanoid rig ----------------------------------------
+// Draws a chunky power-exo frame with a GLASS dome helmet; a real human
+// face (skin, eyes, brow, mouth-shadow) is visible THROUGH the visor.
+// (x,y) = top-left of a 20-wide humanoid cell; head is 8px wide at cx.
+function exoHuman(ctx, col, opts = {}) {
+  const cx = 10;
+  const skin = opts.skin || '#c8875a';
+  const skinShade = '#96613a';
+  const glass = opts.glass || 'rgba(150,210,255,0.34)';
+  const frame = opts.frame || '#39424e';
+  const frameHi = opts.frameHi || '#5a6673';
+  const heavy = opts.heavy || 0; // extra pauldron bulk
+
+  // ---- legs (armored greaves) ----
+  px(ctx, cx - 4, 15, 3, 4, frame); px(ctx, cx + 1, 15, 3, 4, frame);
+  px(ctx, cx - 4, 15, 1, 4, frameHi); px(ctx, cx + 1, 15, 1, 4, frameHi);
+  px(ctx, cx - 4, 18, 3, 2, '#222831'); px(ctx, cx + 1, 18, 3, 2, '#222831'); // boots
+
+  // ---- torso: exo chest plate over undersuit ----
+  px(ctx, cx - 4, 8, 8, 7, frame);            // undersuit
+  px(ctx, cx - 5, 8, 10, 5, col);            // team-colored chest armor
+  px(ctx, cx - 5, 8, 10, 1, lighter(col, 0.35)); // pauldron sheen
+  px(ctx, cx - 3, 9, 6, 1, darker(col, 0.3));    // plate seam
+  px(ctx, cx - 1, 10, 2, 2, '#ffd23f');          // chest pilot light
+  if (heavy) { px(ctx, cx - 6, 7, 3, 4, frameHi); px(ctx, cx + 3, 7, 3, 4, frameHi); } // heavy shoulders
+
+  // ---- arms (segmented exo pistons) ----
+  px(ctx, cx - 7, 9, 2, 5, frameHi); px(ctx, cx + 5, 9, 2, 5, frameHi);
+  px(ctx, cx - 7, 11, 2, 1, frame); px(ctx, cx + 5, 11, 2, 1, frame); // joint gap
+
+  // ---- neck seal ----
+  px(ctx, cx - 2, 6, 4, 2, '#2a3038');
+
+  // ---- GLASS HELMET with human face inside ----
+  // dome shell (metal ring)
+  ctx.fillStyle = frame;
+  ctx.beginPath(); ctx.arc(cx, 4.5, 4.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = frameHi;
+  ctx.beginPath(); ctx.arc(cx, 4, 4.6, Math.PI * 1.15, Math.PI * 1.85); ctx.fill(); // crown highlight
+  // ---- HUMAN FACE inside the helmet, glass tint layered OVER it ----
+  const skinSat = opts.skin ? opts.skin : '#c8875a';
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, 4.5, 3.2, 0, Math.PI * 2); ctx.clip();
+  px(ctx, cx - 3, 2, 6, 6, skinSat);                       // skin
+  px(ctx, cx - 3, 5, 6, 3, skinShade);                    // jaw shadow
+  px(ctx, cx - 2, 1.5, 4, 1.4, opts.hair || '#2b2118');  // hair/balaclava top
+  px(ctx, cx - 2, 4, 1, 1, '#141821');                    // left eye
+  px(ctx, cx + 1, 4, 1, 1, '#141821');                    // right eye
+  px(ctx, cx - 2, 3.2, 1, 0.6, '#3a2b1e');               // brow L
+  px(ctx, cx + 1, 3.2, 1, 0.6, '#3a2b1e');               // brow R
+  px(ctx, cx - 0.5, 6, 1, 0.6, '#7a4a38');               // mouth
+  // see-through canopy: light glass wash over the face
+  ctx.fillStyle = glass; ctx.fillRect(cx - 4, 0.5, 8, 8.5);
+  ctx.restore();
+  // glass glare kept near the helmet rim so the face stays readable
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.arc(cx, 4.5, 3.1, Math.PI * 1.1, Math.PI * 1.4); ctx.stroke();
 }
 
 function teamHex(team, colors) {
@@ -200,24 +277,22 @@ function createUnitTextures(scene) {
   // Each unit: 20x20 canvas top-down sprite per team tint.
   const defs = {
     rigger: (ctx, col) => {
-      px(ctx, 5, 4, 10, 12, '#697079'); px(ctx, 6, 5, 8, 6, col); // torso + visor
-      px(ctx, 3, 6, 2, 6, '#525860'); px(ctx, 15, 6, 2, 6, '#525860'); // arms
-      px(ctx, 6, 16, 3, 3, '#3c4248'); px(ctx, 11, 16, 3, 3, '#3c4248'); // feet
-      px(ctx, 14, 2, 4, 3, '#d9c26a'); // tool arm
+      exoHuman(ctx, darker(col, 0.25), { frame: '#4b5563', frameHi: '#6b7684' }); // worker exo: lighter tooling frame
+      px(ctx, 15, 7, 5, 2, '#d9c26a'); px(ctx, 19, 6, 2, 4, '#f0e0a0'); // welding torch arm
+      px(ctx, 1, 7, 3, 3, '#5a6673'); px(ctx, 0, 8, 2, 2, '#8a95a3'); // mineral scoop
+      px(ctx, 14, 12, 2, 2, '#6ee7a0'); // suit power cell lit
     },
     marine: (ctx, col) => {
-      px(ctx, 5, 3, 10, 14, col); px(ctx, 6, 4, 8, 4, '#0e1620'); // helmet visor
-      px(ctx, 3, 8, 2, 5, col); px(ctx, 15, 8, 2, 5, col);
-      px(ctx, 16, 9, 4, 2, '#2b323b'); // rifle
-      px(ctx, 7, 17, 2, 2, '#222831'); px(ctx, 11, 17, 2, 2, '#222831');
-      px(ctx, 7, 2, 6, 2, '#ffffff'); // helmet stripe
+      exoHuman(ctx, col, { heavy: 1 }); // standard marine exo
+      px(ctx, 15, 9, 5, 2, '#2b323b'); px(ctx, 19, 9, 2, 1, '#141a22'); // rifle barrel
+      px(ctx, 15, 8, 3, 2, '#3c434c');
+      px(ctx, 8, 0, 4, 1, '#ffffff'); // helmet stripe
     },
     incinerator: (ctx, col) => {
-      px(ctx, 5, 3, 10, 14, '#8a3b1e'); px(ctx, 6, 4, 8, 4, '#ff9d3c');
-      px(ctx, 3, 7, 2, 6, '#6e2f17'); px(ctx, 15, 7, 2, 6, '#6e2f17');
-      px(ctx, 16, 8, 5, 3, '#ffb03c'); // flame nozzle
-      px(ctx, 20, 8, 3, 3, '#ffe27a');
-      px(ctx, 6, 17, 2, 2, '#222831'); px(ctx, 11, 17, 2, 2, '#222831');
+      exoHuman(ctx, '#8a3b1e', { frame: '#5c2c19', frameHi: '#8a4a2a', glass: 'rgba(255,170,90,0.34)', heavy: 1 });
+      px(ctx, 15, 8, 5, 3, '#ffb03c'); px(ctx, 20, 8, 3, 3, '#ffe27a'); // flamethrower nozzle
+      px(ctx, 2, 7, 3, 6, '#3c434c'); px(ctx, 2, 6, 3, 1, '#ff7b2e'); // fuel tank valve on back edge
+      px(ctx, 4, 1, 3, 2, '#ff9d3c'); // pilot lamp on helmet
     },
     tank: (ctx, col) => {
       px(ctx, 2, 5, 16, 12, '#5b6470'); px(ctx, 3, 6, 14, 4, col);
@@ -257,10 +332,9 @@ function createUnitTextures(scene) {
       px(ctx, 17, 6, 3, 2, '#8fd0ff');
     },
     medic: (ctx, col) => {
-      px(ctx, 6, 4, 8, 12, '#d8dde6'); px(ctx, 7, 5, 6, 3, col); // white armor
-      px(ctx, 3, 8, 2, 5, '#c2c9d4'); px(ctx, 15, 8, 2, 5, '#c2c9d4');
+      exoHuman(ctx, '#d8dde6', { frame: '#a8b0bd', frameHi: '#e8edf4', glass: 'rgba(140,255,200,0.32)' }); // white medical exo
       px(ctx, 8, 9, 4, 1, '#ff5a5a'); px(ctx, 9, 8, 2, 3, '#ff5a5a'); // red cross
-      px(ctx, 15, 6, 4, 2, '#6ee7a0'); // med-injector
+      px(ctx, 15, 6, 4, 2, '#6ee7a0'); px(ctx, 18, 5, 2, 2, '#b0ffd9'); // med-injector
     },
     battlecruiser: (ctx, col) => {
       // NGV battleship: layered grey hull, forward battery, team-lit spine, burning engines
@@ -274,10 +348,10 @@ function createUnitTextures(scene) {
       px(ctx, 9, 6, 1, 1, '#ffd23f'); // hull beacon
     },
     ghost: (ctx, col) => {
-      px(ctx, 5, 4, 10, 12, '#3d4450'); px(ctx, 6, 5, 8, 4, col);
-      px(ctx, 4, 8, 2, 5, '#333a45'); px(ctx, 14, 8, 2, 5, '#333a45');
-      px(ctx, 15, 9, 5, 2, '#20252c'); // sniper
-      px(ctx, 7, 2, 6, 2, '#5f6c7d');
+      exoHuman(ctx, '#3d4450', { frame: '#2a3038', frameHi: '#4a5260', glass: 'rgba(180,140,255,0.30)', hair: '#1a1424' }); // psi-black ops exo
+      px(ctx, 15, 9, 6, 2, '#20252c'); px(ctx, 20, 9, 2, 1, '#0c1016'); // sniper barrel
+      px(ctx, 8, 0, 4, 1, '#b060ff'); // psi antenna glow
+      px(ctx, 7, 12, 1, 1, '#c9a0ff'); px(ctx, 12, 12, 1, 1, '#c9a0ff'); // psi nodes
     },
     skarling: (ctx, col) => {
       ctx.fillStyle = '#7a4520'; ctx.beginPath(); ctx.arc(10, 11, 6, 0, 7); ctx.fill();
@@ -404,6 +478,21 @@ function createUnitTextures(scene) {
       px(ctx, 9, 15, 2, 2, '#c9a0ff');
       px(ctx, 6, 1, 2, 2, '#3a2a5a'); px(ctx, 12, 1, 2, 2, '#3a2a5a'); // flame tips
     },
+    drone: (ctx, col) => {
+      // terran recon drone: quadcopter with 4 spinning rotor arms, sensor ball
+      ctx.strokeStyle = '#4b5563'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(16, 16); ctx.moveTo(16, 4); ctx.lineTo(4, 16); ctx.stroke(); // X arms
+      for (const [rx, ry] of [[4, 4], [16, 4], [4, 16], [16, 16]]) {
+        ctx.fillStyle = '#2b313a'; ctx.beginPath(); ctx.arc(rx, ry, 3.2, 0, 7); ctx.fill(); // motor
+        ctx.strokeStyle = 'rgba(210,225,245,0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(rx, ry, 3.6, 0, 7); ctx.stroke(); // rotor blur ring
+        px(ctx, rx - 0.5, ry - 0.5, 1, 1, col); // nav light
+      }
+      px(ctx, 7, 7, 6, 6, '#5a6673'); px(ctx, 8, 8, 4, 3, '#7a8794'); // body hull
+      ctx.fillStyle = 'rgba(140,220,255,0.8)'; ctx.beginPath(); ctx.arc(10, 12, 2.2, 0, 7); ctx.fill(); // glass sensor dome
+      px(ctx, 9, 11, 1, 1, '#0e1620'); // sensor lens
+      px(ctx, 8, 5, 4, 1, col); // team beacon bar
+    },
     sporecaster: (ctx, col) => {
       // bloated spore-carrying flyer with long neck
       ctx.fillStyle = '#8a9a4a'; ctx.beginPath(); ctx.ellipse(10, 11, 7, 5, 0, 0, 7); ctx.fill();
@@ -424,7 +513,7 @@ function createUnitTextures(scene) {
     }
   };
 
-  const raceOf = { rigger: 'terran', marine: 'terran', incinerator: 'terran', tank: 'terran', duster: 'terran', ballista: 'terran', wraith: 'terran', battlecruiser: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran',
+  const raceOf = { rigger: 'terran', marine: 'terran', incinerator: 'terran', tank: 'terran', duster: 'terran', ballista: 'terran', wraith: 'terran', battlecruiser: 'terran', ghost: 'terran', medic: 'terran', raven: 'terran', drone: 'terran',
     skarling: 'skarn', skarnling: 'skarn', skarnling: 'skarn', razor: 'skarn', razorspine: 'skarn', vex: 'skarn', vexwing: 'skarn', tremor: 'skarn', tremorclaw: 'skarn', skywarden: 'skarn', airstinger: 'skarn', burrower: 'skarn', queen: 'skarn', hatchling: 'skarn',
     artificer: 'auraxis', bladeguard: 'auraxis', sentinel: 'auraxis', caller: 'auraxis', stormcaller: 'auraxis', nblade: 'auraxis', nightblade: 'auraxis', radiant: 'auraxis', ark: 'auraxis', reaver: 'auraxis', shuttle: 'auraxis', voidlance: 'auraxis', umbral: 'auraxis',
     sporecaster: 'skarn', corroder: 'skarn' };
@@ -437,7 +526,7 @@ function createUnitTextures(scene) {
       const finished = finishSprite(raw, raceOf[kind] || 'terran', col);
       if (!scene.textures.exists(`u-${kind}-t${team}`)) scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
       // AAA: walk-cycle frames — cut the FINISHED sprite halves and offset them (finishSprite re-centers raw, so cutting raw would cancel the shift)
-      if (kind === 'rigger' || kind === 'skarling' || kind === 'artificer' || kind === 'skywarden' || kind === 'battlecruiser' || kind === 'ark' || kind === 'sporecaster' || kind === 'corroder') continue; // wheeled/hovering/flying: no leg cycle
+      if (kind === 'rigger' || kind === 'skarling' || kind === 'artificer' || kind === 'skywarden' || kind === 'battlecruiser' || kind === 'ark' || kind === 'sporecaster' || kind === 'corroder' || kind === 'drone') continue; // wheeled/hovering/flying: no leg cycle
       const FH = finished.height;
       for (let fr = 0; fr < 3; fr++) {
         if (scene.textures.exists(`u-${kind}-t${team}-w${fr}`)) continue;
@@ -540,6 +629,22 @@ function createBuildingTextures(scene) {
 }
 
 function createFx(scene) {
+  // soft ground shadow blob (per-size, tinted by caller alpha)
+  makeTex(scene, 'shadow-s', 20, 10, (ctx) => {
+    const g = ctx.createRadialGradient(10, 5, 1, 10, 5, 9);
+    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(10, 5, 9.5, 4.5, 0, 0, 7); ctx.fill();
+  });
+  makeTex(scene, 'shadow-m', 26, 12, (ctx) => {
+    const g = ctx.createRadialGradient(13, 6, 1, 13, 6, 12);
+    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(13, 6, 12.5, 5.5, 0, 0, 7); ctx.fill();
+  });
+  makeTex(scene, 'shadow-l', 40, 16, (ctx) => {
+    const g = ctx.createRadialGradient(20, 8, 2, 20, 8, 18);
+    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(20, 8, 19, 7.5, 0, 0, 7); ctx.fill();
+  });
   makeTex(scene, 'spark', 8, 8, (ctx) => {
     ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(4, 4, 3, 0, 7); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillRect(3, 3, 2, 2);
