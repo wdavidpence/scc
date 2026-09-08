@@ -11,6 +11,15 @@ export const INTRO_VO = {
   control1: 'vo/intro/control1.mp3', control2: 'vo/intro/control2.mp3', card1: 'vo/intro/card1.mp3',
 };
 
+// v2.35: voiced mission briefings (key = BRIEFS beat vo: b<mission><a|b>)
+export const BRIEF_VO = {
+  b1a: 'vo/brief/b1a.mp3', b1b: 'vo/brief/b1b.mp3', b2a: 'vo/brief/b2a.mp3', b2b: 'vo/brief/b2b.mp3',
+  b3a: 'vo/brief/b3a.mp3', b3b: 'vo/brief/b3b.mp3', b4a: 'vo/brief/b4a.mp3', b4b: 'vo/brief/b4b.mp3',
+  b5a: 'vo/brief/b5a.mp3', b5b: 'vo/brief/b5b.mp3', b6a: 'vo/brief/b6a.mp3', b6b: 'vo/brief/b6b.mp3',
+  b7a: 'vo/brief/b7a.mp3', b7b: 'vo/brief/b7b.mp3', b8a: 'vo/brief/b8a.mp3', b8b: 'vo/brief/b8b.mp3',
+  b9a: 'vo/brief/b9a.mp3', b9b: 'vo/brief/b9b.mp3', b10a: 'vo/brief/b10a.mp3', b10b: 'vo/brief/b10b.mp3',
+};
+
 function ac() {
   if (ctx) return ctx;
   try {
@@ -44,7 +53,11 @@ export function preloadAll(base) {
   load('whoosh', b + 'audio/whoosh.m4a');
   load('click', b + 'audio/ui_click.m4a');
   for (const k of Object.keys(INTRO_VO)) load(k, b + INTRO_VO[k].replace(/^\//, ''));
+  for (const k of Object.keys(BRIEF_VO)) load(k, b + BRIEF_VO[k].replace(/^\//, ''));
 }
+
+// lazily pull a briefing/vo clip by key if preload hasn't covered it yet
+export function ensure(key, base = '') { if (!A[key]) { const p = (INTRO_VO[key] || BRIEF_VO[key]) || ('vo/brief/' + key + '.mp3'); load(key, base + p.replace(/^\//, '')); } }
 
 export function resume() { const c = ac(); if (c && c.state === 'suspended') c.resume(); }
 

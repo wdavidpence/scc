@@ -284,14 +284,14 @@ export class Audio2 {
     }
   }
 
-  voPlay(action, pitch = 1.0, vol = 0.95) {
+  voPlay(action, pitch = 1.0, vol = 0.95, force = false) {
     const v = this.voSrc();
     if (!v || !v.ready) return false;
     const race = this.race || 'terran';
     const n = (v.manifest[race] || {})[action];
     if (!n) return false;
     const now = Date.now();
-    if (this._lastBark && now - this._lastBark < 700) return true; // rate-limit (already voiced)
+    if (!force && this._lastBark && now - this._lastBark < 700) return true; // rate-limit (already voiced)
     const k = `${race}_${action}`;
     v.idx[k] = ((v.idx[k] ?? -1) + 1) % n;
     const url = `${v.base}vo/${race}/${action}_${v.idx[k] + 1}.m4a`;
@@ -334,7 +334,41 @@ export class Audio2 {
   readyBark() { if (this.voPlay('ready', this.racePitch || 1)) return; const L = { terran: ['Ready.', 'SIR, yes sir.', 'Awaiting orders.'], skarn: ['Yes master.', 'Hatching now.', 'Ready to kill.'], auraxis: ['My light endures.', 'Orders?', 'Ready.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); }
   moveBark() { if (Math.random() < 0.5) { if (this.voPlay('move', this.racePitch || 1)) return; const L = { terran: ['Moving out.', 'On my way.', 'Copy that.'], skarn: ['Obey.', 'We move.', 'Hunting.'], auraxis: ['It is done.', 'Advancing.', 'The light ascends.'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)]); } }
   attackBark() { if (this.voPlay('attack', (this.racePitch || 1) * 1.05)) return; const L = { terran: ['Attack!', 'Weapons free!', 'Light them up!'], skarn: ['KILL!', 'Slay them all!', 'For the Hive Crown!'], auraxis: ['Attack!', 'Purge the enemy!', 'For the Auraxis!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
-  underAttackBark() { this.bark('We are under attack!', 1.1, 1.1); }
+  // v2.35 SC1-gap 87: per-race voiced under-attack warning with cooldown
+  underAttackBark() {
+    const now = Date.now();
+    if (this._lastUA && now - this._lastUA < 40000) return;
+    this._lastUA = now;
+    if (this.voPlay('underattack', (this.racePitch || 1) * 1.1, 1)) return;
+    const L = { terran: ['We are under attack!', 'Taking fire! Respond!'], skarn: ['We are struck! Blood flows!', 'Pain! Give them MORE pain!'], auraxis: ['We are assailed! Shields!', 'Fire upon our light! Answer them!'] };
+    const a = L[this.race] || L.terran;
+    this.bark(a[Math.floor(Math.random() * a.length)], 1.1, 1.12);
+  }
+  // v2.35 SC1-gap 85: contextual per-race announcer error library.
+  // ctx: supply|tech|place|energy|nocrew — real VO first, TTS fallback.
+  ANNOUNCER_ERR = {
+    supply:  { terran: ['Supply lines are dry. More depots required.', 'Cannot deploy. Additional supply needed.'], skarn: ['The brood starves. Feed it, or break.', 'No husk left to hatch. More nests.'], auraxis: ['The conduit lacks capacity. Raise more pylons.', 'Harmony broken. Supply is insufficient.'] },
+    tech:    { terran: ['Technology locked. Research prerequisites first.', 'Denied. That tech is not in our library.'], skarn: ['The gene-vault is sealed. Evolve first.', 'Form not learned. The crown refuses.'], auraxis: ['That knowledge is forbidden until the litany completes.', 'The archive is sealed. Study first.'] },
+    place:   { terran: ['Invalid position. Clear the ground.', "Can't build there. Blocked."], skarn: ['Ground is wrong. Chitin will not take.', 'Blocked. The blight recedes.'], auraxis: ['Geometry rejects this ground.', 'Unworthy position. Move the construct.'] },
+    energy:  { terran: ['Insufficient energy reserves.', 'Not enough power. Recharge and retry.'], skarn: ['Bile reserves empty.', 'No venom to spend.'], auraxis: ['The light within is spent.', 'Insufficient psionic charge.'] },
+    nocrew:  { terran: ['No operators available.', 'All crews are committed.'], skarn: ['No drones remain unspent.', 'All claws are busy tearing.'], auraxis: ['No artificers stand idle.', 'All hands are woven elsewhere.'] },
+  };
+  announcer(ctx) {
+    this.error(); // mechanical deny-blip underneath the voice
+    if (this.voPlay(`err_${ctx}`, this.racePitch || 1, 0.95)) return;
+    const L = (this.ANNOUNCER_ERR[ctx] || this.ANNOUNCER_ERR.nocrew)[this.race] || this.ANNOUNCER_ERR.nocrew.terran;
+    this.bark(L[Math.floor(Math.random() * L.length)], 0.68, 1.0);
+  }
+  // v2.35 SC1-gap 89: idle chatter loop — lightly voiced when army sits calm
+  idleChatter() {
+    const now = Date.now();
+    if (this._lastIdle && now - this._lastIdle < 45000) return;
+    this._lastIdle = now;
+    if (this.voPlay('ready', (this.racePitch || 1) * 0.98, 0.6)) return;
+    const L = { terran: ['Holding position, sir.', 'All quiet.', 'Standing by.'], skarn: ['Waiting.', 'Still.', 'The hive breathes.'], auraxis: ['Stillness holds.', 'We wait.', 'The light endures.'] };
+    const a = L[this.race] || L.terran;
+    this.bark(a[Math.floor(Math.random() * a.length)], 0.85, 0.95);
+  }
   buildBark() { if (this.voPlay('build', this.racePitch || 1)) return; const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
@@ -342,6 +376,26 @@ export class Audio2 {
   ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Keystone lance, free!'], skarn: ['The swarm descends!', 'Surge!'], auraxis: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
 
   selectBark(unitKinds) {
+    // v2.35 SC1-gap 63: escalating annoyed repeat-select. Re-selecting the
+    // same selection within 2.5s steps up an irritation tier (select2, select3).
+    const sig = [...unitKinds].sort().join(',');
+    const now = Date.now();
+    this._selTier = this._selTier || { sig: '', n: 0, t: 0 };
+    let tier = 1;
+    if (this._selTier.sig === sig && now - this._selTier.t < 2500) tier = Math.min(3, this._selTier.n + 1);
+    this._selTier = { sig, n: tier, t: now };
+    if (tier >= 2) {
+      const pitch = (this.racePitch || 1) * (tier === 3 ? 1.2 : 1.08);
+      if (this.voPlay(`select${tier}`, pitch, 1, true)) return;
+      const L = {
+        terran: { 2: ['Yeah, I heard you the first time.', 'What is it now?'], 3: ['Quit poking me, commander!', "I'm armed, I'm ready, back OFF!"] },
+        skarn: { 2: ['Prodding the swarm is unwise.', 'We hear. We bite. Wait.'], 3: ['Click again and you lose a finger.', 'The hive froths. Cease!'] },
+        auraxis: { 2: ['We acknowledged you once.', 'Patience is also a weapon.'], 3: ['Repeat the summons and face judgement.', 'You test devotion, commander.'] },
+      };
+      const a = (L[this.race] || L.terran)[tier] || L.terran[tier];
+      this.bark(a[Math.floor(Math.random() * a.length)], 0.78, 1.15);
+      return;
+    }
     // selection-dependent voice groups with rotation (never repeats the same line twice in a row)
     const G = {
       worker: { terran: ['Yes sir.', 'Working.', 'Reporting.'], skarn: ['Sss.', 'At service.', 'Yes.'], auraxis: ['Affirmative.', 'Ready.', 'Awaiting.'] },

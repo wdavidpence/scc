@@ -48,53 +48,53 @@ export const INTRO_SCRIPT = [
 // ---- Per-mission briefings (radio dialogue + objective stamp) ----
 export const BRIEFS = {
   1: { title: 'CLEANUP OP', stamp: 'OPERATION: FIRST LIGHT', beats: [
-    { kind: 'radio', who: 'voss', text: 'Magistrate, the colony is a graveyard and the local fauna made it that way. You will re-establish the mineral line and purge the sector.', wait: 5.0 },
-    { kind: 'radio', who: 'hal', text: 'Translation: clean up the mess someone else made. Boot your marines, build a depot, and stay off the blight until you have guns.', wait: 5.4 },
+    { kind: 'radio', who: 'voss', vo: 'b1a', text: 'Magistrate, the colony is a graveyard and the local fauna made it that way. You will re-establish the mineral line and purge the sector.', wait: 5.0 },
+    { kind: 'radio', who: 'hal', vo: 'b1b', text: 'Translation: clean up the mess someone else made. Boot your marines, build a depot, and stay off the blight until you have guns.', wait: 5.4 },
     { kind: 'obj', text: 'ESTABLISH BASE  ·  PURGE THE SKARN REMNANTS' , wait: 3.0 },
   ]},
   2: { title: 'FIRST CONTACT', stamp: 'OPERATION: ANVIL', beats: [
-    { kind: 'radio', who: 'voss', text: 'A coordinated swarm has landed on our flank. This is not the scattered vermin you scrubbed last tour.', wait: 4.6 },
-    { kind: 'radio', who: 'kate', text: 'They are walling off the gas geyser before we can. If they lock the gas, they lock the tech. Break their grip early.', wait: 5.2 },
+    { kind: 'radio', who: 'voss', vo: 'b2a', text: 'A coordinated swarm has landed on our flank. This is not the scattered vermin you scrubbed last tour.', wait: 4.6 },
+    { kind: 'radio', who: 'kate', vo: 'b2b', text: 'They are walling off the gas geyser before we can. If they lock the gas, they lock the tech. Break their grip early.', wait: 5.2 },
     { kind: 'obj', text: 'HOLD THE LINE  ·  DENY THE GEYSERS' , wait: 3.0 },
   ]},
   3: { title: 'FIRE AND FURY', stamp: 'OPERATION: BURN NOTICE', beats: [
-    { kind: 'radio', who: 'voss', text: 'A renegade warlord claims this sector by right of salvage. He has our old battlecruiser parts, and no scruples.', wait: 5.0 },
-    { kind: 'radio', who: 'hal', text: 'Terran on terran. Fine by me — just watch for the incinerators. They like the terrain a little too much.', wait: 4.6 },
+    { kind: 'radio', who: 'voss', vo: 'b3a', text: 'A renegade warlord claims this sector by right of salvage. He has our old battlecruiser parts, and no scruples.', wait: 5.0 },
+    { kind: 'radio', who: 'hal', vo: 'b3b', text: 'Terran on terran. Fine by me — just watch for the incinerators. They like the terrain a little too much.', wait: 4.6 },
     { kind: 'obj', text: 'BREAK THE WARLORD\u2019S FORTIFICATIONS' , wait: 3.0 },
   ]},
   4: { title: 'PSI STORM', stamp: 'OPERATION: SHATTERED MIRROR', beats: [
-    { kind: 'radio', who: 'conclave', text: 'Adept heralds rise in the high orbit. Their shields drink fire and their storm answers in kind.', wait: 5.0 },
-    { kind: 'radio', who: 'kate', text: 'Do not bunch up. Their storm punishes tight formations. Spread out, swarm their shields, break the projectors.', wait: 5.2 },
+    { kind: 'radio', who: 'conclave', vo: 'b4a', text: 'Adept heralds rise in the high orbit. Their shields drink fire and their storm answers in kind.', wait: 5.0 },
+    { kind: 'radio', who: 'kate', vo: 'b4b', text: 'Do not bunch up. Their storm punishes tight formations. Spread out, swarm their shields, break the projectors.', wait: 5.2 },
     { kind: 'obj', text: 'OVERWHELM THE ADEPT LANDING' , wait: 3.0 },
   ]},
   5: { title: 'SWARM', stamp: 'OPERATION: MEATGRINDER', beats: [
-    { kind: 'radio', who: 'overseer', text: 'The brood nest screams your name across every dead channel. It does not negotiate. It consumes.', wait: 4.8 },
-    { kind: 'radio', who: 'hal', text: 'Four minutes of hell, then the tunnel mouths empty. Bunkers up, marines loaded, and for God\u2019s sake keep the drop lanes clear.', wait: 5.6 },
+    { kind: 'radio', who: 'overseer', vo: 'b5a', text: 'The brood nest screams your name across every dead channel. It does not negotiate. It consumes.', wait: 4.8 },
+    { kind: 'radio', who: 'hal', vo: 'b5b', text: 'Four minutes of hell, then the tunnel mouths empty. Bunkers up, marines loaded, and for God\u2019s sake keep the drop lanes clear.', wait: 5.6 },
     { kind: 'obj', text: 'SURVIVE 4 MINUTES OF ASSAULT  ·  THEN BREAK THE NEST' , wait: 3.2 },
   ]},
   6: { title: 'IRON WALL', stamp: 'OPERATION: SIEGE BREAKER', beats: [
-    { kind: 'radio', who: 'voss', text: 'The warlord\u2019s fortress bristles with turrets and a champion battlecruiser owns the sky above it.', wait: 4.8 },
-    { kind: 'radio', who: 'nakamura', text: 'Bring siege tanks and bring them early. We crack the wall, then we own the rubble.', wait: 4.0 },
+    { kind: 'radio', who: 'voss', vo: 'b6a', text: 'The warlord\u2019s fortress bristles with turrets and a champion battlecruiser owns the sky above it.', wait: 4.8 },
+    { kind: 'radio', who: 'nakamura', vo: 'b6b', text: 'Bring siege tanks and bring them early. We crack the wall, then we own the rubble.', wait: 4.0 },
     { kind: 'obj', text: 'SIEGE THE FORTRESS  ·  DOWN THE CHAMPION' , wait: 3.2 },
   ]},
   7: { title: 'JUDGEMENT', stamp: 'OPERATION: SKY BREAK', beats: [
-    { kind: 'radio', who: 'conclave', text: 'The Fleet of the Executor darkens your sun. Its arks judge you unworthy of orbit.', wait: 4.6 },
-    { kind: 'radio', who: 'fenix', text: 'Interceptors are children until the hangar sings. Shoot the singers. The sky falls after.', wait: 4.4 },
+    { kind: 'radio', who: 'conclave', vo: 'b7a', text: 'The Fleet of the Executor darkens your sun. Its arks judge you unworthy of orbit.', wait: 4.6 },
+    { kind: 'radio', who: 'fenix', vo: 'b7b', text: 'Interceptors are children until the hangar sings. Shoot the singers. The sky falls after.', wait: 4.4 },
     { kind: 'obj', text: 'SHOOT DOWN THE CHAMPION ARK' , wait: 3.0 },
   ]},
   8: { title: 'FINAL RECKONING', stamp: 'OPERATION: KINGSLAYER', beats: [
-    { kind: 'radio', who: 'overseer', text: 'The Mind focuses its ten thousand eyes upon your hives of metal and your small green world. It is curious how you will die.', wait: 5.6 },
-    { kind: 'radio', who: 'hal', text: 'Three minutes of everything it has. Then we put a rounds-down the throat of that Tremorclaw and end the argument.', wait: 5.2 },
+    { kind: 'radio', who: 'overseer', vo: 'b8a', text: 'The Mind focuses its ten thousand eyes upon your hives of metal and your small green world. It is curious how you will die.', wait: 5.6 },
+    { kind: 'radio', who: 'hal', vo: 'b8b', text: 'Three minutes of everything it has. Then we put a rounds-down the throat of that Tremorclaw and end the argument.', wait: 5.2 },
     { kind: 'obj', text: 'HOLD 3 MINUTES  ·  SLAY THE TREMORCLAW CHAMPION' , wait: 3.4 },
   ]},
   9: { title: 'GHOST PROTOCOL', stamp: 'OPERATION: SILENT KNIFE', beats: [
-    { kind: 'radio', who: 'voss', text: 'Ghost operatives hit our supply lines at three installations last night. No bodies. No trace. No survivors.', wait: 4.8 },
-    { kind: 'radio', who: 'kate', text: 'Keep detection coverage on every convoy lane and stagger the moves. You can\u2019t shoot what you can\u2019t see.', wait: 4.8 },
+    { kind: 'radio', who: 'voss', vo: 'b9a', text: 'Ghost operatives hit our supply lines at three installations last night. No bodies. No trace. No survivors.', wait: 4.8 },
+    { kind: 'radio', who: 'kate', vo: 'b9b', text: 'Keep detection coverage on every convoy lane and stagger the moves. You can\u2019t shoot what you can\u2019t see.', wait: 4.8 },
     { kind: 'obj', text: 'HOLD 3 MINUTES  ·  PURGE THE SECTOR' , wait: 3.2 },
   ]},
   10: { title: 'HIVE CROWN ASCENDANT', stamp: 'OPERATION: FINAL BELL', beats: [
-    { kind: 'radio', who: 'overseer', text: 'You have taken broods from me. You have salted my blight. Tonight the debt comes due in fang and acid.', wait: 5.2 },
-    { kind: 'radio', who: 'hal', text: 'Last ride, folks. Everything we\u2019ve got, straight down the middle. Nobody gets left behind.', wait: 4.6 },
+    { kind: 'radio', who: 'overseer', vo: 'b10a', text: 'You have taken broods from me. You have salted my blight. Tonight the debt comes due in fang and acid.', wait: 5.2 },
+    { kind: 'radio', who: 'hal', vo: 'b10b', text: 'Last ride, folks. Everything we\u2019ve got, straight down the middle. Nobody gets left behind.', wait: 4.6 },
     { kind: 'obj', text: 'SURVIVE THE SWARM  ·  KILL THE CHAMPION' , wait: 3.4 },
   ]},
 };

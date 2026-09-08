@@ -192,6 +192,7 @@ export class CutScene extends Phaser.Scene {
     const cursor = this.add.rectangle(bx + 62, by + 37, 7, 12, sp.color ? col : 0xffffff, 0.9).setOrigin(0, 0.5).setDepth(41);
     this.tweens.add({ targets: cursor, alpha: 0, duration: 380, yoyo: true, repeat: -1 });
     // typewriter paces with the real voice clip when available
+    if (voKey && !cin.isReady(voKey)) { try { cin.ensure(voKey); } catch (e) {} }
     const vReady = voKey && cin.isReady(voKey);
     const vDur = vReady ? cin.durationOf(voKey) : 0;
     let ci = 0;

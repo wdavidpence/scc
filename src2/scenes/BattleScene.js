@@ -633,7 +633,7 @@ export class BattleScene extends Phaser.Scene {
   armUltimate() {
     if (!this.ultReady()) {
       this.events.emit('hud:alert', `ULTIMATE CHARGING ${Math.floor(this.ultimateEnergy)}%`);
-      this.audio?.error();
+      this.audio?.announcer?.('energy');
       return;
     }
     this.ultMode = this.ultKind();
@@ -1476,8 +1476,8 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- SC1: scanner sweep (T + click) ----------------
   scannerSweep(x, y) {
-    if (this._scanCd > 0) { this.events.emit('hud:alert', `SCANNER RECHARGING ${Math.ceil(this._scanCd)}s`); this.audio?.error(); return false; }
-    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.error(); return false; }
+    if (this._scanCd > 0) { this.events.emit('hud:alert', `SCANNER RECHARGING ${Math.ceil(this._scanCd)}s`); this.audio?.announcer?.('energy'); return false; }
+    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.announcer?.('tech'); return false; }
     this._scanCd = 30;
     this.audio?.psiCast?.();
     // reveal a radius for 8 seconds via a temp stamp on `seen` + temp vision marker
@@ -1950,7 +1950,7 @@ export class BattleScene extends Phaser.Scene {
         this.selectBuilding(b);
         return;
       }
-      if (b && this.hotseat && b.team !== (this.activeTeam ?? 0)) { this.audio?.error(); this.events.emit('hud:alert', `NOT YOUR STRUCTURE — COMMANDER ${String.fromCharCode(65 + (this.activeTeam ?? 0))} ONLY`); return; }
+      if (b && this.hotseat && b.team !== (this.activeTeam ?? 0)) { this.audio?.announcer?.('nocrew'); this.events.emit('hud:alert', `NOT YOUR STRUCTURE — COMMANDER ${String.fromCharCode(65 + (this.activeTeam ?? 0))} ONLY`); return; }
       // v2.34 L5: SC1 zero-latency selection — own units ack instantly on button-down, not on release
       let ub = null, ubd = 14;
       for (const u2 of this.units) { if (u2.team !== (this.activeTeam ?? 0) || u2.dead) continue; const d = Math.hypot(u2.x - wp0.x, u2.y - wp0.y); if (d < ubd) { ubd = d; ub = u2; } }
@@ -2149,7 +2149,7 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:caustic', () => this.armCausticCast());
     this.events.on('hud:castStorm', () => {
       const casters = [...this.selection].filter(u => u.def.castAbility === 'storm' && u.energy >= 75);
-      if (!casters.length) { this.events.emit('hud:alert', 'PSI STORM: NEED 75 ENERGY'); this.audio?.error(); return; }
+      if (!casters.length) { this.events.emit('hud:alert', 'PSI STORM: NEED 75 ENERGY'); this.audio?.announcer?.('energy'); return; }
       // AAA: targeted cast — arm the storm, click where the psi blade should fall
       this.castMode = 'storm';
       this._castArmTime = this.gameTime;
@@ -2586,7 +2586,7 @@ export class BattleScene extends Phaser.Scene {
       u.sprite.setAlpha(u.cloaked ? 0.22 : 1);
       u._uncloakT = u.cloaked ? 0 : 2;
     }
-    if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT NIGHTBLADES'); this.audio?.error(); return; }
+    if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT NIGHTBLADES'); this.audio?.announcer?.('nocrew'); return; }
     this.audio?.psiCast?.() ; this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.cloaked) ? 'CLOAKED' : 'DECLOAKED');
   }
 
@@ -2606,9 +2606,9 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- SC1: radiant convergence, aerie morphs, void/caustic casts ----------------
   summonRadiant(darkKind = 'radiant') {
     const techGate = darkKind === 'umbral' ? 'umbralConvergence' : null;
-    if (techGate && !this.techResearched(0, techGate)) { this.events.emit('hud:alert', 'REQUIRES CONVERGENCE RESEARCH'); this.audio?.error(); return; }
+    if (techGate && !this.techResearched(0, techGate)) { this.events.emit('hud:alert', 'REQUIRES CONVERGENCE RESEARCH'); this.audio?.announcer?.('tech'); return; }
     const dts = [...this.selection].filter(u => u.kind === 'nightblade' && !u.dead);
-    if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'radiant' ? 'CONVERGENCE: SELECT 2+ NIGHTBLADES' : 'DARK CONVERGENCE: SELECT 2+ NIGHTBLADES'); this.audio?.error(); return; }
+    if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'radiant' ? 'CONVERGENCE: SELECT 2+ NIGHTBLADES' : 'DARK CONVERGENCE: SELECT 2+ NIGHTBLADES'); this.audio?.announcer?.('nocrew'); return; }
     let merged = 0;
     const pool = [...dts];
     while (pool.length >= 2) {
@@ -2635,9 +2635,9 @@ export class BattleScene extends Phaser.Scene {
 
   morphSelected(toKind) {
     const list = [...this.selection].filter(u => u.kind === 'vexwing' && !u.dead);
-    if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT VEXWINGS`); this.audio?.error(); return; }
+    if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT VEXWINGS`); this.audio?.announcer?.('nocrew'); return; }
     const t = TECHS[toKind];
-    if (!this.techResearched(0, toKind)) { this.events.emit('hud:alert', `REQUIRES ${t?.name?.toUpperCase() || toKind.toUpperCase()} RESEARCH`); this.audio?.error(); return; }
+    if (!this.techResearched(0, toKind)) { this.events.emit('hud:alert', `REQUIRES ${t?.name?.toUpperCase() || toKind.toUpperCase()} RESEARCH`); this.audio?.announcer?.('tech'); return; }
     let done = 0;
     for (const m of list) {
       if (!this.canAfford(0, t.minerals, t.gas)) break;
@@ -2655,7 +2655,7 @@ export class BattleScene extends Phaser.Scene {
 
   armVoidCast() {
     const list = [...this.selection].filter(u => (u.kind === 'voidlance' || u.kind === 'umbral') && u.energy >= 100 && !u.dead);
-    if (!list.length) { this.events.emit('hud:alert', 'MAELSTROM: NEED 100 ENERGY AIR CASTERS'); this.audio?.error(); return; }
+    if (!list.length) { this.events.emit('hud:alert', 'MAELSTROM: NEED 100 ENERGY AIR CASTERS'); this.audio?.announcer?.('energy'); return; }
     this.castMode = 'maelstrom';
     this._castArmTime = this.gameTime;
     this.input.setDefaultCursor('crosshair');
@@ -2665,7 +2665,7 @@ export class BattleScene extends Phaser.Scene {
 
   armCausticCast() {
     const list = [...this.selection].filter(u => u.kind === 'corroder' && u.energy >= 75 && !u.dead);
-    if (!list.length) { this.events.emit('hud:alert', 'CAUSTIC MIST: NEED 75 ENERGY DEVOURERS'); this.audio?.error(); return; }
+    if (!list.length) { this.events.emit('hud:alert', 'CAUSTIC MIST: NEED 75 ENERGY DEVOURERS'); this.audio?.announcer?.('energy'); return; }
     this.castMode = 'cloud';
     this._castArmTime = this.gameTime;
     this.input.setDefaultCursor('crosshair');
@@ -2842,7 +2842,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   armScan() {
-    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.error(); return; }
+    if (!this.hasBuilding('scienceFacility', 0)) { this.events.emit('hud:alert', 'REQUIRES SCIENCE FACILITY'); this.audio?.announcer?.('tech'); return; }
     this.scanMode = true;
     this.input.setDefaultCursor('crosshair');
     this.events.emit('hud:alert', 'SCANNER: CLICK TARGET AREA');
@@ -2855,7 +2855,7 @@ export class BattleScene extends Phaser.Scene {
 
   armPatrol() {
     const list = [...this.selection].filter(u => !u.def.worker && u.def.damage > 0);
-    if (!list.length) { this.events.emit('hud:alert', 'PATROL: SELECT COMBAT UNITS'); this.audio?.error(); return; }
+    if (!list.length) { this.events.emit('hud:alert', 'PATROL: SELECT COMBAT UNITS'); this.audio?.announcer?.('nocrew'); return; }
     this.patrolMode = true;
     this._patrolAnchor = null;
     this.input.setDefaultCursor('crosshair');
@@ -2904,9 +2904,9 @@ export class BattleScene extends Phaser.Scene {
     if (!def) return;
     const T = this.activeTeam ?? 0;
     const race = this.players[T].race;
-    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.error(); return; }
+    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.announcer?.('supply'); return; }
     const workers = [...this.selection].filter(u => u.def.worker && u.team === T);
-    if (race === 'terran' && workers.length === 0) { this.audio?.error(); return; }
+    if (race === 'terran' && workers.length === 0) { this.audio?.announcer?.('nocrew'); return; }
     this.placing = { buildId };
     this.ghost = this.add.image(0, 0, this.ghostTexKey(buildId)).setDepth(501).setAlpha(0.5);
     this.ghostValid = this.add.graphics().setDepth(502);
@@ -2964,11 +2964,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   tryPlace(x, y) {
-    if (!this.isValid) { this.audio?.error(); return; }
+    if (!this.isValid) { this.audio?.announcer?.('place'); return; }
     this.cmdCount++;
     const T = this.activeTeam ?? 0;
     const def = BUILDINGS[this.placing.buildId];
-    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.error(); this.cancelPlacing(); return; }
+    if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.announcer?.('supply'); this.cancelPlacing(); return; }
     this.spend(T, def.minerals, def.gas);
     const b = new Building(this, T, this.placing.buildId, x, y, {});
     this.buildings.push(b);
@@ -2993,16 +2993,16 @@ export class BattleScene extends Phaser.Scene {
     this.cmdCount++;
     const T = this.activeTeam ?? 0;
     const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId || b.morphedTo === buildingId));
-    if (!b) { this.audio?.error(); return; }
-    if (b.queueUnit(kind)) this.audio?.queue(); else { this.audio?.error(); this.events.emit('hud:unaffordable'); }
+    if (!b) { this.audio?.announcer?.('nocrew'); return; }
+    if (b.queueUnit(kind)) this.audio?.queue(); else { this.audio?.announcer?.('supply'); this.events.emit('hud:unaffordable'); }
   }
 
   queueResearchFromHud(buildingId, techId) {
     this.cmdCount++;
     const T = this.activeTeam ?? 0;
     const b = this.buildings.find(b => b.team === T && !b.dead && (b.buildId === buildingId));
-    if (!b) { this.audio?.error(); return; }
-    if (b.queueResearch(techId)) this.audio?.queue(); else { this.audio?.error(); this.events.emit('hud:unaffordable'); }
+    if (!b) { this.audio?.announcer?.('nocrew'); return; }
+    if (b.queueResearch(techId)) this.audio?.queue(); else { this.audio?.announcer?.('supply'); this.events.emit('hud:unaffordable'); }
   }
 
   handleHudCommand(action) {
@@ -3029,6 +3029,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // edge pan + WASD with SC-feel acceleration/inertia
+    // v2.35 gap 89: idle-unit chatter when the army sits calm
+    if (this.selection && this.selection.size && (this.audio?._intensity || 0) === 0) this.audio?.idleChatter?.();
     const cam = this.cameras.main;
     if (this.hotseat && this.cam2 && this.cam2.zoom !== cam.zoom) this.cam2.setZoom(cam.zoom);
     const maxPan = 620 / cam.zoom;
@@ -3453,8 +3455,7 @@ export class BattleScene extends Phaser.Scene {
     if (blockedProducers.length && !pMine._supAlertShown) {
       pMine._supAlertShown = true;
       this.events.emit('hud:alert', this.race === 'skarn' ? 'NEED MORE SKYWARDENS' : 'SUPPLY BLOCKED');
-      this.audio?.error();
-      this.audio?.adminBark();
+      this.audio?.announcer?.('supply');
       this.time.delayedCall(15000, () => { pMine._supAlertShown = false; });
     }
     if (idleWorkers >= 2 && !pMine._idleAlertShown) {
@@ -3641,6 +3642,8 @@ export class BattleScene extends Phaser.Scene {
     // attach debrief line for the game-over board
     const n = this.campMissionNum();
     this.debriefLine = (result === 'victory' ? DEBRIEFS_WIN[n] : DEBRIEFS_LOSE[n]) || null;
+    // v2.35: voiced debrief line
+    if (this.debriefLine) { try { this.audio._lastBark = 0; } catch (e) {} this.audio?.bark?.(this.debriefLine, result === 'victory' ? 0.8 : 0.6, 0.92); }
     this.events.emit('hud:gameover', result);
   }
 

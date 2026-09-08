@@ -5,14 +5,30 @@
   "select": 2,
   "build": 2,
   "move": 4,
-  "attack": 4
+  "attack": 4,
+  "err_supply": 2,
+  "err_tech": 2,
+  "err_place": 2,
+  "err_energy": 2,
+  "err_nocrew": 2,
+  "underattack": 2,
+  "select2": 2,
+  "select3": 2
  },
  "skarn": {
   "ready": 2,
   "select": 1,
   "build": 1,
   "move": 3,
-  "attack": 3
+  "attack": 3,
+  "err_supply": 2,
+  "err_tech": 2,
+  "err_place": 2,
+  "err_energy": 2,
+  "err_nocrew": 2,
+  "underattack": 2,
+  "select2": 2,
+  "select3": 2
  },
  "auraxis": {
   "ready": 2,
@@ -20,6 +36,14 @@
   "select": 1,
   "build": 1,
   "move": 3,
-  "attack": 3
+  "attack": 3,
+  "err_supply": 2,
+  "err_tech": 2,
+  "err_place": 2,
+  "err_energy": 2,
+  "err_nocrew": 2,
+  "underattack": 2,
+  "select2": 2,
+  "select3": 2
  }
 }
