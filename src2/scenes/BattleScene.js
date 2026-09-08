@@ -6,6 +6,7 @@ import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
+import { createBuildingsAAA } from '../engine/art3d.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
@@ -136,6 +137,7 @@ export class BattleScene extends Phaser.Scene {
     this.spatial = new SpatialHash(28);
 
     createAllTextures(this);
+    try { createBuildingsAAA(this); } catch (e) { console.warn('AAA buildings fallback', String(e)); }
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
     this.flows.nav = this.nav;
