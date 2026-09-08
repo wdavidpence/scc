@@ -13,8 +13,8 @@ export function effectiveDamage(attacker, target) {
   const mult = SIZE_MULT[attacker.def.attackType]?.[target.def.size] ?? 1;
   const armor = target.def.armor + (target.bonusArmor || 0);
   let dmg = (attacker.def.damage + (attacker.bonusDamage || 0)) * mult - armor;
-  // SC1 high ground: attacker standing on higher terrain gets +2 damage bonus
-  if (attacker.world?.elevAt && attacker.team === 0 && attacker.world.elevAt(attacker.x, attacker.y) > attacker.world.elevAt(target.x, target.y)) dmg += 2;
+  // v2.34 SC1 high ground: ANY attacker standing on higher terrain gets +2 damage bonus (was team-0 only)
+  if (attacker.world?.elevAt && attacker.world.elevAt(attacker.x, attacker.y) > attacker.world.elevAt(target.x, target.y)) dmg += 2;
   return Math.max(1, Math.round(dmg));
 }
 
@@ -60,7 +60,8 @@ export class Unit {
     this.hpBar = world.add.graphics();
     this.container.add([this.shadow || [], this.sprite, this.hpBar].flat());
     this.selected = false;
-    this.radius = 8;
+    // v2.34 L2: true collision radius per body size (sub-tile), was flat 8 for everyone
+    this.radius = this.def.size === 'large' ? 11 : this.def.size === 'medium' ? 9 : 7;
     this.stunTimer = 0;
     this.dead = false;
     this.animT = Math.random() * 10;
@@ -251,6 +252,14 @@ export class Unit {
   }
 
   // rotate/facing: full rotation toward movement/attack vector + squash so troops look oriented
+  // v2.34 L10: snap facing to 8 cardinal/intercardinal dirs for infantry (SC1 sprite dirs), track last dir
+  face8(dx, dy) {
+    if (dx === 0 && dy === 0) return;
+    const a = Math.atan2(dy, dx);
+    this._facing8 = Math.round(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
+    this.face(dx, dy);
+  }
+
   face(dx, dy) {
     if (dx === 0 && dy === 0) return;
     if (this.def.flying || this.def.size === 'large' || ['tank', 'duster', 'wraith', 'battlecruiser', 'ark', 'skywarden', 'ballista', 'dropship'].includes(this.kind)) {
@@ -468,11 +477,15 @@ export class Unit {
       return;
     }
     if (this.inWeaponRange(target)) {
-      // face target & fire
-      this.sprite.setFlipX(target.x < this.x);
-      if (this.attackTimer <= 0 && !this.firingVolley) {
-        this.fireAt(target);
+      // v2.34 L10: wind-up window (punishable, SC1 shot delay), then fire; 8-dir facing tracked
+      this.face8(target.x - this.x, target.y - this.y);
+      if (this._windupT > 0) {
+        this._windupT -= dt;
+        if (this._windupT <= 0 && this.inWeaponRange(target)) this.fireAt(target);
+      } else if (this.attackTimer <= 0 && !this.firingVolley) {
         this.attackTimer = this.def.cooldown * (this.sieged ? (this.def.siege ? this.def.siege.cooldown / this.def.cooldown : 1) : 1);
+        this._windupT = this.def.windup || (this.def.size === 'large' ? 0.22 : 0.12);
+        if (!this.def.flying) this.sprite.setScale((this.baseScale || 1) * (this._windupT > 0.15 ? 0.93 : 0.97));
       }
     } else {
       if (this.sieged) { this.unsiege(); return; } // must unsiege to move
@@ -770,6 +783,10 @@ export class Unit {
     }
     this.hp -= amount;
     this.sprite.setTint(0xffffff);
+    // v2.34 L6: SC1 retaliation — an idle unit shot by a visible attacker auto-acquires return fire
+    if (!this.dead && attacker && !attacker.dead && this.def.damage > 0 && !this.def.worker && !this.order && !this.target && !this.burrowed && !this.cloaked && this.world.isVisible && this.world.isVisible(attacker.x, attacker.y)) {
+      this.setOrder({ type: 'attackTarget', target: attacker });
+    }
     // v2.26 polish: flinch on every hit; glass-shatter when the last shield point breaks
     this.world.polish?.flinch(this);
     if (wasShielded && this.shield <= 0) this.world.polish?.shieldBreak(this);

@@ -1019,7 +1019,8 @@ export class BattleScene extends Phaser.Scene {
       // hot-seat: both commanders' units contribute vision (shared screen)
       if (!this.hotseat && u.team !== 0 && (u.cloaked || u.burrowed)) continue;
       if (this.hotseat && u.cloaked) continue;
-      stamp(u.x, u.y, (u.cloaked || u.burrowed) ? 1 : u.def.sight);
+      const elevSight = (!u.flying && this.elevAt && this.elevAt(u.x, u.y)) ? 2 : 0; // v2.34 L9: high ground +2 sight
+      stamp(u.x, u.y, (u.cloaked || u.burrowed) ? 1 : u.def.sight + elevSight);
     }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
     const softCut = (ctx, cx, cy, r) => {
@@ -1603,6 +1604,7 @@ export class BattleScene extends Phaser.Scene {
 
   onBuildingDeath(b) {
     this.buildings = this.buildings.filter(x => x !== b);
+    this.flows?.invalidateNear(b.x, b.y); // v2.34 L1: raze opens paths — stale fields would route armies into ghost walls
     this.shake(b.def.primary ? 12 : 7, 0.5);
     // v2.26: permanent scorch under razed structures (fades over 30s)
     this.polish?.registerCorpse(b.x, b.y, true, 0x241a12);
@@ -1640,6 +1642,7 @@ export class BattleScene extends Phaser.Scene {
 
   onBuildingComplete(b) {
     this.players[b.team].supplyCap = this.computeSupplyCap(b.team);
+    this.flows?.invalidateNear(b.x, b.y); // v2.34 L1: new blocker — rebuild integrator fields around it
     if (b.def.onGeyser) {
       // attach to geyser
       const g = this.geysers.find(g => Math.hypot(g.x - b.x, g.y - b.y) < TILE * 2.2 && !g.building);
@@ -1931,6 +1934,14 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       if (b && this.hotseat && b.team !== (this.activeTeam ?? 0)) { this.audio?.error(); this.events.emit('hud:alert', `NOT YOUR STRUCTURE — COMMANDER ${String.fromCharCode(65 + (this.activeTeam ?? 0))} ONLY`); return; }
+      // v2.34 L5: SC1 zero-latency selection — own units ack instantly on button-down, not on release
+      let ub = null, ubd = 14;
+      for (const u2 of this.units) { if (u2.team !== (this.activeTeam ?? 0) || u2.dead) continue; const d = Math.hypot(u2.x - wp0.x, u2.y - wp0.y); if (d < ubd) { ubd = d; ub = u2; } }
+      if (ub && ub.team === (this.activeTeam ?? 0) && !ub.def.worker) {
+        if (!p.shiftKey) this.clearSelection();
+        this.addToSelection(ub);
+        this.audio?.select?.();
+      }
       this.dragStart = (this.hotseat && this.cam2) ? { x: p.x, y: p.y, screen: true } : wp0;
       this.dragMoved = false;
     });
@@ -2156,7 +2167,8 @@ export class BattleScene extends Phaser.Scene {
       if (d < bd) { bd = d; found = u; }
     }
       if (found) {
-      if (!additive) this.clearSelection();
+      if (!additive && !this.selection.has(found)) this.clearSelection();
+      if (this.selection.has(found)) return; // v2.34 L5: button-down already acked this unit — don't double-bark
       this.addToSelection(found);
       this.audio?.select();
       this.audio?.selectBark([found.kind]);
