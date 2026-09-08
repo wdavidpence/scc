@@ -557,14 +557,50 @@ function createBuildingTextures(scene) {
     const col = team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
     const dark = team === 0 ? '#1d3a63' : team === 1 ? '#6e3512' : '#5b3f9e';
 
-    // command center 5x4 tiles
+    // command center 5x4 tiles — extruded pseudo-3D command bunker
     makeTex(scene, 'b-commandCenter-t0', 5 * T, 4 * T, (ctx) => {
       const w = 5 * T, h = 4 * T;
-      drawPanel(ctx, w, h, '#5b6675', '#2e343c', '#6d798a', col);
-      px(ctx, 24, 24, w - 60, 20, '#39424e'); // landing pad
-      px(ctx, 26, 26, w - 64, 16, '#20262d');
-      px(ctx, 6, 6, w - 12, 3, '#8fa2ff'); // glow strip
-      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 4, 8, 0, 7); ctx.fill();
+      const sunlit = '#7d8ea3', mid = '#57626f', dark = '#2c333b', deeper = '#1a1f26';
+      // ground apron + ambient occlusion rim
+      px(ctx, 0, 0, w, h, 'rgba(0,0,0,0)');
+      ctx.fillStyle = 'rgba(8,10,14,0.55)';
+      ctx.beginPath(); ctx.ellipse(w / 2, h - 7, w / 2 - 4, 7, 0, 0, 7); ctx.fill();
+      // landing apron (front, lighter concrete with hazard chevrons)
+      px(ctx, 8, h - 18, w - 16, 14, '#49525c');
+      px(ctx, 8, h - 18, w - 16, 2, '#5c6771');
+      for (let i = 0; i < 5; i++) px(ctx, 12 + i * 12, h - 14, 8, 2, (i % 2 ? '#d9c26a' : '#20262d'));
+      px(ctx, w / 2 - 5, h - 13, 3, 7, '#dfe6ee'); px(ctx, w / 2 + 2, h - 13, 3, 7, '#dfe6ee'); px(ctx, w / 2 - 2, h - 11, 4, 3, '#dfe6ee'); // pad H
+      // main bunker block: front wall (mid), top deck (sunlit), SE side (dark)
+      px(ctx, 10, 22, w - 20, h - 40, mid);                        // front wall
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(w - 10, 22); ctx.lineTo(w - 4, 18); ctx.lineTo(w - 4, h - 22); ctx.lineTo(w - 10, h - 18); ctx.closePath(); ctx.fill(); // SE wall sliver
+      px(ctx, 10, 18, w - 20, 5, sunlit);                          // deck lip
+      px(ctx, 10, 22, w - 20, 2, darker(sunlit, 0.25));             // deck shadow line
+      // armored buttresses on front wall
+      for (let i = 0; i < 4; i++) px(ctx, 14 + i * 18, 24, 4, h - 44, darker(mid, 0.3));
+      // glowing bay windows (team lit)
+      for (let i = 0; i < 6; i++) px(ctx, 16 + i * 10, 30, 5, 3, col);
+      px(ctx, 14, 36, w - 28, 2, darker(mid, 0.45));                // wall seam
+      // central command tower stack (two tiers, sunlit crowns)
+      px(ctx, w / 2 - 16, 10, 32, 14, mid);
+      px(ctx, w / 2 - 16, 8, 32, 3, sunlit);
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(w / 2 + 16, 10); ctx.lineTo(w / 2 + 20, 7); ctx.lineTo(w / 2 + 20, 21); ctx.lineTo(w / 2 + 16, 24); ctx.closePath(); ctx.fill();
+      px(ctx, w / 2 - 12, 2, 24, 7, '#67727f');                     // upper bridge
+      px(ctx, w / 2 - 12, 0, 24, 2, sunlit);                        // bridge crown
+      // glass bridge band with pilot silhouettes implied by bright windows
+      for (let i = 0; i < 5; i++) px(ctx, w / 2 - 10 + i * 4.4, 4, 3, 3, 'rgba(143,210,255,0.9)');
+      // radar dome (sphere shading: bright NW -> dark SE)
+      const dg = ctx.createRadialGradient(w / 2 - 3, h / 2 - 12, 1, w / 2, h / 2 - 9, 8);
+      dg.addColorStop(0, '#c9d6e6'); dg.addColorStop(0.55, '#8593a5'); dg.addColorStop(1, '#39424e');
+      ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 9, 7.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = darker(col, 0.1); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(w / 2, h / 2 - 9, 7.5, Math.PI * 0.9, Math.PI * 1.6); ctx.stroke();
+      px(ctx, w / 2 - 1, h / 2 - 19, 2, 4, '#b8c6d8');             // antenna mast
+      px(ctx, w / 2 - 2, h / 2 - 20, 4, 1, col);                    // beacon
+      // exhaust stacks w/ warm inner glow
+      px(ctx, 12, 14, 4, 8, dark); px(ctx, 12, 14, 4, 2, '#3a4450'); px(ctx, 13, 15, 2, 2, '#ff9c3c');
+      px(ctx, w - 16, 14, 4, 8, dark); px(ctx, w - 16, 14, 4, 2, '#3a4450'); px(ctx, w - 15, 15, 2, 2, '#ff9c3c');
+      // team stripe across the front + bottom AO
+      px(ctx, 10, h - 22, w - 20, 2, col);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(10, h - 20, w - 20, 2);
     });
     // broodNest 4x4
     makeTex(scene, 'b-broodNest-t1', 4 * T, 4 * T, (ctx) => {
