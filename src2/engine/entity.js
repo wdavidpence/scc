@@ -783,8 +783,8 @@ export class Unit {
     }
     this.hp -= amount;
     this.sprite.setTint(0xffffff);
-    // v2.34 L6: SC1 retaliation — an idle unit shot by a visible attacker auto-acquires return fire
-    if (!this.dead && attacker && !attacker.dead && this.def.damage > 0 && !this.def.worker && !this.order && !this.target && !this.burrowed && !this.cloaked && this.world.isVisible && this.world.isVisible(attacker.x, attacker.y)) {
+    // v2.34 L6: SC1 retaliation — an idle unit shot by a currently-visible attacker auto-acquires return fire
+    if (!this.dead && attacker && !attacker.dead && this.def.damage > 0 && !this.def.worker && !this.order && !this.target && !this.burrowed && !this.cloaked && this.world.currentlyVisible && this.world.currentlyVisible(attacker.x, attacker.y)) {
       this.setOrder({ type: 'attackTarget', target: attacker });
     }
     // v2.26 polish: flinch on every hit; glass-shatter when the last shield point breaks

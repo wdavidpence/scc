@@ -1083,6 +1083,23 @@ export class BattleScene extends Phaser.Scene {
 
   // per-fog-tick: enemy stealth sprites — cloaked/burrowed hostiles invisible unless detected
   updateStealthVisibility() {
+    // v2.34 L4: SC1 fog memory for structures — enemy buildings seen before go grayscale
+    // silhouettes when vision is lost (SC1 stale intel), full color while spotted.
+    for (const bl of this.buildings) {
+      if (bl.dead || bl.team === 0) continue;
+      if (this.hotseat) continue;
+      const seenT = bl.lastSeenIntel || 0;
+      if (this.currentlyVisible(bl.x, bl.y)) {
+        bl.lastSeenIntel = this.gameTime;
+        bl._memorized = true;
+        bl.sprite.clearTint(); bl.sprite.setAlpha(bl.built ? 1 : 0.6);
+      } else if (bl._memorized || this.seen[this.nav.idx(Math.floor(bl.x / TILE), Math.floor(bl.y / TILE))]) {
+        bl._memorized = true;
+        const age = Math.max(0, this.gameTime - (seenT || 0));
+        const a = Math.max(0.42, 0.72 - Math.min(0.3, age / 90)); // fresh memory brighter, stale fades
+        bl.sprite.setTintFill(0x76839a); bl.sprite.setAlpha(a);
+      }
+    }
     for (const u of this.units) {
       if (u.dead || u.team === 0) continue;
       const detected = this.detectedAt(u.x, u.y);
