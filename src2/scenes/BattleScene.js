@@ -512,7 +512,7 @@ export class BattleScene extends Phaser.Scene {
     else if (d < 0.55) night = (d - 0.4) / 0.15;
     else if (d < 0.85) night = 1;
     else night = 1 - (d - 0.85) / 0.15;
-    const nightAlpha = night * 0.32;
+    const nightAlpha = night * 0.22;
     this.tintRect.setAlpha(nightAlpha);
     const dusk = (d >= 0.35 && d < 0.6) ? 1 : 0;
     this.tintRect.fillColor = dusk && nightAlpha > 0 ? 0x2a1a40 : 0x0a1230;
@@ -803,7 +803,7 @@ export class BattleScene extends Phaser.Scene {
       for (let tx = 0; tx < MAP_W; tx++) {
         const v = (Math.sin(tx * 12.9898 + ty * 78.233) * 43758.5453) % 1;
         const pick = Math.abs(v);
-        const cols = pick < 0.25 ? ['#1d2b1f', '#233524', '#2b4030'] : pick < 0.5 ? ['#202d1e', '#283625', '#31422e'] : pick < 0.75 ? ['#252a1c', '#2d3222', '#39412c'] : ['#1c2820', '#22302a', '#2c3e35'];
+        const cols = pick < 0.25 ? ['#2e4632', '#375438', '#41633f'] : pick < 0.5 ? ['#334730', '#3d5437', '#496343'] : pick < 0.75 ? ['#3a422c', '#454e34', '#525e3f'] : ['#2c4232', '#354e3e', '#41604c'];
         gx.fillStyle = cols[0]; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
         for (let i = 0; i < 5; i++) {
           gx.fillStyle = rnd() < 0.5 ? cols[1] : cols[2];
@@ -964,7 +964,7 @@ export class BattleScene extends Phaser.Scene {
     this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W, MAP_H);
     this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
-    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.72);
+    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.55);
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
     this._eventPings = []; // minimap event pings {x,y,t,color,big}
@@ -995,8 +995,8 @@ export class BattleScene extends Phaser.Scene {
         if (!this.seen[i]) continue;
         const ls = this.lastSeen[i] || 0;
         const age = Math.max(0, this.gameTime - ls);
-        const a = Math.min(1, 0.25 + (age / 40) * 0.75);
-        visCtx.fillStyle = `rgba(108,116,134,${a.toFixed(2)})`;
+        const a = Math.min(0.62, 0.18 + (age / 40) * 0.44);
+        visCtx.fillStyle = `rgba(150,158,176,${a.toFixed(2)})`;
         visCtx.fillRect(tx, ty, 1, 1);
       }
     }

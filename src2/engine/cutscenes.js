@@ -23,22 +23,26 @@ export const SPEAKERS = {
 };
 
 // ---- Opening cinematic: cold open from the victims' POV, then title ----
+// v2.30: fully voiced — each radio beat carries a pre-baked Edge-TTS clip
+// (vo/intro/*.mp3) and its wait auto-extends to the voice duration.
 export const INTRO_SCRIPT = [
-  { kind: 'scene', art: 'wreckage', wait: 3.2 },
-  { kind: 'radio', who: 'jem', text: '…salvage rights are salvaged rights, Joey Ray. Look at this hull. That blast came from the *inside*.', wait: 4.2 },
-  { kind: 'radio', who: 'joey', text: 'Inside? Nothing blows a freighter apart from the inside except a reactor.', wait: 3.4 },
-  { kind: 'radio', who: 'jem', text: 'And what does this scar look like to you? Melted. One clean stroke. Nothing in our book cuts like that.', wait: 4.6 },
+  { kind: 'static', wait: 0.9 },
+  { kind: 'scene', art: 'wreckage', wait: 3.4 },
+  { kind: 'radio', who: 'jem', vo: 'jem1', text: '…salvage rights are salvaged rights, Joey Ray. Look at this hull. That blast came from the *inside*.', wait: 7.3 },
+  { kind: 'radio', who: 'joey', vo: 'joey1', text: 'Inside? Nothing blows a freighter apart from the inside except a reactor.', wait: 5.1 },
+  { kind: 'radio', who: 'jem', vo: 'jem2', text: 'And this scar? Melted. One clean stroke. Nothing in our book cuts like that.', wait: 6.1 },
   { kind: 'fx', fx: 'radar', color: '#4ea1ff', text: 'PROXIMITY ALERT — UNREGISTERED CONTACT', wait: 1.6 },
-  { kind: 'radio', who: 'joey', text: 'Sensor ping. Big. Coming about to—', wait: 2.2 },
+  { kind: 'radio', who: 'joey', vo: 'joey2', text: 'Sensor ping. Big. Coming about to—', wait: 3.7 },
   { kind: 'scene', art: 'alien', wait: 2.6 },
-  { kind: 'radio', who: 'jem', text: 'Cut the lights! Cut everything, now—', wait: 2.4 },
-  { kind: 'fx', fx: 'burn', color: '#a78bfa', wait: 2.8 },
-  { kind: 'static', wait: 1.1 },
-  { kind: 'scene', art: 'title', wait: 3.4 },
-  { kind: 'radio', who: 'control', text: 'Koprulu Sector Watch Log, entry one-four-four… Chau Sara has gone dark. All forty-two thousand souls.', wait: 5.0 },
-  { kind: 'radio', who: 'control', text: 'Whatever did this is already moving sunward. It is moving toward *us*.', wait: 4.4 },
-  { kind: 'scene', art: 'armada', wait: 3.2 },
-  { kind: 'card', text: 'THEY CAME WITHOUT WARNING.', wait: 2.6 },
+  { kind: 'radio', who: 'jem', vo: 'jem3', text: 'Cut the lights! Cut everything, now—', wait: 3.3 },
+  { kind: 'fx', fx: 'burn', color: '#a78bfa', wait: 2.6 },
+  { kind: 'static', wait: 0.9 },
+  { kind: 'scene', art: 'title', wait: 3.2 },
+  { kind: 'radio', who: 'control', vo: 'control1', text: 'Koprulu Sector Watch Log, entry one-four-four… Chau Sara has gone dark. All forty-two thousand souls.', wait: 9.5 },
+  { kind: 'radio', who: 'control', vo: 'control2', text: 'Whatever did this is already moving sunward. It is moving toward *us*.', wait: 6.1 },
+  { kind: 'scene', art: 'armada', wait: 3.4 },
+  { kind: 'card', text: 'THEY CAME WITHOUT WARNING.', vo: 'card1', wait: 2.8 },
+  { kind: 'fx', fx: 'jump', color: '#cfe4ff', wait: 1.2 },
 ];
 
 // ---- Per-mission briefings (radio dialogue + objective stamp) ----

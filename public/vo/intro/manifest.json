@@ -1,0 +1,42 @@
+{
+ "jem1": {
+  "who": "jem",
+  "dur": 6.7,
+  "size": 40176
+ },
+ "joey1": {
+  "who": "joey",
+  "dur": 4.54,
+  "size": 27216
+ },
+ "jem2": {
+  "who": "jem",
+  "dur": 5.59,
+  "size": 33552
+ },
+ "joey2": {
+  "who": "joey",
+  "dur": 3.29,
+  "size": 19728
+ },
+ "jem3": {
+  "who": "jem",
+  "dur": 2.88,
+  "size": 17280
+ },
+ "control1": {
+  "who": "control",
+  "dur": 8.95,
+  "size": 53712
+ },
+ "control2": {
+  "who": "control",
+  "dur": 5.54,
+  "size": 33264
+ },
+ "card1": {
+  "who": "control",
+  "dur": 2.26,
+  "size": 13536
+ }
+}
