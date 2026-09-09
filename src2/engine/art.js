@@ -741,13 +741,38 @@ function createFx(scene) {
     ctx.fillStyle = 'rgba(140,200,255,0.5)'; ctx.fillRect(8, 10, 2, 2); ctx.fillRect(15, 14, 2, 2); ctx.fillRect(12, 17, 3, 1); // ionized residue
     ctx.fillStyle = 'rgba(30,40,60,0.5)'; ctx.beginPath(); ctx.ellipse(13, 12, 5, 3, 0.9, 0, 7); ctx.fill();
   });
-  // burning wreckage for dead structures
+  // burning wreckage for dead structures — v2.35b: fresh burning stage
   makeTex(scene, 'rubble', 40, 40, (ctx) => {
     ctx.fillStyle = 'rgba(24,22,20,0.85)';
     ctx.beginPath(); ctx.moveTo(4, 30); ctx.lineTo(12, 12); ctx.lineTo(20, 22); ctx.lineTo(28, 8); ctx.lineTo(36, 28); ctx.lineTo(30, 34); ctx.lineTo(10, 34); ctx.closePath(); ctx.fill();
     ctx.fillStyle = 'rgba(50,44,38,0.8)'; ctx.fillRect(9, 22, 8, 6); ctx.fillRect(22, 18, 9, 8);
     ctx.fillStyle = 'rgba(255,140,60,0.7)'; ctx.fillRect(13, 20, 3, 3); ctx.fillRect(26, 16, 2, 3);
     ctx.fillStyle = 'rgba(255,210,120,0.8)'; ctx.fillRect(14, 21, 1, 1); ctx.fillRect(26, 17, 1, 1);
+  });
+  // v2.35b gap 94: wreckage stage 1 — blackened twisted frame still fully alight
+  makeTex(scene, 'rubble-fresh', 40, 40, (ctx) => {
+    ctx.fillStyle = 'rgba(16,13,10,0.92)';
+    ctx.beginPath(); ctx.moveTo(3, 32); ctx.lineTo(9, 10); ctx.lineTo(15, 20); ctx.lineTo(21, 6); ctx.lineTo(27, 18); ctx.lineTo(33, 9); ctx.lineTo(37, 30); ctx.lineTo(30, 36); ctx.lineTo(8, 36); ctx.closePath(); ctx.fill();
+    // hot core flames
+    ctx.fillStyle = 'rgba(255,120,30,0.85)'; ctx.fillRect(8, 18, 6, 8); ctx.fillRect(18, 14, 7, 10); ctx.fillRect(28, 20, 5, 6);
+    ctx.fillStyle = 'rgba(255,190,80,0.9)'; ctx.fillRect(10, 20, 3, 4); ctx.fillRect(20, 16, 3, 5); ctx.fillRect(29, 22, 2, 3);
+    ctx.fillStyle = 'rgba(255,240,170,0.95)'; ctx.fillRect(11, 22, 1, 2); ctx.fillRect(21, 18, 1, 2);
+    // glowing beam tips
+    ctx.fillStyle = 'rgba(255,150,50,0.6)'; ctx.fillRect(9, 10, 2, 3); ctx.fillRect(21, 6, 2, 3); ctx.fillRect(33, 9, 2, 3);
+  });
+  // v2.35b gap 94: stage 3 — cold gray ash after the fire dies
+  makeTex(scene, 'rubble-ash', 40, 40, (ctx) => {
+    ctx.fillStyle = 'rgba(58,58,62,0.8)';
+    ctx.beginPath(); ctx.moveTo(4, 31); ctx.lineTo(11, 13); ctx.lineTo(19, 23); ctx.lineTo(27, 10); ctx.lineTo(36, 29); ctx.lineTo(29, 35); ctx.lineTo(9, 35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(92,92,98,0.7)'; ctx.fillRect(10, 24, 7, 5); ctx.fillRect(23, 20, 8, 7);
+    ctx.fillStyle = 'rgba(130,130,138,0.5)'; ctx.fillRect(12, 25, 3, 2); ctx.fillRect(25, 22, 3, 2);
+    ctx.fillStyle = 'rgba(30,30,34,0.6)'; ctx.fillRect(8, 33, 24, 2); // settled ash line
+  });
+  // v2.35b gap 94: rising smoke puff
+  makeTex(scene, 'smoke', 16, 16, (ctx) => {
+    const g = ctx.createRadialGradient(8, 8, 1, 8, 8, 8);
+    g.addColorStop(0, 'rgba(90,90,96,0.55)'); g.addColorStop(0.6, 'rgba(60,60,66,0.30)'); g.addColorStop(1, 'rgba(40,40,46,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(8, 8, 8, 0, 7); ctx.fill();
   });
   // power-up crate (SC1 pickups)
   makeTex(scene, 'crate', 14, 14, (ctx) => {

@@ -364,8 +364,16 @@ export class HudScene extends Phaser.Scene {
     const T = b?.hotseat ? (b.activeTeam ?? 0) : 0;
     const race = b?.hotseat ? b.players[T].race : this.race;
     this._lastSelInfo = info;
+    // v2.35b: any non-unit selection clears busts (deselect or building)
+    if (!info?.building && !(info?.count > 0)) {
+      if (this._busts) { for (const s of this._busts) s.destroy(); this._busts = []; }
+      this._selUnits = null;
+    }
     if (info?.building) {
       const sel = info.building;
+      // v2.35b: building selected — clear unit busts
+      if (this._busts) { for (const s of this._busts) s.destroy(); this._busts = []; }
+      this._selUnits = null;
       if (this._cardTabBld !== sel.buildId) { this._cardTab = 'train'; this._cardTabBld = sel.buildId; }
       this.cardTitle.setText(sel.name.toUpperCase());
       this.selText.setText(`HP ${sel.hp}/${sel.maxHp}`);
@@ -417,7 +425,7 @@ export class HudScene extends Phaser.Scene {
       const names = info.units.slice(0, 3).map(u => `${u.name} ${u.hp}/${u.maxHp}${u.cargo ? ' +' + u.cargo : ''}`).join('  ');
       this.selText.setText(names);
       // SC1 unit-status portraits (hp/shield/energy bars + level chevrons)
-      if (!this.portraitG) this.portraitG = this.add.graphics().setScrollFactor(0);
+      if (!this.portraitG) this.portraitG = this.add.graphics().setScrollFactor(0).setDepth(152);
       this.drawPortraits(info.units, b);
       const order = RACE_INFO[race].buildingOrder.filter(bid => BUILDINGS[bid].race === race);
       const rows = workers ? order : [];
@@ -476,6 +484,9 @@ export class HudScene extends Phaser.Scene {
   drawPortraits(units, b) {
     const g = this.portraitG; if (!g) return;
     g.clear();
+    // v2.35b gap 27: destroy previous bust sprites before rebuilding
+    if (this._busts) { for (const s of this._busts) s.destroy(); }
+    this._busts = [];
     const x0 = 12, y0 = this.H - 142;
     const max = Math.min(6, (units || []).length);
     // frame
@@ -487,10 +498,31 @@ export class HudScene extends Phaser.Scene {
       const u = units[i];
       const x = x0 + i * 40, y = y0;
       g.fillStyle(0x101826, 1); g.fillRect(x, y, 36, 26);
-      // unit icon block tinted by race/team
-      g.fillStyle(0x4ea1ff, 0.9); g.fillRect(x + 12, y + 4, 12, 12);
+      // SC1: animated portrait bust — sprite cycle of the unit's walk frames
+      const team = u.team > 2 ? 2 : (u.team || 0);
+      const baseKey = `u-${u.def?.icon || u.kind}-t${team}`;
+      if (b.textures.exists(baseKey)) {
+        const sp = this.add.image(x + 18, y + 10, baseKey).setDepth(150).setScale(1.6);
+        this._busts.push({ sp, u, team, fr: 0 });
+      } else {
+        g.fillStyle(0x4ea1ff, 0.9); g.fillRect(x + 12, y + 4, 12, 12);
+      }
+    }
+    this._selUnits = units || [];
+    this._selX0 = x0; this._selY0 = y0; this._selMax = max;
+    this.drawPortraitBars();
+  }
+
+  drawPortraitBars() {
+    const g = this.portraitG; if (!g || !this._selUnits) return;
+    // redraw only the bars over the busts layer's frame
+    const x0 = this._selX0, y0 = this._selY0, max = this._selMax;
+    for (let i = 0; i < max; i++) {
+      const u = this._selUnits[i];
+      const x = x0 + i * 40, y = y0;
       // hp bar
       const hr = Math.max(0, Math.min(1, u.hp / (u.maxHp || 1)));
+      g.fillStyle(0x0a1220, 0.9); g.fillRect(x + 2, y + 18, 32, 6);
       g.fillStyle(0x000000, 0.6); g.fillRect(x + 2, y + 18, 32, 3);
       g.fillStyle(hr > 0.5 ? 0x3ddc6a : hr > 0.25 ? 0xffd23f : 0xff4444); g.fillRect(x + 2, y + 19, 32 * hr, 1);
       if (u.shield > 0) {
@@ -504,6 +536,32 @@ export class HudScene extends Phaser.Scene {
       // level chevrons
       const lv = u.level || 0;
       for (let c = 0; c < lv; c++) { g.fillStyle(0xffd23f, 0.95); g.fillRect(x + 3 + c * 4, y + 2, 3, 2); }
+      // SC1 damaged-portrait flicker: red flash while recently hurt
+      if (u._dmgFlashUntil && performance.now() < u._dmgFlashUntil) {
+        g.fillStyle(0xff4444, 0.25); g.fillRect(x, y, 36, 26);
+      }
+    }
+  }
+
+  // v2.35b gap 27: bust animation tick — walk-frame cycle ~7fps, live bars
+  update() {
+    if (!this._busts || !this._busts.length) return;
+    const now = performance.now();
+    if (now - (this._pfT || 0) < 140) return;
+    this._pfT = now;
+    const b = this.scene.get('Battle');
+    const fr = ((this._pf || 0) + 1) % 3; this._pf = fr;
+    for (const e of this._busts) {
+      if (!e.sp.active || e.u.dead) { if (e.sp.active) e.sp.setAlpha(0.25); continue; }
+      const k = `u-${e.u.def?.icon || e.u.kind}-t${e.team}-w${fr}`;
+      if (b?.textures?.exists(k)) e.sp.setTexture(k);
+    }
+    // live bars: redraw every other bust tick
+    if (this._selUnits) { this.portraitG.clear(); const x0 = this._selX0, y0 = this._selY0, max = this._selMax;
+      this.portraitG.fillStyle(0x0a1220, 0.85); this.portraitG.fillRect(x0 - 2, y0 - 2, max * 40 + 4, 30);
+      this.portraitG.lineStyle(1, 0x3f4a5a, 0.8); this.portraitG.strokeRect(x0 - 2, y0 - 2, max * 40 + 4, 30);
+      for (let i = 0; i < max; i++) { const x = x0 + i * 40; this.portraitG.fillStyle(0x101826, 1); this.portraitG.fillRect(x, y0, 36, 26); }
+      this.drawPortraitBars();
     }
   }
 

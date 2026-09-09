@@ -782,7 +782,15 @@ export class Unit {
       }
     }
     this.hp -= amount;
-    this.sprite.setTint(0xffffff);
+    // v2.35b gap 95: SC1 damaged-unit tell — RED flash (replaces the plain white blink) + portrait flicker
+    this._dmgFlashUntil = performance.now() + 320;
+    if (!this._dmgTinting) {
+      this._dmgTinting = true;
+      this.sprite.setTint(this.team === 1 ? 0xff8866 : 0xff4433);
+      this.world.time.delayedCall(120, () => { if (!this.dead && this.sprite) { this.sprite.clearTint(); if (this._tinted) this.sprite.setTint(0xd8f0e0); } this._dmgTinting = false; });
+    } else {
+      this.sprite.setTint(this.team === 1 ? 0xff8866 : 0xff4433);
+    }
     // v2.34 L6: SC1 retaliation — an idle unit shot by a currently-visible attacker auto-acquires return fire
     if (!this.dead && attacker && !attacker.dead && this.def.damage > 0 && !this.def.worker && !this.order && !this.target && !this.burrowed && !this.cloaked && this.world.currentlyVisible && this.world.currentlyVisible(attacker.x, attacker.y)) {
       this.setOrder({ type: 'attackTarget', target: attacker });
@@ -806,7 +814,7 @@ export class Unit {
         this.world.tweens.add({ targets: b, x: this.x + (Math.random() * 24 - 12), y: this.y + (Math.random() * 24 - 12), alpha: 0, scale: 0.5, duration: 350, onComplete: () => b.destroy() });
       }
     }
-    this.world.time.delayedCall(60, () => { if (this.sprite && !this.dead) this.sprite.clearTint(); });
+    this.world.time.delayedCall(120, () => { if (this.sprite && !this.dead && !this._dmgTinting) this.sprite.clearTint(); });
     if (this.hp <= 0) {
       if (attacker && attacker.addKill && attacker.team === 0) attacker.addKill();
       this.die();
@@ -999,8 +1007,9 @@ export class Building {
     if (this.world.flash) this.world.flash(this.x, this.y, 0xff9c3c, s * 1.2, 420);
     this.world.tweens.add({ targets: boom, scale: s * 1.4, alpha: 0, duration: 500, onComplete: () => boom.destroy() });
     this.world.audio?.death(true);
-    // SC1: persistent burning rubble — smoldering ruin stays on the battlefield
-    const rub = this.world.add.image(this.x, this.y, 'rubble');
+    // SC1: persistent burning rubble — v2.35b gap 94 staged wreckage:
+    // fresh inferno frame -> burning embers -> cold ash, with smoke columns
+    const rub = this.world.add.image(this.x, this.y, 'rubble-fresh');
     rub.setDepth(7).setScale(Math.max(1, s * 0.9)).setAlpha(0.95).setRotation(Math.random() * 6.28);
     // flickering fires on the ruin
     const fires = [];
@@ -1010,7 +1019,28 @@ export class Building {
     };
     const fireIv = this.world.time.addEvent({ delay: 320, repeat: 24, callback: makeFire });
     fires.push(fireIv);
+    // stage 2: inferno frame collapses to the burning rubble frame at 6s
+    this.world.time.delayedCall(6000, () => {
+      if (!rub.active) return;
+      rub.setTexture('rubble');
+    });
+    // stage 3: fire dies to cold gray ash ~30s; sparse embers until 45s
+    const emberIv = this.world.time.addEvent({ delay: 1100, repeat: 21, callback: () => { if (Math.random() < 0.5) makeFire(); } });
+    this.world.time.delayedCall(30000, () => {
+      if (!rub.active) return;
+      rub.setTexture('rubble-ash');
+      fireIv.remove();
+    });
+    this.world.time.delayedCall(45000, () => { if (emberIv.active) emberIv.remove(); });
     this.world.tweens.add({ targets: rub, alpha: 0.55, duration: 25000 });
+    // rising smoke columns over the ruin
+    const puff = () => {
+      if (!rub.active || this.world.gameOver) return;
+      const p = this.world.add.image(this.x + (Math.random() * s * 10 - s * 5), this.y - 6, 'smoke').setDepth(9).setScale(1 + Math.random()).setAlpha(0.7);
+      this.world.tweens.add({ targets: p, y: p.y - 34 - Math.random() * 26, x: p.x - 10 + Math.random() * 20, alpha: 0, scale: p.scale * 2.1, duration: 2600 + Math.random() * 1400, onComplete: () => p.destroy() });
+    };
+    const smokeIv = this.world.time.addEvent({ delay: 700, repeat: 44, callback: puff });
+    this.world.events.once('shutdown', () => { try { smokeIv.remove(); fireIv.remove(); emberIv.remove(); } catch (e) {} });
     this.container.destroy();
     this.world.nav.unblockBy(this.id);
   }
