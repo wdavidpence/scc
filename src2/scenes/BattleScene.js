@@ -22,6 +22,13 @@ const PXH = MAP_H * TILE;
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
 
+  preload() {
+    // v2.38 AI-painted art kit (Pollinations Flux, original IP prompts)
+    const AI = 'assets/ai/';
+    for (const k of ['ground_a', 'ground_b', 'ground_cracked', 'ground_highland', 'ground_ash', 'rock0', 'rock1', 'rock2', 'minerals', 'geyser'])
+      if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
+  }
+
   init(data) {
     this.race = data.race || 'terran';
     this.enemyRace = data.enemyRace || 'skarn';
@@ -801,18 +808,53 @@ export class BattleScene extends Phaser.Scene {
     gc.width = PXW; gc.height = PXH;
     const gx = gc.getContext('2d');
     const rnd = this.rng();
-    for (let ty = 0; ty < MAP_H; ty++) {
-      for (let tx = 0; tx < MAP_W; tx++) {
-        const v = (Math.sin(tx * 12.9898 + ty * 78.233) * 43758.5453) % 1;
-        const pick = Math.abs(v);
-        const cols = pick < 0.25 ? ['#2e4632', '#375438', '#41633f'] : pick < 0.5 ? ['#334730', '#3d5437', '#496343'] : pick < 0.75 ? ['#3a422c', '#454e34', '#525e3f'] : ['#2c4232', '#354e3e', '#41604c'];
-        gx.fillStyle = cols[0]; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
-        for (let i = 0; i < 5; i++) {
-          gx.fillStyle = rnd() < 0.5 ? cols[1] : cols[2];
-          gx.fillRect(tx * TILE + ((rnd() * TILE) | 0), ty * TILE + ((rnd() * TILE) | 0), 2 + ((rnd() * 3) | 0), 1 + ((rnd() * 2) | 0));
+    // v2.38 AI-painted ground atlas: seamless Flux tiles blended into biome patches
+    const aiOk = (k) => this.textures.exists('ai-' + k);
+    const pat = (key, scale) => {
+      if (!aiOk(key)) return null;
+      const src = this.textures.get('ai-' + key).getSourceImage();
+      const tc = document.createElement('canvas');
+      tc.width = Math.max(1, Math.round(src.width * scale)); tc.height = Math.max(1, Math.round(src.height * scale));
+      const tx2 = tc.getContext('2d');
+      tx2.drawImage(src, 0, 0, tc.width, tc.height);
+      return gx.createPattern(tc, 'repeat');
+    };
+    if (aiOk('ground_a')) {
+      gx.fillStyle = pat('ground_a', 0.5); gx.fillRect(0, 0, PXW, PXH);
+      // biome blobs: cooler moss, scorched patches, ash fields, scattered
+      const blob = (x, y, r, key, scale, alpha) => {
+        const p = pat(key, scale); if (!p) return;
+        const sc = document.createElement('canvas'); sc.width = r * 2; sc.height = r * 2;
+        const sx = sc.getContext('2d');
+        sx.translate(-x + r, -y + r); sx.fillStyle = p; sx.fillRect(x - r, y - r, r * 2, r * 2); sx.setTransform(1, 0, 0, 1, 0, 0);
+        const gmask = sx.createRadialGradient(r, r, r * 0.2, r, r, r);
+        gmask.addColorStop(0, `rgba(0,0,0,${alpha})`); gmask.addColorStop(1, 'rgba(0,0,0,0)');
+        sx.globalCompositeOperation = 'destination-in'; sx.fillStyle = gmask; sx.fillRect(0, 0, r * 2, r * 2);
+        gx.drawImage(sc, x - r, y - r);
+      };
+      for (let i = 0; i < 26; i++) blob(rnd() * PXW, rnd() * PXH, 180 + rnd() * 260, 'ground_b', 0.5, 0.85);
+      for (let i = 0; i < 7; i++) blob(PXW * (0.2 + rnd() * 0.6), PXH * (0.2 + rnd() * 0.6), 150 + rnd() * 190, 'ground_cracked', 0.45, 0.9);
+      for (let i = 0; i < 6; i++) blob(PXW * (0.1 + rnd() * 0.8), PXH * (0.1 + rnd() * 0.8), 170 + rnd() * 240, 'ground_ash', 0.45, 0.8);
+      // fine grain speckle so tiling stays organic
+      for (let i = 0; i < 2600; i++) {
+        gx.fillStyle = rnd() < 0.5 ? 'rgba(10,16,14,0.16)' : 'rgba(120,160,150,0.05)';
+        gx.fillRect((rnd() * PXW) | 0, (rnd() * PXH) | 0, 1 + ((rnd() * 3) | 0), 1 + ((rnd() * 2) | 0));
+      }
+    } else {
+      for (let ty = 0; ty < MAP_H; ty++) {
+        for (let tx = 0; tx < MAP_W; tx++) {
+          const v = (Math.sin(tx * 12.9898 + ty * 78.233) * 43758.5453) % 1;
+          const pick = Math.abs(v);
+          const cols = pick < 0.25 ? ['#2e4632', '#375438', '#41633f'] : pick < 0.5 ? ['#334730', '#3d5437', '#496343'] : pick < 0.75 ? ['#3a422c', '#454e34', '#525e3f'] : ['#2c4232', '#354e3e', '#41604c'];
+          gx.fillStyle = cols[0]; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+          for (let i = 0; i < 5; i++) {
+            gx.fillStyle = rnd() < 0.5 ? cols[1] : cols[2];
+            gx.fillRect(tx * TILE + ((rnd() * TILE) | 0), ty * TILE + ((rnd() * TILE) | 0), 2 + ((rnd() * 3) | 0), 1 + ((rnd() * 2) | 0));
+          }
         }
       }
     }
+
     if (this.textures.exists('terrain')) this.textures.remove('terrain');
     this.textures.addCanvas('terrain', gc);
     this.add.image(PXW / 2, PXH / 2, 'terrain').setOrigin(0.5).setDepth(0);
@@ -827,18 +869,21 @@ export class BattleScene extends Phaser.Scene {
         kept.push({ tx, ty });
       }
       for (const r of kept) {
-        const img = this.add.image(r.tx * TILE + 8, r.ty * TILE + 8, rnd() < 0.5 ? 'rock' : 'rock2');
+        const key = this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : (rnd() < 0.5 ? 'rock' : 'rock2');
+        const img = this.add.image(r.tx * TILE + 8, r.ty * TILE + 8, key);
+        if (key.startsWith('ai-rock')) { img.setScale(0.38 + rnd() * 0.22).setFlipX(rnd() < 0.5); }
         img.setDepth(25);
       }
       this.rockClusters.push(kept);
       return kept;
     };
     // borders
+    const borderRock = () => this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : 'rock';
     for (let t = 0; t < MAP_W; t++) {
-      for (const ty of [0, MAP_H - 1]) { this.add.image(t * TILE + 8, ty * TILE + 8, 'rock').setDepth(25); }
+      for (const ty of [0, MAP_H - 1]) { const k = borderRock(); const im = this.add.image(t * TILE + 8, ty * TILE + 8, k); if (k.startsWith('ai-rock')) im.setScale(0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
     }
     for (let ty = 0; ty < MAP_H; ty++) {
-      for (const tx of [0, MAP_W - 1]) { this.add.image(tx * TILE + 8, ty * TILE + 8, 'rock').setDepth(25); }
+      for (const tx of [0, MAP_W - 1]) { const k = borderRock(); const im = this.add.image(tx * TILE + 8, ty * TILE + 8, k); if (k.startsWith('ai-rock')) im.setScale(0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
     }
     // chokes near each base
     this.rockTiles = [];
@@ -876,10 +921,12 @@ export class BattleScene extends Phaser.Scene {
     plateau(MAP_W * 0.24, MAP_H * 0.5, 4, 3);
     // paint elevation + destructible cracks into the terrain texture
     gx2: {
+      const hiPat = this.textures.exists('ai-ground_highland') ? pat('ground_highland', 0.5) : null;
       for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
         const i = ty * MAP_W + tx;
         if (this.elev[i]) {
-          gx.fillStyle = 'rgba(190,205,225,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+          if (hiPat) { gx.save(); gx.fillStyle = hiPat; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); gx.restore(); gx.fillStyle = 'rgba(210,225,245,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
+          else { gx.fillStyle = 'rgba(190,205,225,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
           if (!this.elev[i - MAP_W]) { gx.fillStyle = 'rgba(0,0,0,0.45)'; gx.fillRect(tx * TILE, ty * TILE, TILE, 3); }
           if (!this.elev[i + MAP_W]) { gx.fillStyle = 'rgba(255,255,255,0.10)'; gx.fillRect(tx * TILE, (ty + 1) * TILE - 2, TILE, 2); }
         }
@@ -899,7 +946,8 @@ export class BattleScene extends Phaser.Scene {
         const m = { x, y, amount: 1500, id: nextObjId() };
         this.minerals.push(m);
         out.push(m);
-        const spr = this.add.image(x, y, 'minerals').setDepth(15);
+        const spr = this.add.image(x, y, this.textures.exists('ai-minerals') ? 'ai-minerals' : 'minerals').setDepth(15);
+        if (this.textures.exists('ai-minerals')) spr.setScale(0.75 + (rnd() * 0.3));
         m.sprite = spr;
       }
       return out;
@@ -911,7 +959,8 @@ export class BattleScene extends Phaser.Scene {
     const gey = (x, y) => {
       const g = { x, y, gas: 2500, id: nextObjId(), workers: [] };
       this.geysers.push(g);
-      g.spr = this.add.image(x, y, 'geyser').setDepth(15);
+      g.spr = this.add.image(x, y, this.textures.exists('ai-geyser') ? 'ai-geyser' : 'geyser').setDepth(15);
+      if (this.textures.exists('ai-geyser')) g.spr.setScale(0.7);
     };
     gey(PXW * 0.22, PXH * 0.26);
     gey(PXW * 0.78, PXH * 0.74);
@@ -1159,7 +1208,7 @@ export class BattleScene extends Phaser.Scene {
     const i = this.nav.idx(tx, ty);
     if (this.nav.blockedBy[i] === -2) { this.nav.blocked[i] = 0; this.nav.blockedBy[i] = -1; }
     for (const c of [...this.children.list]) {
-      if (c.type === 'Image' && c.texture && (c.texture.key === 'rock' || c.texture.key === 'rock2') &&
+      if (c.type === 'Image' && c.texture && (/^ai-rock/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
           Math.abs(c.x - (tx * TILE + 8)) < 9 && Math.abs(c.y - (ty * TILE + 8)) < 9) c.destroy();
     }
     this.rockTiles = this.rockTiles.filter(r => r !== rk);
