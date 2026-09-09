@@ -59,11 +59,13 @@ function bakeSprite(scene, srcKey, outKey, team, target) {
   const rx = rim.getContext('2d');
   rx.drawImage(c, 0, 0);
   rx.globalCompositeOperation = 'source-in';
-  rx.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.5)`; rx.fillRect(0, 0, W, H);
+  // v2.41: strong team rim (was 0.5 — units read as blobs against fog at 24px)
+  rx.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.88)`; rx.fillRect(0, 0, W, H);
   const out = document.createElement('canvas'); out.width = W; out.height = H;
   const ox = out.getContext('2d');
   const OFF = Math.max(1, Math.round(Math.min(W, H) / 28));
-  for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF], [-OFF, -OFF], [OFF, OFF]]) ox.drawImage(rim, dx, dy);
+  // full 8-dir spread so the outline is unbroken at small sizes
+  for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF], [-OFF, -OFF], [OFF, OFF], [-OFF, OFF], [OFF, -OFF]]) ox.drawImage(rim, dx, dy);
   ox.drawImage(c, 0, 0);
   scene.textures.addCanvas(outKey, out);
 }

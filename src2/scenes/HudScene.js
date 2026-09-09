@@ -14,6 +14,22 @@ export class HudScene extends Phaser.Scene {
 
   create() {
     this.W = this.scale.width; this.H = this.scale.height;
+    // v2.41: 4-tier HUD type scale + uniform drop shadow — intercept add.text once
+    const self = this;
+    const TIERS = [10, 12, 16, 24, 40];
+    const _txt = this.add.text.bind(this.add);
+    this.add.text = function (x, y, str, opts) {
+      const o = Object.assign({}, opts);
+      if (o.fontSize) {
+        const px = parseFloat(o.fontSize) || 12;
+        let t = TIERS[TIERS.length - 1];
+        for (const tier of TIERS) if (px <= tier) { t = tier; break; }
+        o.fontSize = t + 'px';
+      }
+      if (o.shadow === undefined) o.shadow = { offsetX: 0, offsetY: 1, color: '#000000', blur: 0, opacity: 0.7 };
+      const tx = _txt(x, y, str, o);
+      return tx;
+    };
     this.buttons = [];
     this.createTopBar();
     this.createMinimap();
@@ -426,13 +442,13 @@ export class HudScene extends Phaser.Scene {
     this._lastSelInfo = info;
     // v2.35b: any non-unit selection clears busts (deselect or building)
     if (!info?.building && !(info?.count > 0)) {
-      if (this._busts) { for (const s of this._busts) s.destroy(); this._busts = []; }
+      if (this._busts) { for (const s of this._busts) (s.sp || s).destroy(); this._busts = []; }
       this._selUnits = null;
     }
     if (info?.building) {
       const sel = info.building;
       // v2.35b: building selected — clear unit busts
-      if (this._busts) { for (const s of this._busts) s.destroy(); this._busts = []; }
+      if (this._busts) { for (const s of this._busts) (s.sp || s).destroy(); this._busts = []; }
       this._selUnits = null;
       if (this._cardTabBld !== sel.buildId) { this._cardTab = 'train'; this._cardTabBld = sel.buildId; }
       this.cardTitle.setText(sel.name.toUpperCase());
@@ -573,7 +589,7 @@ export class HudScene extends Phaser.Scene {
     const g = this.portraitG; if (!g) return;
     g.clear();
     // v2.35b gap 27: destroy previous bust sprites before rebuilding
-    if (this._busts) { for (const s of this._busts) s.destroy(); }
+    if (this._busts) { for (const s of this._busts) (s.sp || s).destroy(); this._busts = []; }
     this._busts = [];
     const x0 = 12, y0 = this.H - 142;
     const max = Math.min(6, (units || []).length);

@@ -28,8 +28,8 @@ export class BattleScene extends Phaser.Scene {
     const AI = 'assets/ai/';
     for (const k of ['ground_a', 'ground_b', 'ground_cracked', 'ground_highland', 'ground_ash', 'rock0', 'rock1', 'rock2', 'minerals', 'geyser'])
       if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
-    // v2.40 polish kit: fog mist, per-team blight spreads, HUD chrome
-    for (const k of ['fog_mist', 'blight_player', 'blight_enemy', 'hud_chrome'])
+    // v2.41 terrain variety + HUD chrome (deco scatter is procedural — free-tier gen failed bg keying)
+    for (const k of ['fog_mist', 'blight_player', 'blight_enemy', 'hud_chrome', 'ground_moss2', 'ground_rust'])
       if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
     // v2.39 deep kit: every unit + structure + fx
     preloadAIKit(this);
@@ -454,18 +454,23 @@ export class BattleScene extends Phaser.Scene {
     this.tintRect = this.add.rectangle(PXW / 2, PXH / 2, PXW + 400, PXH + 400, 0x0a1230, 0).setDepth(47).setBlendMode(Phaser.BlendModes.MULTIPLY);
     this._lights = [];           // {img, base, pulse, phase}
     this._flashPool = [];
-    // geyser cyan pulses
+    // geyser cyan pulses — v2.41: brighter bloom (review: nothing in-frame exceeds lum ~99)
     for (const g of this.geysers) {
-      const glow = this.add.image(g.x, g.y - 4, 'glow-soft').setTint(0x4affc8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.25).setScale(0.9);
+      const glow = this.add.image(g.x, g.y - 4, 'glow-soft').setTint(0x4affc8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setScale(1.15);
       this.lightLayer.add(glow);
-      this._lights.push({ img: glow, base: 0.25, pulse: 0.12, phase: Math.random() * 6.28, sp: 1.4 });
+      this._lights.push({ img: glow, base: 0.55, pulse: 0.2, phase: Math.random() * 6.28, sp: 1.4 });
     }
-    // mineral crystal shimmer
+    // mineral crystal shimmer — v2.41 brighter
     if (this.minerals) for (const m of this.minerals) {
-      const glow = this.add.image(m.x, m.y, 'glow').setTint(0x69a6ff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.12).setScale(0.7);
+      const glow = this.add.image(m.x, m.y, 'glow').setTint(0x69a6ff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.32).setScale(0.9);
       this.lightLayer.add(glow);
-      this._lights.push({ img: glow, base: 0.12, pulse: 0.05, phase: Math.random() * 6.28, sp: 2.2 });
+      this._lights.push({ img: glow, base: 0.32, pulse: 0.1, phase: Math.random() * 6.28, sp: 2.2 });
     }
+    // v2.41 forge warmth — warm flicker pool, driven in updateLighting
+    this._forgeLights = [];
+    this._forgeT = 0;
+    // v2.41: spawnBase ran before lightLayer existed — retro-register forge lights
+    for (const b of this.buildings) if (b.built && !b.dead) this.addForgeLight(b);
     this._dayT = 0.3; // mission starts mid-morning; full cycle ~4 min
   }
 
@@ -477,10 +482,19 @@ export class BattleScene extends Phaser.Scene {
     b._bglows = [];
     for (let i = 0; i < n; i++) {
       const dx = (Math.random() - 0.5) * 30, dy = (Math.random() - 0.5) * 20;
-      const g = this.add.image(b.x + dx, b.y + dy, 'glow').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(0.6);
+      // v2.41: window glow pops on when built (was invisible alpha 0 post-build — review: no highlights)
+      const g = this.add.image(b.x + dx, b.y + dy, 'glow').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(b.built ? 0.38 : 0).setScale(0.6 + (b.built ? 0.25 : 0));
       this.lightLayer.add(g);
       b._bglows.push(g);
     }
+    // v2.41 forge warmth: primary structures get a warm flickering key light (via addForgeLight)
+  }
+  addForgeLight(b) {
+    if (!this.lightLayer || !b || !b.def.primary) return;
+    if ((this._forgeLights || []).some(f => f.b === b)) return;
+    const fg = this.add.image(b.x, b.y - 8, 'glow-soft').setTint(0xff9a4a).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(1.2);
+    this.lightLayer.add(fg);
+    (this._forgeLights = this._forgeLights || []).push({ img: fg, b, ph: Math.random() * 6.28 });
   }
 
   // transient point light (muzzle flash, explosion)
@@ -520,6 +534,13 @@ export class BattleScene extends Phaser.Scene {
     }
     const t = this.time.now / 1000;
     for (const l of this._lights) l.img.setAlpha(l.base + Math.sin(t * l.sp + l.phase) * l.pulse);
+    // v2.41 forge flicker (warm key light on primaries once built)
+    if (this._forgeLights) for (const f of this._forgeLights) {
+      const want = (f.b && f.b.built && !f.b.dead) ? 0.34 + Math.sin(t * 9 + f.ph) * 0.08 + Math.sin(t * 23 + f.ph * 2) * 0.05 : 0;
+      f.img.alpha += (want - f.img.alpha) * Math.min(1, dt * 3);
+      f.img.x += (f.b.x - f.img.x) * Math.min(1, dt);
+      f.img.y += (f.b.y - 8 - f.img.y) * Math.min(1, dt);
+    }
     // day/night ambience cycle
     this._dayT = (this._dayT + dt / 240) % 1;
     const d = this._dayT;
@@ -536,7 +557,7 @@ export class BattleScene extends Phaser.Scene {
     // building window glows fade in at night
     for (const b of this.buildings) {
       if (!b._bglows) continue;
-      const want = b.built && !b.dead ? 0.14 + night * 0.4 : 0;
+      const want = b.built && !b.dead ? 0.38 + night * 0.45 : 0;
       for (const g of b._bglows) {
         g.alpha += (want - g.alpha) * Math.min(1, dt * 2);
         g.x += (b.x - g.x) * Math.min(1, dt); // follow if moved
@@ -840,8 +861,8 @@ export class BattleScene extends Phaser.Scene {
         sx.globalCompositeOperation = 'destination-in'; sx.fillStyle = gmask; sx.fillRect(0, 0, r * 2, r * 2);
         gx.drawImage(sc, x - r, y - r);
       };
-      for (let i = 0; i < 26; i++) blob(rnd() * PXW, rnd() * PXH, 180 + rnd() * 260, 'ground_b', 0.5, 0.85);
-      for (let i = 0; i < 7; i++) blob(PXW * (0.2 + rnd() * 0.6), PXH * (0.2 + rnd() * 0.6), 150 + rnd() * 190, 'ground_cracked', 0.45, 0.9);
+      for (let i = 0; i < 26; i++) blob(rnd() * PXW, rnd() * PXH, 180 + rnd() * 260, rnd() < 0.5 ? 'ground_b' : 'ground_moss2', 0.5, 0.85); // v2.41: two moss variants break repetition
+      for (let i = 0; i < 7; i++) blob(PXW * (0.2 + rnd() * 0.6), PXH * (0.2 + rnd() * 0.6), 150 + rnd() * 190, rnd() < 0.5 ? 'ground_cracked' : 'ground_rust', 0.45, 0.9); // v2.41: warm rust variant
       for (let i = 0; i < 6; i++) blob(PXW * (0.1 + rnd() * 0.8), PXH * (0.1 + rnd() * 0.8), 170 + rnd() * 240, 'ground_ash', 0.45, 0.8);
       // fine grain speckle so tiling stays organic
       for (let i = 0; i < 2600; i++) {
@@ -899,6 +920,39 @@ export class BattleScene extends Phaser.Scene {
     for (const [sx, sy] of spots) {
       const c = placeCluster(sx | 0, sy | 0, 14 + ((rnd() * 10) | 0));
       this.rockTiles.push(...c);
+    }
+    // v2.41 AI deco scatter: grass/fungal/crystal clumps break terrain monotony (visual only, depth 20)
+    // Prefer AI textures if they loaded; always have procedural clumps so scatter never depends on free tier.
+    const makeDeco = (key, draw) => {
+      if (this.textures.exists(key)) return key;
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+      const x = c.getContext('2d');
+      try { draw(x); } catch (e) { return null; }
+      this.textures.addCanvas(key, c);
+      return key;
+    };
+    const rndD = (() => { let s = 0x5eed4c1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; })();
+    const decoKeys = [
+      makeDeco('deco_grass_p', (x) => { for (let i = 0; i < 9; i++) { const bx = 10 + rndD() * 44, bh = 20 + rndD() * 26; x.strokeStyle = `rgba(${(70 + rndD() * 30) | 0},${(190 + rndD() * 45) | 0},${(150 + rndD() * 40) | 0},0.9)`; x.lineWidth = 1.6; x.beginPath(); x.moveTo(bx, 58); x.quadraticCurveTo(bx + (rndD() - 0.5) * 10, 58 - bh * 0.6, bx + (rndD() - 0.5) * 14, 58 - bh); x.stroke(); } }),
+      makeDeco('deco_fungal_p', (x) => { for (let i = 0; i < 5; i++) { const bx = 14 + rndD() * 36, bh = 12 + rndD() * 16, cr = 4 + rndD() * 5; x.strokeStyle = 'rgba(190,210,220,0.85)'; x.lineWidth = 2; x.beginPath(); x.moveTo(bx, 58); x.lineTo(bx, 58 - bh); x.stroke(); const g = x.createRadialGradient(bx, 58 - bh, 0, bx, 58 - bh, cr); g.addColorStop(0, 'rgba(120,255,225,0.95)'); g.addColorStop(1, 'rgba(40,140,160,0.7)'); x.fillStyle = g; x.beginPath(); x.ellipse(bx, 58 - bh, cr, cr * 0.66, 0, 0, 7); x.fill(); } }),
+      makeDeco('deco_spire_p', (x) => { for (let i = 0; i < 4; i++) { const bx = 16 + rndD() * 32, h2 = 22 + rndD() * 24, w2 = 3 + rndD() * 3; const g = x.createLinearGradient(bx, 58 - h2, bx, 58); g.addColorStop(0, 'rgba(150,210,255,0.95)'); g.addColorStop(1, 'rgba(60,80,120,0.85)'); x.fillStyle = g; x.beginPath(); x.moveTo(bx - w2, 58); x.lineTo(bx, 58 - h2); x.lineTo(bx + w2, 58); x.closePath(); x.fill(); } x.fillStyle = 'rgba(70,74,86,0.9)'; x.beginPath(); x.ellipse(32, 58, 20, 5, 0, 0, 7); x.fill(); })
+    ].filter(Boolean).map(k => this.textures.exists('ai-' + k.replace('_p','')) ? 'ai-' + k.replace('_p','') : k);
+    if (decoKeys.length) {
+      const occupied = (tx, ty) => this.rockTiles.some(r => r.tx === tx && r.ty === ty);
+      this._decoImgs = [];
+      let placed = 0, guard = 0;
+      while (placed < 90 && guard++ < 600) {
+        const tx = 4 + ((rnd() * (MAP_W - 8)) | 0), ty = 4 + ((rnd() * (MAP_H - 8)) | 0);
+        if (occupied(tx, ty)) continue;
+        const k = decoKeys[(rnd() * decoKeys.length) | 0];
+        const im = this.add.image(tx * TILE + 8, ty * TILE + 8, k);
+        const src = this.textures.get(k).getSourceImage();
+        const base = 26 / Math.max(32, src.width); // ~26px clumps regardless of source res
+        const sc = base * (0.8 + rnd() * 0.5);
+        im.setScale(sc).setFlipX(rnd() < 0.5).setDepth(20).setAlpha(0.92);
+        this._decoImgs.push(im);
+        placed++;
+      }
     }
     // SC1 destructible rocks: mid-map cluster rocks crack under fire, clearing new paths
     this.destructibles = [];
@@ -1023,7 +1077,7 @@ export class BattleScene extends Phaser.Scene {
     this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W, MAP_H);
     this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
-    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.55);
+    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.48); // v2.41: 0.55->0.48, still fully hides unseen, less banding
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
     this._eventPings = []; // minimap event pings {x,y,t,color,big}
@@ -1045,7 +1099,7 @@ export class BattleScene extends Phaser.Scene {
       this.mistCanvas = mc; this.mistCtx = mx;
       this.textures.addCanvas('fog_mist', mc);
       this.fogMistImg = this.add.image(PXW / 2, PXH / 2, 'fog_mist');
-      this.fogMistImg.setOrigin(0.5).setScale(PXW / 768).setDepth(501).setAlpha(0.5).setBlendMode(Phaser.BlendModes.SCREEN);
+      this.fogMistImg.setOrigin(0.5).setScale(PXW / 768).setDepth(501).setAlpha(0.38).setBlendMode(Phaser.BlendModes.SCREEN);
     }
   }
 
@@ -1065,7 +1119,7 @@ export class BattleScene extends Phaser.Scene {
         if (!this.seen[i]) continue;
         const ls = this.lastSeen[i] || 0;
         const age = Math.max(0, this.gameTime - ls);
-        const a = Math.min(0.62, 0.18 + (age / 40) * 0.44);
+        const a = Math.min(0.48, 0.14 + (age / 40) * 0.34); // v2.41: lighter stale-intel dim (was .62/.18) — explored ground stays readable
         visCtx.fillStyle = `rgba(150,158,176,${a.toFixed(2)})`;
         visCtx.fillRect(tx, ty, 1, 1);
       }
@@ -1094,7 +1148,7 @@ export class BattleScene extends Phaser.Scene {
     const softCut = (ctx, cx, cy, r) => {
       if (!isFinite(cx) || !isFinite(cy)) return;
       const rr = Math.max(1.5, isFinite(r) ? r : 4);
-      const grad = ctx.createRadialGradient(cx, cy, rr * 0.55, cx, cy, rr);
+      const grad = ctx.createRadialGradient(cx, cy, rr * 0.42, cx, cy, rr); // v2.41: wider open center, gentler edge
       grad.addColorStop(0, 'rgba(0,0,0,1)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
@@ -1291,7 +1345,7 @@ export class BattleScene extends Phaser.Scene {
         this.blightCanvases[t].ac = ac; this.blightCanvases[t].ax = ax;
         this.textures.addCanvas(`blight-ai-t${t}`, ac);
         const aim = this.add.image(PXW / 2, PXH / 2, `blight-ai-t${t}`);
-        aim.setOrigin(0.5).setScale(TILE).setDepth(6).setAlpha(t === 0 ? 0.85 : 0.9);
+        aim.setOrigin(0.5).setScale(TILE).setDepth(6).setAlpha(t === 0 ? 0.92 : 0.95); // v2.41: richer, crisper
       }
     }
     this.blightDirty = false;
@@ -1310,10 +1364,10 @@ export class BattleScene extends Phaser.Scene {
     ax.beginPath(); ax.arc(px, py, r, 0, 7); ax.clip();
     ax.fillStyle = pat; ax.fillRect(px - r, py - r, r * 2, r * 2);
     ax.restore();
-    // feather edge
+    // feather edge — v2.41: tighter feather (sharper blight margin at high zoom)
     ax.globalCompositeOperation = 'destination-out';
-    const g = ax.createRadialGradient(px, py, r * 0.45, px, py, r);
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    const g = ax.createRadialGradient(px, py, r * 0.72, px, py, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)');
     ax.fillStyle = g; ax.beginPath(); ax.arc(px, py, r, 0, 7); ax.fill();
     ax.globalCompositeOperation = 'source-over';
   }
@@ -1347,6 +1401,7 @@ export class BattleScene extends Phaser.Scene {
     const by = team === 0 ? PXH * 0.12 : PXH * 0.88;
     const b = new Building(this, team, info.primary, bx, by, { instant: true });
     this.buildings.push(b);
+    this.addBuildingLights(b); // v2.41: spawnBase bypasses building_built — ensure forge light
     const workerKinds = info.workers;
     for (let i = 0; i < 4; i++) {
       const u = this.spawnUnit(team, workerKinds[0], bx + 40 + Math.random() * 40, by + 40 + Math.random() * 40, { arriveReady: true });
@@ -1792,7 +1847,7 @@ export class BattleScene extends Phaser.Scene {
     if (b.def.blightGrowth) this.addBlight(b.team, b.x, b.y, b.def.blightRadius || 8);
     if (b.def.power) { b.powerRadius = TILE * 10; this.drawPowerField(b); }
     this.addBuildingLights(b);
-    // SC1: production buildings get a default rally flag just below the footprint
+    this.addForgeLight(b); // v2.41
     if (b.def.rally && b.team === 0 && !b.rallyPoint) {
       b.rallyPoint = { x: b.x, y: b.y + (b.def.h * TILE) / 2 + TILE * 1.2 };
       this.showRallyFlag(b);
@@ -2346,9 +2401,11 @@ export class BattleScene extends Phaser.Scene {
 
   showSelRing(u) {
     if (u._ring) u._ring.destroy();
-    u._ring = this.add.circle(0, 0, u.radius + 4, 0x6ee7a0, 0.12).setStrokeStyle(1, 0x6ee7a0, 0.9);
+    const tc = u.team === 0 ? 0x6ee7a0 : u.team === 1 ? 0xff8a4a : 0xff5ce0;
+    u._ring = this.add.circle(0, 0, u.radius + 4, tc, 0.14).setStrokeStyle(2, tc, 1);
     u.container.add(u._ring);
-    this.tweens.add({ targets: u._ring, alpha: { from: 0.9, to: 0.3 }, duration: 600, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: u._ring, alpha: { from: 1, to: 0.35 }, duration: 600, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: u._ring, scale: { from: 1, to: 1.12 }, duration: 600, yoyo: true, repeat: -1 });
   }
 
   clearSelection() {
