@@ -292,17 +292,61 @@ export class HudScene extends Phaser.Scene {
     this.input.on('pointerdown', () => { if (!this.gameOver) return; this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title'); });
   }
 
-  mkBtn(x, y, w, h, label, cb, tip) {
+  // v2.36: SC1-style grey-out command card. opts.state = (battle)=>reason|'' evaluated
+  // live on every hud:tick — reasons: minerals|supply|tech|energy|nocrew|done|place.
+  disMsg(r) { return ({ minerals: 'NOT ENOUGH MINERALS', supply: 'SUPPLY BLOCKED', tech: 'TECH REQUIRED', energy: 'NOT ENOUGH ENERGY', nocrew: 'NO CREW', place: 'INVALID POSITION', done: 'ALREADY DONE' })[r] || 'UNAVAILABLE'; }
+  disCtx(r) { return ({ minerals: 'supply', supply: 'supply', tech: 'tech', energy: 'energy', place: 'place' })[r] || 'nocrew'; }
+  get disG() { if (!this._disG) this._disG = this.add.graphics().setScrollFactor(0).setDepth(151); return this._disG; }
+  redrawDisabled() {
+    const g = this.disG; g.clear();
+    for (const bb of this.buttons) if (bb.disabled) {
+      g.lineStyle(2, 0xd23c3c, 0.95)
+        .lineBetween(bb.x + 3, bb.y + 3, bb.x + bb.w - 3, bb.y + bb.h - 3)
+        .lineBetween(bb.x + bb.w - 3, bb.y + 3, bb.x + 3, bb.y + bb.h - 3);
+    }
+  }
+
+  mkBtn(x, y, w, h, label, cb, tip, opts = {}) {
+    const self = this;
     const bg = this.add.rectangle(x, y, w, h, 0x18202c, 1).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     const brd = this.add.rectangle(x, y, w, h, 0x2f3a49, 0).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3f4a5a);
     const txt = this.add.text(x + w / 2, y + h / 2, label, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#dbe7ff', align: 'center' }).setOrigin(0.5).setScrollFactor(0);
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
-    hit.on('pointerdown', () => { this.flash(txt); this.scene.get('Battle').audio?.uiClick?.(); cb(); });
-    hit.on('pointerover', () => { bg.setFillStyle(0x22304a, 1); this.scene.get('Battle').audio?.uiHover?.(); if (tip) this.showTip(x + w / 2, y - 8, tip); });
-    hit.on('pointerout', () => { bg.setFillStyle(0x18202c, 1); this.hideTip(); });
-    const btn = { bg, brd, txt, hit, x, y, w, h, label, setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); } };
+    const btn = { bg, brd, txt, hit, x, y, w, h, label, disabled: false, _disReason: '', _check: opts.state || null,
+      setDisabled(on, reason = '') {
+        on = !!on;
+        if (this.disabled === on && this._disReason === reason) return;
+        this.disabled = on; this._disReason = reason;
+        txt.setColor(on ? '#6b7686' : '#dbe7ff');
+        if (on) bg.setFillStyle(0x10161f, 1); else bg.setFillStyle(0x18202c, 1);
+        self.redrawDisabled();
+      },
+      setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); if (this.disabled) self.redrawDisabled(); } };
+    hit.on('pointerdown', () => {
+      if (btn.disabled) { const ctx = self.disCtx(btn._disReason); self.scene.get('Battle').audio?.announcer?.(ctx); self.flashNotEnough(self.disMsg(btn._disReason)); return; }
+      self.flash(bg); self.scene.get('Battle').audio?.uiClick?.(); cb();
+    });
+    hit.on('pointerover', () => {
+      if (btn.disabled) { self.showTip(btn.x + w / 2, btn.y - 8, (Array.isArray(tip) ? tip : [tip]).concat(self.disMsg(btn._disReason))); return; }
+      bg.setFillStyle(0x22304a, 1); self.scene.get('Battle').audio?.uiHover?.(); if (tip) self.showTip(btn.x + w / 2, btn.y - 8, tip);
+    });
+    hit.on('pointerout', () => { bg.setFillStyle(btn.disabled ? 0x10161f : 0x18202c, 1); self.hideTip(); });
     this.buttons.push(btn);
+    if (btn._check) { const b0 = this.scene.get('Battle'); if (b0) btn.setDisabled(!!btn._check(b0), btn._check(b0)); }
     return btn;
+  }
+
+  // live grey-out refresh (throttled ~4Hz): re-run each button's state fn
+  updateButtonStates(b) {
+    const now = this.time ? this.time.now : 0;
+    if (now - (this._bsAt || 0) < 250) return;
+    this._bsAt = now;
+    for (const btn of this.buttons) {
+      if (!btn._check) continue;
+      let reason = '';
+      try { reason = btn._check(b) || ''; } catch (e) { reason = ''; }
+      btn.setDisabled(!!reason, reason);
+    }
   }
 
   setIncomeRate(perMin) {
@@ -310,9 +354,9 @@ export class HudScene extends Phaser.Scene {
     this.rateTxt.setText(perMin > 0 ? `+${Math.round(perMin)}/m` : '');
   }
 
-  flashNotEnough() {
+  flashNotEnough(msg) {
     if (!this._neT) this._neT = this.add.text(this.W / 2, 34, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontWeight: 'bold', color: '#ff6060' }).setOrigin(0.5).setScrollFactor(0).setDepth(95).setStroke(2, 0x000000, 0.8);
-    this._neT.setText('NOT ENOUGH MINERALS').setAlpha(1).setScale(1.06);
+    this._neT.setText(msg || 'NOT ENOUGH MINERALS').setAlpha(1).setScale(1.06);
     this.tweens.add({ targets: this._neT, alpha: 0, scale: 1, duration: 900, ease: 'Quad.easeOut' });
     if (this.resText) { const c = this.resText.color; this.resText.setColor('#ff6060'); this.time.delayedCall(350, () => { if (this.resText?.active) this.resText.setColor(c); }); }
   }
@@ -346,6 +390,7 @@ export class HudScene extends Phaser.Scene {
   clearButtons() {
     for (const b of this.buttons) { b.bg.destroy(); b.brd.destroy(); b.txt.destroy(); b.hit.destroy(); }
     this.buttons = [];
+    if (this._disG) this._disG.clear();
   }
 
   mkTab(x, y, w, label, active, cb) {
@@ -388,6 +433,11 @@ export class HudScene extends Phaser.Scene {
       const unitRows = [];
       const prods = Object.keys(UNITS).filter(k => (def.produces?.includes(k) || UNITS[k].build === sel.buildId) && UNITS[k].race === race && !UNITS[k].summon);
       for (const k of prods) unitRows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''),
+        state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0; const p = bt.players[T]; const d = UNITS[k];
+          if (p.supplyUsed + (d.supply || 0) > p.supplyCap) return 'supply';
+          if (d.tech && !bt.techResearched(T, d.tech)) return 'tech';
+          if (!bt.canAfford(T, d.minerals, d.gas)) return 'minerals';
+          return ''; },
         tip: [UNITS[k].name, `Min ${UNITS[k].minerals}${UNITS[k].gas ? '  Gas ' + UNITS[k].gas : ''}  Sup ${UNITS[k].supply || 0}`, `HP ${UNITS[k].hp}${UNITS[k].shield ? ' +Sh ' + UNITS[k].shield : ''}  Arm ${UNITS[k].armor || 0}`, `Dmg ${UNITS[k].damage}  Rng ${UNITS[k].range}  Spd ${(UNITS[k].speed || 0).toFixed(2)}`, UNITS[k].tech ? (b.techResearched(0, UNITS[k].tech) ? '✓ ' + (TECHS[UNITS[k].tech]?.name || '') : 'REQUIRES: ' + (TECHS[UNITS[k].tech]?.name || UNITS[k].tech)) : null].filter(Boolean) });
       // research
       const techRows = [];
@@ -397,6 +447,11 @@ export class HudScene extends Phaser.Scene {
         if (t.requiresTech && !b.techResearched(0, t.requiresTech)) continue;
         const done = b.techResearched(0, tId);
         techRows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''),
+          state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0;
+            if (bt.techResearched(T, tId)) return 'done';
+            if (t.requiresTech && !bt.techResearched(T, t.requiresTech)) return 'tech';
+            if (!bt.canAfford(T, t.minerals, t.gas)) return 'minerals';
+            return ''; },
           tip: [t.name, `Min ${t.minerals}${t.gas ? '  Gas ' + t.gas : ''}  ${t.time}s`, t.unlocks ? ('Unlocks: ' + (UNITS[t.unlocks]?.name || t.unlocks)) : null, t.morph ? ('Morphs: ' + t.at) : null, done ? 'RESEARCHED' : null].filter(Boolean) });
       }
       // GAP 37: tabbed build menu — TRAIN / UPGRADE headers when a lab has both
@@ -410,7 +465,7 @@ export class HudScene extends Phaser.Scene {
       rows.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
         const x = 12 + col * 82, y = this.H - 96 + row * 44;
-        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb, r.tip);
+        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb, r.tip, { state: r.state });
         i++;
       });
       if (def.rally === false && rows.length === 0) {
@@ -463,15 +518,33 @@ export class HudScene extends Phaser.Scene {
         __hold: ['HOLD [H]', () => b.events.emit('hud:command', 'hold')],
         __scan: ['SCAN [T]', () => b.events.emit('hud:scan')]
       };
+      // live grey-out conditions per ability (energy/tech gates read from selection each tick)
+      const hasKind = (bt, ...ks) => bt.selection && [...bt.selection].some(u => !u.dead && ks.includes(u.kind));
+      const energyReady = (bt, ...ks) => bt.selection && [...bt.selection].some(u => !u.dead && ks.includes(u.kind) && (u.energy || 0) >= (ks[0] === 'voidlance' || ks[0] === 'umbral' ? 100 : 75));
+      const abilState = {
+        __cloak: (bt) => (!hasKind(bt, 'nightblade') || [...bt.selection].every(u => u.dead || !u.def.cloak)) ? 'nocrew' : '',
+        __merge: (bt) => (bt.selection && [...bt.selection].filter(u => !u.dead && u.kind === 'nightblade').length >= 2) ? '' : 'nocrew',
+        __mergeDark: (bt) => !b.techResearched(0, 'umbralConvergence') ? 'tech' : ((bt.selection && [...bt.selection].filter(u => !u.dead && u.kind === 'nightblade').length >= 2) ? '' : 'nocrew'),
+        __mael: (bt) => energyReady(bt, 'voidlance', 'umbral') ? '' : 'energy',
+        __storm: (bt) => energyReady(bt, 'caller') ? '' : 'energy',
+        __caustic: (bt) => energyReady(bt, 'corroder') ? '' : 'energy',
+        __morphG: (bt) => !b.techResearched(0, 'sporecaster') ? 'tech' : (hasKind(bt, 'vexwing') ? '' : 'nocrew'),
+        __morphD: (bt) => !b.techResearched(0, 'corroder') ? 'tech' : (hasKind(bt, 'vexwing') ? '' : 'nocrew'),
+        __scan: (bt) => bt._scanCd > 0 ? 'energy' : (!b.hasBuilding('scienceFacility', 0) ? 'tech' : ''),
+      };
       const btnDefs = rows.map(bid => {
-        if (abil[bid]) return { label: abil[bid][0], cb: abil[bid][1] };
-        return { label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid) };
+        if (abil[bid]) return { label: abil[bid][0], cb: abil[bid][1], state: abilState[bid] || null };
+        return { label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid),
+          state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0; const d = BUILDINGS[bid];
+            if (d.requires && !d.requires.every(r => bt.hasBuilding(r, T))) return 'tech';
+            if (!bt.canAfford(T, d.minerals, d.gas)) return 'minerals';
+            return ''; } };
       });
       btnDefs.unshift({ label: 'STOP', cb: () => b.events.emit('hud:command', 'stop') });
       btnDefs.unshift({ label: 'ATTACK\nMOVE', cb: () => b.events.emit('hud:attackMode') });
       btnDefs.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
-        this.mkBtn(12 + col * 72, this.H - 96 + row * 44, 68, 38, r.label, r.cb);
+        this.mkBtn(12 + col * 72, this.H - 96 + row * 44, 68, 38, r.label, r.cb, null, { state: r.state });
         i++;
       });
       return;
@@ -736,6 +809,7 @@ export class HudScene extends Phaser.Scene {
   refresh() {
     const b = this.scene.get('Battle');
     if (!b || !b.players) return;
+    this.updateButtonStates(b);
     this.censusTick(b);
     this.urgencyTick(b);
     const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
