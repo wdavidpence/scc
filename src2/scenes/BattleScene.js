@@ -2908,6 +2908,7 @@ export class BattleScene extends Phaser.Scene {
     const workers = [...this.selection].filter(u => u.def.worker && u.team === T);
     if (race === 'terran' && workers.length === 0) { this.audio?.announcer?.('nocrew'); return; }
     this.placing = { buildId };
+    this._ghostOk = null;
     this.ghost = this.add.image(0, 0, this.ghostTexKey(buildId)).setDepth(501).setAlpha(0.5);
     this.ghostValid = this.add.graphics().setDepth(502);
     this.input.setDefaultCursor('none');
@@ -2923,48 +2924,64 @@ export class BattleScene extends Phaser.Scene {
     const def = BUILDINGS[this.placing.buildId];
     const gx = Math.round(wp.x / TILE) * TILE, gy = Math.round(wp.y / TILE) * TILE;
     this.ghost.setPosition(gx, gy);
-    const ok = this.placementValid(this.placing.buildId, gx, gy);
+    const reason = this.placementReason(this.placing.buildId, gx, gy);
+    const ok = !reason;
     this.isValid = ok;
+    // v2.37: state-change feedback while dragging — soft ack on valid, deny-blip on invalid
+    if (ok !== this._ghostOk) {
+      this._ghostOk = ok;
+      if (ok) this.audio?.uiHover?.(); else this.audio?.announcer?.('place');
+    }
     this.ghostValid.clear();
     this.ghostValid.lineStyle(2, ok ? 0x6ee7a0 : 0xff4444, 0.8);
     this.ghostValid.strokeRect(gx - (def.w * TILE) / 2, gy - (def.h * TILE) / 2, def.w * TILE, def.h * TILE);
     this.ghost.setTint(ok ? 0xffffff : 0xff5555);
+    // v2.37: inline reason tag beside the ghost while dragging over blocked ground
+    if (!ok) {
+      if (!this._placeTag) this._placeTag = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', fontWeight: 'bold', color: '#ffb0b0', backgroundColor: '#160a0acc', padding: { x: 4, y: 2 } }).setOrigin(0.5, 1).setDepth(503);
+      this._placeTag.setText(reason).setPosition(gx, gy - (def.h * TILE) / 2 - 6);
+      this._placeTag.setVisible(true).setDepth(503);
+    } else if (this._placeTag) this._placeTag.setVisible(false);
     // v2.26: build-site stencil — hatch fill + per-tile dots under the ghost
     this.polish?.ghostStencil(this.ghostValid, gx, gy, def, ok);
   }
 
-  placementValid(buildId, x, y) {
+  // v2.37: reason-tagged placement validity ('' = valid). placementValid kept as boolean facade.
+  placementReason(buildId, x, y) {
     const def = BUILDINGS[buildId];
     const w = def.w * TILE, h = def.h * TILE;
-    if (x - w / 2 < TILE || y - h / 2 < TILE || x + w / 2 > PXW - TILE || y + h / 2 > PXH - TILE) return false;
+    if (x - w / 2 < TILE || y - h / 2 < TILE || x + w / 2 > PXW - TILE || y + h / 2 > PXH - TILE) return 'OUT OF BOUNDS';
     // not on rock/minerals/geyser unless refinery type
-    if (this.buildingAt(x, y)) return false;
+    if (this.buildingAt(x, y)) return 'OCCUPIED';
     if (def.onGeyser) {
       const g = this.geysers.find(g => Math.hypot(g.x - x, g.y - y) < TILE * 2 && !g.building);
-      return !!g;
+      return g ? '' : 'GAS GEYSER REQUIRED';
     }
     // clearance on ground tiles
     const tx0 = Math.floor((x - w / 2) / TILE), ty0 = Math.floor((y - h / 2) / TILE);
     const tx1 = Math.ceil((x + w / 2) / TILE) - 1, ty1 = Math.ceil((y + h / 2) / TILE) - 1;
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const i = this.nav.idx(tx, ty);
-      if (this.nav.solid[i]) return false;
-      if (this.rockTiles.some(r => r.tx === tx && r.ty === ty)) return false;
+      if (this.nav.solid[i]) return 'TERRAIN BLOCKED';
+      if (this.rockTiles.some(r => r.tx === tx && r.ty === ty)) return 'ROCK OBSTRUCTION';
     }
     // skarn blight requirement
     if (this.race === 'skarn' && def.blight) {
-      if (!this.hasBlight(0, x, y)) return false;
+      if (!this.hasBlight(0, x, y)) return 'BLIGHT REQUIRED';
     }
     // auraxis power field requirement
     if (this.race === 'auraxis' && !['conduit', 'aegis'].includes(buildId)) {
       const powered = this.buildings.some(b => b.team === 0 && b.def.power && !b.dead && Math.hypot(b.x - x, b.y - y) < TILE * 10);
-      if (!powered) return false;
+      if (!powered) return 'PSI FIELD REQUIRED';
     }
-    return true;
+    return '';
   }
 
+  placementValid(buildId, x, y) { return !this.placementReason(buildId, x, y); }
+
   tryPlace(x, y) {
-    if (!this.isValid) { this.audio?.announcer?.('place'); return; }
+    if (!this.placing) return;
+    if (!this.isValid) { this.audio?.announcer?.('place'); this.events.emit('hud:alert', this.placementReason(this.placing.buildId, x, y) || 'INVALID POSITION'); return; }
     this.cmdCount++;
     const T = this.activeTeam ?? 0;
     const def = BUILDINGS[this.placing.buildId];
@@ -2984,6 +3001,8 @@ export class BattleScene extends Phaser.Scene {
 
   cancelPlacing() {
     this.placing = null;
+    this._ghostOk = null;
+    if (this._placeTag) this._placeTag.setVisible(false);
     if (this.ghost) { this.ghost.destroy(); this.ghost = null; }
     if (this.ghostValid) { this.ghostValid.clear(); }
     this.input.setDefaultCursor('default');
