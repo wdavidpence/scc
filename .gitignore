@@ -4,3 +4,6 @@ node_modules
 dist2/
 dist-preview/
 .playwright-mcp/
+ai_raw/.code_*
+/v238_battle.png
+/v238_title.png
