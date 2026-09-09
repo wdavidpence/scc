@@ -953,6 +953,8 @@ export class Building {
     let bid = this.buildId;
     if (this.morphedTo) bid = this.morphedTo;
     const team = this.team > 2 ? 2 : this.team;
+    // v2.39: geyser-mounted gas buildings get bespoke AI art (b<bid>-geyser-t<team>)
+    if (this.geyser && this.world.textures.exists(`b-${bid}-geyser-t${team}`)) return `b-${bid}-geyser-t${team}`;
     if (this.world.textures.exists(`b-${bid}-t${team}`)) return `b-${bid}-t${team}`;
     if (this.world.textures.exists(`b-${bid}-t${this.def.race === 'skarn' ? 1 : this.def.race === 'auraxis' ? 2 : 0}`)) return `b-${bid}-t${this.def.race === 'skarn' ? 1 : this.def.race === 'auraxis' ? 2 : 0}`;
     return `b-commandCenter-t0`;

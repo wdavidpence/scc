@@ -7,6 +7,7 @@ import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
 import { createBuildingsAAA } from '../engine/art3d.js';
+import { preloadAIKit, applyAIKit } from '../engine/aiKit.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
@@ -27,6 +28,8 @@ export class BattleScene extends Phaser.Scene {
     const AI = 'assets/ai/';
     for (const k of ['ground_a', 'ground_b', 'ground_cracked', 'ground_highland', 'ground_ash', 'rock0', 'rock1', 'rock2', 'minerals', 'geyser'])
       if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
+    // v2.39 deep kit: every unit + structure + fx
+    preloadAIKit(this);
   }
 
   init(data) {
@@ -145,6 +148,8 @@ export class BattleScene extends Phaser.Scene {
 
     createAllTextures(this);
     try { createBuildingsAAA(this); } catch (e) { console.warn('AAA buildings fallback', String(e)); }
+    // v2.39 deep AI kit: repaint unit/structure/fx keys in-place (safe no-op if assets absent)
+    try { this._aiBaked = applyAIKit(this); } catch (e) { console.warn('ai-kit fallback', String(e)); this._aiBaked = 0; }
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
     this.flows.nav = this.nav;
