@@ -25,10 +25,11 @@ const UNIT_TARGET = { // desired on-screen footprint px at zoom1 (16px world til
   tremorclaw: [38, 22], burrower: [42, 18], skywarden: [42, 22], sporecaster: [32, 28], corroder: [30, 24], voidlance: [38, 16],
   razorspine: [26, 16], sentinel: [26, 26], aegisX: 0 };
 const UNIT_DEFAULT = { small: 24, medium: 28, large: 34 };
+export const EMBLEM_PAD = 7; // v2.42: canvas pad added around emblem-baked units; consumers must compensate scale
 const LARGE = ['tank','ballista','wraith','battlecruiser','dropship','tremorclaw','skywarden','burrower','sentinel','ark','voidlance','sporecaster','corroder','razorspine'];
 const MED = ['duster','bladeguard','nightblade','umbral','ghost','marine','incinerator','stormcaller','radiant','skarling','skarnling','artificer','vexwing','airstinger','drone','medic','rigger'];
 
-function bakeSprite(scene, srcKey, outKey, team, target) {
+function bakeSprite(scene, srcKey, outKey, team, target, emblem) {
   if (scene.textures.exists(outKey)) scene.textures.remove(outKey);
   const src = scene.textures.get(srcKey).getSourceImage();
   // downscale body to target px (top-down footprints), then team wash + rim glow
@@ -61,13 +62,53 @@ function bakeSprite(scene, srcKey, outKey, team, target) {
   rx.globalCompositeOperation = 'source-in';
   // v2.41: strong team rim (was 0.5 — units read as blobs against fog at 24px)
   rx.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.88)`; rx.fillRect(0, 0, W, H);
-  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const out = document.createElement('canvas'); 
+  // v2.42 faction emblems: instant faction language under every unit footprint
+  const E = emblem ? 7 : 0;
+  out.width = W + E * 2; out.height = H + E * 2;
   const ox = out.getContext('2d');
+  if (emblem && team >= 0) {
+    const cx = out.width / 2, cy = out.height / 2, R = Math.max(W, H) / 2 + E - 2;
+    if (team === 1) { // skarn: jagged organic spore-pad
+      ox.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.30)`;
+      ox.beginPath();
+      for (let a = 0; a <= 72; a++) {
+        const th = a / 72 * Math.PI * 2, rr = R * (0.82 + 0.18 * Math.sin(th * 7 + W * 0.5));
+        const px = cx + Math.cos(th) * rr * (W / Math.max(W, H)), py = cy + Math.sin(th) * rr * (H / Math.max(W, H));
+        a ? ox.lineTo(px, py) : ox.moveTo(px, py);
+      }
+      ox.closePath(); ox.fill();
+    } else if (team === 0) { // terran: angular hex plate
+      const pw = Math.min(out.width - 2, W * 0.94 + 4), ph = Math.min(out.height - 2, H * 0.88 + 4);
+      ox.beginPath();
+      ox.moveTo(cx - pw / 2, cy - ph * 0.15);
+      ox.lineTo(cx - pw * 0.32, cy - ph / 2);
+      ox.lineTo(cx + pw * 0.32, cy - ph / 2);
+      ox.lineTo(cx + pw / 2, cy - ph * 0.15);
+      ox.lineTo(cx + pw * 0.34, cy + ph / 2);
+      ox.lineTo(cx - pw * 0.34, cy + ph / 2);
+      ox.closePath();
+      ox.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.24)`;
+      ox.fill();
+      ox.strokeStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.55)`; ox.lineWidth = 1; ox.stroke();
+    } else { // auraxis: crystal ring + ticks
+      ox.strokeStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.5)`; ox.lineWidth = 1.5;
+      ox.beginPath(); ox.arc(cx, cy, R * 0.9, 0, Math.PI * 2); ox.stroke();
+      for (let i = 0; i < 8; i++) {
+        const th = i / 8 * Math.PI * 2;
+        ox.beginPath();
+        ox.moveTo(cx + Math.cos(th) * R * 0.72, cy + Math.sin(th) * R * 0.72);
+        ox.lineTo(cx + Math.cos(th) * R * 1.0, cy + Math.sin(th) * R * 1.0);
+        ox.stroke();
+      }
+    }
+  }
   const OFF = Math.max(1, Math.round(Math.min(W, H) / 28));
   // full 8-dir spread so the outline is unbroken at small sizes
-  for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF], [-OFF, -OFF], [OFF, OFF], [-OFF, OFF], [OFF, -OFF]]) ox.drawImage(rim, dx, dy);
-  ox.drawImage(c, 0, 0);
+  for (const [dx, dy] of [[-OFF, 0], [OFF, 0], [0, -OFF], [0, OFF], [-OFF, -OFF], [OFF, OFF], [-OFF, OFF], [OFF, -OFF]]) ox.drawImage(rim, E + dx, E + dy);
+  ox.drawImage(c, E, E);
   scene.textures.addCanvas(outKey, out);
+  // emblem ring overflows body footprint by design; sprite scale stays 1:1 (body=target px, ring=+7px marker)
 }
 
 export function applyAIKit(scene) {
@@ -78,22 +119,23 @@ export function applyAIKit(scene) {
     const src = scene.textures.get(srcKey).getSourceImage();
     const tgt = UNIT_TARGET[k] || [LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small, LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small];
     for (let team = 0; team < 3; team++) {
-      try { bakeSprite(scene, srcKey, `u-${k}-t${team}`, team, tgt); n++; } catch (e) { console.warn('ai-kit unit', k, String(e)); }
+      try { bakeSprite(scene, srcKey, `u-${k}-t${team}`, team, tgt, true); n++; } catch (e) { console.warn('ai-kit unit', k, String(e)); }
       // regenerate walk frames from the baked sprite (cut halves, offset legs)
       const finished = scene.textures.get(`u-${k}-t${team}`).getSourceImage();
-      const FH = finished.height;
+      const FW = finished.width, FH = finished.height;
       const mid = Math.round(FH * 0.62);
       for (let fr = 0; fr < 3; fr++) {
         const key = `u-${k}-t${team}-w${fr}`;
         if (scene.textures.exists(key)) scene.textures.remove(key);
-        const frC = document.createElement('canvas'); frC.width = FH; frC.height = FH;
+        const frC = document.createElement('canvas'); frC.width = FW; frC.height = FH;
         const fctx = frC.getContext('2d');
         fctx.imageSmoothingEnabled = false;
         const dx = fr === 1 ? 0 : (fr === 0 ? 1 : -1);
         const bob = fr === 2 ? -1 : 0;
-        fctx.drawImage(finished, 0, 0, FH, mid, 0, bob, FH, mid);
-        fctx.drawImage(finished, 0, mid, FH, FH - mid, dx, mid, FH, FH - mid);
+        fctx.drawImage(finished, 0, 0, FW, mid, 0, bob, FW, mid);
+        fctx.drawImage(finished, 0, mid, FW, FH - mid, dx, mid, FW, FH - mid);
         scene.textures.addCanvas(key, frC);
+        if (scene.__emblemScale && scene.__emblemScale[`u-${k}-t${team}`]) scene.__emblemScale[key] = scene.__emblemScale[`u-${k}-t${team}`];
       }
     }
   }
