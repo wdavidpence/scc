@@ -28,6 +28,9 @@ export class BattleScene extends Phaser.Scene {
     const AI = 'assets/ai/';
     for (const k of ['ground_a', 'ground_b', 'ground_cracked', 'ground_highland', 'ground_ash', 'rock0', 'rock1', 'rock2', 'minerals', 'geyser'])
       if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
+    // v2.40 polish kit: fog mist, per-team blight spreads, HUD chrome
+    for (const k of ['fog_mist', 'blight_player', 'blight_enemy', 'hud_chrome'])
+      if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
     // v2.39 deep kit: every unit + structure + fx
     preloadAIKit(this);
   }
@@ -1033,6 +1036,17 @@ export class BattleScene extends Phaser.Scene {
     this.visImg.setOrigin(0.5).setScale(TILE).setDepth(499).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(1);
     this.fogDirty = true;
     this.fogTimer = 0;
+    // v2.40: AI mist overlay baked through the fog mask (soft edge from softCut upscale)
+    if (this.textures.exists('ai-fog_mist')) {
+      const mc = document.createElement('canvas'); mc.width = 768; mc.height = 768;
+      const mx = mc.getContext('2d');
+      const src = this.textures.get('ai-fog_mist').getSourceImage();
+      this._fogPat = mx.createPattern(src, 'repeat');
+      this.mistCanvas = mc; this.mistCtx = mx;
+      this.textures.addCanvas('fog_mist', mc);
+      this.fogMistImg = this.add.image(PXW / 2, PXH / 2, 'fog_mist');
+      this.fogMistImg.setOrigin(0.5).setScale(PXW / 768).setDepth(501).setAlpha(0.5).setBlendMode(Phaser.BlendModes.SCREEN);
+    }
   }
 
   updateFog() {
@@ -1092,6 +1106,27 @@ export class BattleScene extends Phaser.Scene {
     for (const b of this.buildings) { if (!b.dead) { softCut(visCtx, b.x / TILE, b.y / TILE, (b.def.sight || 5)); } }
     fogCtx.globalCompositeOperation = 'source-over';
     visCtx.globalCompositeOperation = 'source-over';
+    // v2.40: bake AI mist into unseen areas — pattern fill, punch soft holes at vision sources
+    if (this.mistCtx) {
+      const mc = this.mistCanvas, mx = this.mistCtx, S = mc.width / MAP_W;
+      mx.globalCompositeOperation = 'source-over';
+      mx.clearRect(0, 0, mc.width, mc.height);
+      mx.fillStyle = this._fogPat; mx.fillRect(0, 0, mc.width, mc.height);
+      mx.globalCompositeOperation = 'destination-out';
+      const softCutPx = (cx, cy, r) => {
+        if (!isFinite(cx) || !isFinite(cy)) return;
+        const rr = Math.max(1.5, (isFinite(r) ? r : 4)) * S;
+        const g2 = mx.createRadialGradient(cx / TILE * S, cy / TILE * S, rr * 0.55, cx / TILE * S, cy / TILE * S, rr);
+        g2.addColorStop(0, 'rgba(0,0,0,1)');
+        g2.addColorStop(1, 'rgba(0,0,0,0)');
+        mx.fillStyle = g2;
+        mx.beginPath(); mx.arc(cx / TILE * S, cy / TILE * S, rr, 0, 7); mx.fill();
+      };
+      for (const u of this.units) { if (!u.dead) softCutPx(u.x, u.y, u.def.sight); }
+      for (const b of this.buildings) { if (!b.dead) softCutPx(b.x, b.y, b.def.sight || 5); }
+      mx.globalCompositeOperation = 'source-over';
+      this.textures.get('fog_mist').refresh();
+    }
     // repopulate holes in fog: fog = black where unseen only
     fogCtx.clearRect(0, 0, MAP_W, MAP_H);
     fogCtx.fillStyle = '#000';
@@ -1235,6 +1270,8 @@ export class BattleScene extends Phaser.Scene {
   createBlightLayers() {
     this.blightCanvases = {};
     this.blightTextures = {};
+    this.blightAiCanvases = {};
+    const BS = 1024; // AI blight overlay resolution
     for (const t of [0, 1]) {
       const c = document.createElement('canvas'); c.width = MAP_W; c.height = MAP_H;
       const ctx = c.getContext('2d');
@@ -1243,9 +1280,42 @@ export class BattleScene extends Phaser.Scene {
       this.blightTextures[t] = tex;
       const img = this.add.image(PXW / 2, PXH / 2, `blight-t${t}`);
       img.setOrigin(0.5).setScale(TILE).setDepth(5).setAlpha(t === 0 ? 0.75 : 0.8);
+      // v2.40 AI-painted blight texture layered on top of the flat fill
+      const aiKey = t === 0 ? 'ai-blight_player' : 'ai-blight_enemy';
+      if (this.textures.exists(aiKey)) {
+        const ac = document.createElement('canvas'); ac.width = BS; ac.height = BS;
+        const ax = ac.getContext('2d');
+        const src = this.textures.get(aiKey).getSourceImage();
+        this.blightCanvases[t].pat = ax.createPattern(src, 'repeat');
+        this.blightCanvases[t].sc = BS / (MAP_W * TILE); // world px -> overlay px
+        this.blightCanvases[t].ac = ac; this.blightCanvases[t].ax = ax;
+        this.textures.addCanvas(`blight-ai-t${t}`, ac);
+        const aim = this.add.image(PXW / 2, PXH / 2, `blight-ai-t${t}`);
+        aim.setOrigin(0.5).setScale(TILE).setDepth(6).setAlpha(t === 0 ? 0.85 : 0.9);
+      }
     }
     this.blightDirty = false;
     this.blightTimer = 0;
+  }
+
+  // v2.40: stamp a soft AI-textured blob at a newly-blighted cell.
+  // The pattern is anchored to the overlay canvas origin (world-fixed), so
+  // neighbouring stamps sample one continuous texture — no seams.
+  stampBlightAi(team, x, y) {
+    const cc = this.blightCanvases[team];
+    if (!cc || !cc.ax) return;
+    const { ax, pat, sc } = cc;
+    const px = x * TILE * sc, py = y * TILE * sc, r = TILE * sc * 1.15;
+    ax.save();
+    ax.beginPath(); ax.arc(px, py, r, 0, 7); ax.clip();
+    ax.fillStyle = pat; ax.fillRect(px - r, py - r, r * 2, r * 2);
+    ax.restore();
+    // feather edge
+    ax.globalCompositeOperation = 'destination-out';
+    const g = ax.createRadialGradient(px, py, r * 0.45, px, py, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ax.fillStyle = g; ax.beginPath(); ax.arc(px, py, r, 0, 7); ax.fill();
+    ax.globalCompositeOperation = 'source-over';
   }
 
   addBlight(team, cx, cy, radius) {
@@ -1258,10 +1328,10 @@ export class BattleScene extends Phaser.Scene {
         const x = tx + dx, y = ty + dy;
         if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
         const i = y * MAP_W + x;
-        if (!cells[i]) { cells[i] = 1; ctx.fillStyle = team === 0 ? '#2f4e8f' : '#5a2340'; ctx.fillRect(x, y, 1, 1); changed = true; }
+        if (!cells[i]) { cells[i] = 1; ctx.fillStyle = team === 0 ? '#2f4e8f' : '#5a2340'; ctx.fillRect(x, y, 1, 1); this.stampBlightAi(team, x, y); changed = true; }
       }
     }
-    if (changed) this.textures.get(`blight-t${team}`).refresh();
+    if (changed) { this.textures.get(`blight-t${team}`).refresh(); if (this.blightCanvases[team].ac) this.textures.get(`blight-ai-t${team}`).refresh(); }
   }
 
   hasBlight(team, x, y) {

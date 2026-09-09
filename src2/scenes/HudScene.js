@@ -7,6 +7,11 @@ export class HudScene extends Phaser.Scene {
 
   init(data) { this.race = data.race || 'terran'; this.world = data.world; }
 
+  preload() {
+    // v2.40: AI chrome plate for HUD panels
+    if (!this.textures.exists('ai-hud_chrome')) this.load.image('ai-hud_chrome', 'assets/ai/hud_chrome.png');
+  }
+
   create() {
     this.W = this.scale.width; this.H = this.scale.height;
     this.buttons = [];
@@ -250,6 +255,16 @@ export class HudScene extends Phaser.Scene {
     this.mmX = this.W - this.mmSize - 8;
     this.mmY = 40;
     this.mmBG = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x060a12, 0.95).setOrigin(0, 0).setScrollFactor(0);
+    // v2.40: AI chrome bezel + live terrain tint on the minimap face.
+    // Creation order = draw order: mmBG (dark) -> chrome bezel -> terrain tint -> frame -> dots -> zone.
+    if (this.textures.exists('ai-hud_chrome')) {
+      this.mmChrome = this.add.image(this.mmX - 4, this.mmY - 4, 'ai-hud_chrome').setOrigin(0, 0).setScrollFactor(0).setTint(0xbfc9d6).setAlpha(0.85);
+      this.mmChrome.setDisplaySize(this.mmSize + 8, this.mmSize + 8);
+    }
+    if (this.textures.exists('terrain')) {
+      this.mmTerrain = this.add.image(this.mmX, this.mmY, 'terrain').setOrigin(0, 0).setScrollFactor(0).setAlpha(0.92);
+      this.mmTerrain.setDisplaySize(this.mmSize, this.mmSize);
+    }
     this.mmFrame = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x2b313a, 1).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3b444f);
     this.mmG = this.add.graphics().setScrollFactor(0);
     const zone = this.add.zone(this.mmX, this.mmY, this.mmSize, this.mmSize).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
@@ -1008,6 +1023,8 @@ export class HudScene extends Phaser.Scene {
     this.mmSize = nz; this.mmX = this.W - nz - 8;
     this.mmBG.setSize(nz, nz); this.mmBG.setPosition(this.mmX, this.mmY);
     this.mmFrame.setSize(nz, nz); this.mmFrame.setPosition(this.mmX, this.mmY);
+    if (this.mmChrome) { this.mmChrome.setPosition(this.mmX - 4, this.mmY - 4); this.mmChrome.setDisplaySize(nz + 8, nz + 8); }
+    if (this.mmTerrain) { this.mmTerrain.setPosition(this.mmX, this.mmY); this.mmTerrain.setDisplaySize(nz, nz); }
     if (this.mmZone) { this.mmZone.setSize(nz, nz); this.mmZone.setPosition(this.mmX, this.mmY); }
     this.mmG.setScale(1);
     const b = this.scene.get('Battle');
