@@ -25,8 +25,8 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
     await new Promise(r => setTimeout(r, 5000));
     const bs = sm.getScene('Battle');
     const out = {};
-    // 1. fog/intel canvas resolution 96*4
-    out.fogRes = bs.fogCanvas.width === 96 * 4 && bs.visCanvas.width === 96 * 4;
+    // 1. fog/intel canvas resolution MAP*4 (v2.45: 160)
+    out.fogRes = bs.fogCanvas.width === bs.nav.w * 4 && bs.visCanvas.width === bs.nav.h * 4;
     // 2. fog image scale matches
     out.fogScale = Math.abs(bs.fogImg.scaleX - 16 / 4) < 0.01;
     // 3. fog unseen color is deep blue not pure black: sample center of an unseen tile block
@@ -36,14 +36,15 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
       let px = null;
       const d = fx.getImageData(0, 0, bs.fogCanvas.width, bs.fogCanvas.height).data;
       for (let i = 0; i < bs.seen.length; i++) {
-        if (!bs.seen[i]) { const tx = i % 96, ty = (i / 96) | 0; const o = ((ty * 4 + 2) * bs.fogCanvas.width + (tx * 4 + 2)) * 4; if (d[o + 3] > 200) { px = [d[o], d[o + 1], d[o + 2]]; break; } }
+        if (!bs.seen[i]) { const tx = i % bs.nav.w, ty = (i / bs.nav.w) | 0; const o = ((ty * 4 + 2) * bs.fogCanvas.width + (tx * 4 + 2)) * 4; if (d[o + 3] > 200) { px = [d[o], d[o + 1], d[o + 2]]; break; } }
       }
       out.fogColor = px; // expect [6,10,20]
       out.fogTint = !!px && px[2] > px[0]; // blue > red = tinted, not pure black
     }
     // 4. feathered edge: along a horizontal scanline through a building vision center, count intermediate-alpha fog pixels
     {
-      const b0 = bs.buildings.find(bb => bb.team === 0 && !bb.dead);
+      // v2.45 RA start: no buildings at spawn — use the player MCV as the vision source
+      const b0 = bs.buildings.find(bb => bb.team === 0 && !bb.dead) || bs.units.find(u => u.team === 0 && !u.dead);
       const cx = Math.round(b0.x / 16 * 4), cy = Math.round(b0.y / 16 * 4);
       const d = bs.fogCtx.getImageData(cx, cy, 60, 1).data;
       let mid = 0;
