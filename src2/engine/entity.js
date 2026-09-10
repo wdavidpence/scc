@@ -169,7 +169,7 @@ export class Unit {
       default:
         if (this.def.transport) { /* dropship holds station until ordered */ if (!this.order) this.state = 'idle'; }
         else if (this.def.heal) { if (!this.updateAutoHeal(dt)) this.updateAutoAcquire(dt); } // SC1 medic micro: heal first, shoot second
-        else if (this.def.worker || this.def.weaponless) { if (!this.order && (this.world.autoMine !== false)) this.setOrder({ type: 'harvest' }); }
+        else if (this.def.worker || this.def.weaponless) { if (!this.order && (this.world.autoMine !== false) && !this.def.mcv) this.setOrder({ type: 'harvest' }); } // v2.47: MCV must not auto-harvest — it would eat AI roam orders and never deploy
         else this.updateAutoAcquire(dt);
     }
     this.animate(dt);

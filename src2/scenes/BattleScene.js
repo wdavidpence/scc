@@ -3800,12 +3800,21 @@ export class BattleScene extends Phaser.Scene {
     if (aiMCV && !this.buildings.some(b => b.team === team && !b.dead && b.def.primary)) {
       aiMCV._depT = (aiMCV._depT ?? 0) - 1;
       if (aiMCV._depT <= 0) {
-        aiMCV._depT = 4;
+        aiMCV._depT = 2;
         let best = null, bd = 1e9;
         for (const m of this.minerals) { if (m.amount <= 0) continue; const d = Math.hypot(m.x - aiMCV.x, m.y - aiMCV.y); if (d < bd) { bd = d; best = m; } }
         const roamed = this.gameTime > 10;
-        if (best && bd < TILE * 5 && roamed && this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, team)) {
-          this.deployMCV(aiMCV, true);
+        // v2.47 FIX: the old orbit-and-hope gate (bd<TILE*5 at the exact think tick)
+        // left the AI parked forever on seeds where the mineral orbit kept it outside.
+        // Now: after roaming, try to deploy anywhere valid, else walk TO the mineral.
+        if (best && roamed) {
+          if (this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, team)) {
+            this.deployMCV(aiMCV, true);
+          } else if (!aiMCV.order || aiMCV.order.type !== 'move') {
+            const ang = Math.random() * Math.PI * 2;
+            const rr = bd < TILE * 2 ? TILE * (2 + Math.random() * 3) : TILE * (1 + Math.random() * 2);
+            aiMCV.issueMove(best.x + Math.cos(ang) * rr, best.y + Math.sin(ang) * rr, false);
+          }
         } else if (best && (!aiMCV.order || aiMCV.order.type !== 'move')) {
           const ang = Math.random() * Math.PI * 2;
           const rr = TILE * (4 + Math.random() * 6);
