@@ -10,6 +10,7 @@ import { createBuildingsAAA } from '../engine/art3d.js';
 import { preloadAIKit, applyAIKit } from '../engine/aiKit.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
+import { CH } from '../engine/chrome.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
 import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
@@ -455,6 +456,17 @@ export class BattleScene extends Phaser.Scene {
   createLighting() {
     this.lightLayer = this.add.container(0, 0).setDepth(46); // above units(30/40), below fx(50+)
     this.tintRect = this.add.rectangle(PXW / 2, PXH / 2, PXW + 400, PXH + 400, 0x0a1230, 0).setDepth(47).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    // v2.47 COLOR GRADE: soft vignette + warm/cool split-tone over the battlefield
+    // (below the fog mist 501 and HUD scene, above units/lights). Scroll-factor 0.
+    CH.init(this);
+    const SW = this.scale.width, SH = this.scale.height;
+    this.gradeRect = this.add.rectangle(SW / 2, SH / 2, SW + 40, SH + 40, 0xffb066, 0.05).setDepth(49).setScrollFactor(0).setBlendMode(Phaser.BlendModes.OVERLAY);
+    this.vignetteImg = this.add.image(SW / 2, SH / 2, 'grade-vignette').setOrigin(0.5).setScrollFactor(0).setDepth(500).setDisplaySize(SW, SH).setAlpha(0.9);
+    this.events.on('resize', (sz) => {
+      const w = sz.width || this.scale.width, h = sz.height || this.scale.height;
+      if (this.gradeRect?.active) { this.gradeRect.setPosition(w / 2, h / 2); this.gradeRect.setSize(w + 40, h + 40); }
+      if (this.vignetteImg?.active) { this.vignetteImg.setPosition(w / 2, h / 2); this.vignetteImg.setDisplaySize(w, h); }
+    });
     this._lights = [];           // {img, base, pulse, phase}
     this._flashPool = [];
     // geyser cyan pulses — v2.41: brighter bloom (review: nothing in-frame exceeds lum ~99)
@@ -557,6 +569,20 @@ export class BattleScene extends Phaser.Scene {
     this.tintRect.setAlpha(nightAlpha);
     const dusk = (d >= 0.35 && d < 0.6) ? 1 : 0;
     this.tintRect.fillColor = dusk && nightAlpha > 0 ? 0x2a1a40 : 0x0a1230;
+    // v2.47 COLOR GRADE: split-tone by time-of-day — warm amber highlight grade by day,
+    // teal/cool at night, magenta-lean at dusk. Low alpha so the v2.29 brightness budget holds.
+    if (this.gradeRect) {
+      const gt = night; // 0 day -> 1 night
+      // day warm 0xffb066, dusk violet 0xff7ab0, night teal 0x3ad0d0
+      let col, a;
+      if (gt < 0.25) { col = 0xffc27a; a = 0.05; }
+      else if (gt < 0.75) { col = 0xd07ac8; a = 0.07; }
+      else { col = 0x2ec8cc; a = 0.09; }
+      const cur = this.gradeRect.fillColor;
+      this.gradeRect.fillColor = col;
+      this.gradeRect.setAlpha(a);
+    }
+    if (this.vignetteImg) this.vignetteImg.setAlpha(0.78 + night * 0.12);
     // building window glows fade in at night
     for (const b of this.buildings) {
       if (!b._bglows) continue;
@@ -1753,6 +1779,23 @@ export class BattleScene extends Phaser.Scene {
     if (!target.def && target.kind && target.team === (this.activeTeam ?? 0)) {
       const sp = this.add.circle(tx, ty, 2, 0xffd0d0, 0.9).setDepth(46);
       this.tweens.add({ targets: sp, scale: 2.4, alpha: 0, duration: 180, onComplete: () => sp.destroy() });
+    }
+    // v2.47 HIT FX UPGRADE: expanding shock ring + 6-spoke spark burst on every impact,
+    // scaled by damage; heavy hits get a hot core flash.
+    if (this.camNear(tx, ty)) {
+      const heavy = damage >= 30;
+      const ring = this.add.circle(tx, ty, heavy ? 8 : 5, 0, 0).setStrokeStyle(heavy ? 2.5 : 1.5, heavy ? 0xffc27a : 0xffe9c2, 0.9).setDepth(52);
+      this.tweens.add({ targets: ring, scale: heavy ? 2.6 : 1.9, alpha: 0, duration: heavy ? 260 : 190, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+      const spokes = heavy ? 6 : 4;
+      for (let i = 0; i < spokes; i++) {
+        const a = Math.random() * Math.PI * 2, r0 = 3 + Math.random() * 4;
+        const s2 = this.add.rectangle(tx + Math.cos(a) * r0, ty + Math.sin(a) * r0, 2.5, 1.2, heavy ? 0xffdf8a : 0xffd0a0, 0.95).setRotation(a).setDepth(52);
+        this.tweens.add({ targets: s2, x: tx + Math.cos(a) * (12 + r0 * 2), y: ty + Math.sin(a) * (12 + r0 * 2), alpha: 0, scaleX: 0.4, duration: 200 + Math.random() * 120, ease: 'Quad.easeOut', onComplete: () => s2.destroy() });
+      }
+      if (heavy && this.textures.exists('glow-soft')) {
+        const core = this.add.image(tx, ty, 'glow-soft').setTint(0xffd9a0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.85).setScale(0.7).setDepth(52);
+        this.tweens.add({ targets: core, alpha: 0, scale: 1.5, duration: 220, onComplete: () => core.destroy() });
+      }
     }
     this.hitRocksNear(tx, ty, damage, splash);
     if (splash > 0) {

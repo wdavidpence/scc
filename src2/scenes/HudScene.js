@@ -74,6 +74,39 @@ export class HudScene extends Phaser.Scene {
 
     this.events.on('resize', () => this.handleResize());
     this.input.on('pointerdown', () => { this.audioUnlock = true; });
+    this.createCommandCursor();
+  }
+
+  // v2.47 COMMAND CURSOR: game-drawn pointer that reflects order state
+  // (normal / attack / cast / place), replacing the OS arrow over the battlefield.
+  createCommandCursor() {
+    this.input.setDefaultCursor('none');
+    // interactive UI elements restore a hand cursor automatically on hover;
+    // if no game canvas exists (gate headless without WebGL) fall back to default
+    this.cur = this.add.image(-100, -100, 'cur-normal').setScrollFactor(0).setDepth(10000);
+    this._curState = 'normal';
+    this._curTgt = null;
+    this.input.on('pointermove', (p) => {
+      if (!this.cur || !this.cur.active) return;
+      this.cur.setPosition(p.x, p.y + 2);
+      const b = this.scene.get('Battle');
+      if (!b || !b.scene.isActive()) return;
+      let st = 'normal';
+      if (b.placing) st = 'place';
+      else if (b.castMode || b.ultMode || b.scanMode) st = 'cast';
+      else if (b.attackMoveMode) st = 'attack';
+      if (st !== this._curState) {
+        this._curState = st;
+        const key = st === 'attack' ? 'cur-attack' : st === 'cast' ? 'cur-cast' : st === 'place' ? 'cur-place' : 'cur-normal';
+        if (this.textures.exists(key)) this.cur.setTexture(key);
+      }
+    });
+    this.input.on('pointerdown', () => {
+      if (!this.cur || !this.cur.active) return;
+      this.cur.setScale(1.35);
+      this.tweens.add({ targets: this.cur, scale: 1, duration: 130, ease: 'Back.easeOut' });
+    });
+    this.events.once('shutdown', () => this.input.setDefaultCursor('default'));
   }
 
   fmt(n) { return Math.floor(n).toLocaleString('en-US'); }
