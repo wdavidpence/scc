@@ -171,6 +171,8 @@ export class BattleScene extends Phaser.Scene {
     this.showBriefingCard();
     this.events.emit('hud:objectives', this.objectives);
     this.spawnAmbient();
+    // v2.45: RA-start opening directive
+    this.events.emit('hud:alert', 'SCOUT FOR MINERALS — SELECT COMMAND VEHICLE, PRESS D TO DEPLOY');
     this.createLighting();
     // F7: veteran perks from campaign
     if (this.campaign && this.campaign.owned) {
@@ -1290,11 +1292,12 @@ export class BattleScene extends Phaser.Scene {
       if (u.dead) continue;
       // hot-seat: both commanders' units contribute vision (shared screen)
       if (!this.hotseat && u.team !== 0 && (u.cloaked || u.burrowed)) continue;
+      if (!this.hotseat && u.team !== 0) continue; // v2.45: enemy units/buildings no longer paint YOUR fog — they are as blind as you
       if (this.hotseat && u.cloaked) continue;
       const elevSight = (!u.flying && this.elevAt && this.elevAt(u.x, u.y)) ? 2 : 0; // v2.34 L9: high ground +2 sight
       stamp(u.x, u.y, (u.cloaked || u.burrowed) ? 1 : u.def.sight + elevSight);
     }
-    for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
+    for (const b of this.buildings) { if (!b.dead && (this.hotseat || b.team === 0)) stamp(b.x, b.y, b.def.sight || 5); }
     fogCtx.globalCompositeOperation = 'destination-out';
     visCtx.globalCompositeOperation = 'destination-out';
     // v2.44: vision holes punched at FOGRES resolution with wider feather -> smooth curved edges
@@ -1552,34 +1555,72 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- base spawn ----------------
   spawnBase(team, race) {
-    const info = RACE_INFO[race];
+    // v2.45: Red Alert start — one MCV-class vehicle per side, no base, no troops, no workers.
+    // Drive to minerals, DEPLOY to found your Command Center.
     const bx = team === 0 ? PXW * 0.12 : PXW * 0.88;
     const by = team === 0 ? PXH * 0.12 : PXH * 0.88;
-    const b = new Building(this, team, info.primary, bx, by, { instant: true });
-    this.buildings.push(b);
-    this.addBuildingLights(b); // v2.41: spawnBase bypasses building_built — ensure forge light
-    const workerKinds = info.workers;
-    for (let i = 0; i < 4; i++) {
-      const u = this.spawnUnit(team, workerKinds[0], bx + 40 + Math.random() * 40, by + 40 + Math.random() * 40, { arriveReady: true });
-    }
-    if (race === 'skarn') {
-      this.addBlight(team, bx, by, b.def.blightRadius || 8);
-      // skywarden
-      this.spawnUnit(team, 'skywarden', bx + 30, by - 40, { arriveReady: true });
-    }
-    if (race === 'auraxis') {
-      // starting conduit
-      const py = new Building(this, team, 'conduit', bx + TILE * 5, by + TILE * 2, { instant: true });
-      this.buildings.push(py);
-    }
-    // starting barracks for enemy
-    if (team === 1) {
-      const bid = race === 'skarn' ? 'clawPit' : race === 'auraxis' ? 'portal' : 'barracks';
-      const eb = new Building(this, team, bid, bx + TILE * 4 * (team === 1 ? -1 : 1), by + TILE * 3, { instant: true });
-      this.buildings.push(eb);
-      if (race === 'skarn') this.addBlight(team, bx, by, 9);
-    }
+    const mcvKind = race === 'terran' ? 'mcv' : race === 'skarn' ? 'broodmatron' : 'atlaswalker';
+    this._startMCV = this._startMCV || {};
+    this._startMCV[team] = this.spawnUnit(team, mcvKind, bx, by, { arriveReady: true });
     this.players[team].supplyCap = this.computeSupplyCap(team);
+  }
+
+  // v2.45: MCV deploy — turns the starter vehicle into your primary Command Center
+  deployMCV(u, force = false) {
+    if (!u || u.dead || !u.def.mcv) { this.audio?.error(); return false; }
+    if (!force) {
+      const T = this.activeTeam ?? 0;
+      if (u.team !== T) return false;
+    }
+    const bid = u.def.deploysTo;
+    const def = BUILDINGS[bid];
+    const bx = u.x, by = u.y;
+    // must be flat clear ground of the right footprint
+    if (!this.deploySpotValid(def, bx, by, u.team)) {
+      this.events.emit('hud:alert', 'NEED FLAT CLEAR GROUND TO DEPLOY');
+      this.audio?.error();
+      return false;
+    }
+    // consume the vehicle
+    this.clearSelection();
+    if (u._ring) { u._ring.destroy(); u._ring = null; }
+    this.selection.delete(u);
+    u.dead = true;
+    this.units = this.units.filter(x => x !== u);
+    this.polish?.spawnFlash(bx, by, u.team);
+    this.audio?.explosion?.();
+    // instant primary structure (RA: deployment is immediate)
+    const b = new Building(this, u.team, bid, bx, by, { instant: true });
+    this.buildings.push(b);
+    this.addBuildingLights(b);
+    this.addForgeLight(b);
+    if (u.team === 1 && u.def.race === 'skarn') this.addBlight(u.team, bx, by, b.def.blightRadius || 8);
+    this.players[u.team].supplyCap = this.computeSupplyCap(u.team);
+    if (u.team === 0) {
+      this.events.emit('hud:alert', 'COMMAND CENTER ONLINE — HARVESTERS AVAILABLE');
+      this.audio?.complete?.();
+      this.audio?.announcer?.('build');
+    } else if (this.isVisible(bx, by)) {
+      // v2.45: enemies found a deploy spot — you only know if you're watching
+      this.events.emit('hud:alert', '⚠ ENEMY COMMAND CENTER DEPLOYING', 0xff5c5c);
+      this.audio?.underAttackBark?.();
+    }
+    if (u.team === 0) { this.selectedBuilding = b; this.events.emit('hud:selection', this.selectionInfo()); }
+    return true;
+  }
+
+  deploySpotValid(def, x, y, team) {
+    const w = def.w * TILE, h = def.h * TILE;
+    if (x - w / 2 < TILE || y - h / 2 < TILE || x + w / 2 > PXW - TILE || y + h / 2 > PXH - TILE) return false;
+    if (this.buildingAt(x, y)) return false;
+    const tx0 = Math.floor((x - w / 2) / TILE), ty0 = Math.floor((y - h / 2) / TILE);
+    const tx1 = Math.ceil((x + w / 2) / TILE) - 1, ty1 = Math.ceil((y + h / 2) / TILE) - 1;
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+      if (this.nav.solid[this.nav.idx(tx, ty)]) return false;
+      if (this.rockTiles.some(r => r.tx === tx && r.ty === ty)) return false;
+    }
+    return true;
   }
 
   // ---------------- spawning ----------------
@@ -1916,6 +1957,13 @@ export class BattleScene extends Phaser.Scene {
     this.units = this.units.filter(x => x !== u);
     this.selection.delete(u);
     this.harvestTargetReset(u);
+    // v2.45: MCV is your only way to found a base — losing it pre-deploy loses the game
+    if (u.def.mcv && !this.gameOver && !this.buildings.some(b => b.team === u.team && !b.dead && b.def.primary)) {
+      if (this.mods && (this.mods.escape || this.mods.cratesWin || this.mods.convoy)) {
+        if (u.team === 0) this.endGame('defeat');
+      } else if (u.team === 0) this.endGame('defeat');
+      else if (!(this.mods && (this.mods.escape || this.mods.cratesWin || this.mods.convoy))) this.endGame('victory');
+    }
     // minimap event ping on combat deaths
     if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
     // polish: kill pop + streak taunts when the enemy dies in your vision
@@ -2437,6 +2485,11 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-J', () => this.toggleAutoMine());
     this.input.keyboard.on('keydown-P', () => this.armPatrol());
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
+    // v2.45: D = deploy MCV-class starter into Command Center
+    this.input.keyboard.on('keydown-D', () => {
+      const u = [...this.selection].find(x => x.def.mcv && !x.dead && x.team === (this.activeTeam ?? 0));
+      if (u) this.deployMCV(u);
+    });
     this.input.keyboard.on('keydown-F', () => this.stimSelected());
     // v2.27: camera follow lock (X) — cam tracks the selected unit until re-press
     this.input.keyboard.on('keydown-X', () => {
@@ -3695,6 +3748,26 @@ export class BattleScene extends Phaser.Scene {
     }
     // assign idle workers to harvest
     for (const w of this.units) { if (!w.dead && w.team === team && w.def.worker && w.state === 'idle') w.setOrder({ type: 'harvest' }); }
+
+    // v2.45: AI deploys its MCV — blind search to nearest mineral patch, deploy on valid ground.
+    // Roams a few seconds first (RA feel) instead of parking instantly at spawn.
+    const aiMCV = this.units.find(u => !u.dead && u.team === team && u.def.mcv);
+    if (aiMCV && !this.buildings.some(b => b.team === team && !b.dead && b.def.primary)) {
+      aiMCV._depT = (aiMCV._depT ?? 0) - 1;
+      if (aiMCV._depT <= 0) {
+        aiMCV._depT = 4;
+        let best = null, bd = 1e9;
+        for (const m of this.minerals) { if (m.amount <= 0) continue; const d = Math.hypot(m.x - aiMCV.x, m.y - aiMCV.y); if (d < bd) { bd = d; best = m; } }
+        const roamed = this.gameTime > 10;
+        if (best && bd < TILE * 5 && roamed && this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, team)) {
+          this.deployMCV(aiMCV, true);
+        } else if (best && (!aiMCV.order || aiMCV.order.type !== 'move')) {
+          const ang = Math.random() * Math.PI * 2;
+          const rr = TILE * (4 + Math.random() * 6);
+          aiMCV.issueMove(best.x + Math.cos(ang) * rr, best.y + Math.sin(ang) * rr, false);
+        }
+      }
+    }
 
     // build structure needs
     const want = (bid) => BUILDINGS[bid];

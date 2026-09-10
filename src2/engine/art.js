@@ -510,6 +510,38 @@ function createUnitTextures(scene) {
       px(ctx, 10, 5, 1, 1, col); // eye
       px(ctx, 5, 13, 2, 4, '#8fbf6a'); px(ctx, 9, 14, 2, 4, '#8fbf6a'); px(ctx, 13, 13, 2, 4, '#8fbf6a'); // acid droplets
       px(ctx, 6, 16, 1, 2, '#b0e08a'); px(ctx, 13, 16, 1, 2, '#b0e08a');
+    },
+    mcv: (ctx, col) => {
+      // terran Mobile Command: 8-wheeled armored HQ truck, container body, dish antenna
+      px(ctx, 1, 6, 18, 8, '#5b6470'); px(ctx, 2, 7, 16, 6, '#454e59');
+      px(ctx, 12, 8, 7, 4, col); // command module
+      px(ctx, 13, 4, 4, 3, '#727c8a'); px(ctx, 14, 3, 2, 1, col); // cab
+      px(ctx, 3, 14, 3, 3, '#22272e'); px(ctx, 8, 14, 3, 3, '#22272e'); px(ctx, 13, 14, 3, 3, '#22272e'); px(ctx, 17, 14, 3, 3, '#22272e'); // wheels
+      px(ctx, 4, 8, 5, 2, '#8a95a3'); // rack
+      px(ctx, 6, 2, 1, 3, '#cfd8e6'); px(ctx, 5, 1, 3, 1, '#cfd8e6'); // antenna dish
+      px(ctx, 18, 9, 1, 2, '#ffd23f'); // beacon
+    },
+    broodmatron: (ctx, col) => {
+      // skarn Brood Matron: heavy sac-backed crawler, pulsing egg sac glowing
+      ctx.fillStyle = '#6e3a20'; ctx.beginPath(); ctx.ellipse(9, 11, 7, 5.5, 0, 0, 7); ctx.fill(); // body
+      ctx.fillStyle = '#8a4a28'; ctx.beginPath(); ctx.ellipse(14, 10, 4, 3.5, 0, 0, 7); ctx.fill(); // head
+      px(ctx, 15, 9, 2, 2, col); // eye slit
+      const g = ctx.createRadialGradient(7, 10, 1, 7, 10, 4.5); // glowing egg sac
+      g.addColorStop(0, 'rgba(255,220,140,0.95)'); g.addColorStop(1, 'rgba(160,80,40,0.55)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(7, 10, 4.2, 3.4, 0, 0, 7); ctx.fill();
+      px(ctx, 2, 15, 2, 3, '#3c2214'); px(ctx, 6, 16, 2, 3, '#3c2214'); px(ctx, 10, 16, 2, 3, '#3c2214'); px(ctx, 14, 15, 2, 3, '#3c2214'); // legs
+      px(ctx, 12, 5, 3, 2, '#a55a30'); // spine ridge
+    },
+    atlaswalker: (ctx, col) => {
+      // auraxis Atlas Walker: bipedal walker with glowing core and phase pylons
+      px(ctx, 6, 4, 8, 9, '#6b5f9e'); px(ctx, 7, 5, 6, 7, '#4a4173'); // hull
+      const g = ctx.createRadialGradient(10, 8, 1, 10, 8, 3.5); // psionic core
+      g.addColorStop(0, 'rgba(255,235,180,0.95)'); g.addColorStop(1, 'rgba(120,90,200,0.4)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(10, 8, 3.2, 0, 7); ctx.fill();
+      px(ctx, 5, 13, 2, 5, '#8a7fc4'); px(ctx, 13, 13, 2, 5, '#8a7fc4'); // legs
+      px(ctx, 4, 17, 4, 1, '#c4b5fd'); px(ctx, 12, 17, 4, 1, '#c4b5fd'); // feet
+      px(ctx, 3, 6, 2, 4, '#a78bfa'); px(ctx, 15, 6, 2, 4, '#a78bfa'); // pylons
+      px(ctx, 10, 2, 1, 2, col); // spire light
     }
   };
 

@@ -22,6 +22,12 @@ export const BUILD_TIME_SCALE = 0.18; // accelerate vs SC1 for browser session p
 
 export const UNITS = {
   // ---------------- TERRAN ----------------
+  mcv: {
+    race: 'terran', name: 'Mobile Command', hp: 250, armor: 1, size: 'large',
+    speed: 0.5, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
+    supply: 1, minerals: 0, gas: 0, buildTime: 0, build: null,
+    sight: 10, mcv: true, deploysTo: 'commandCenter', weaponless: true, spawnOnly: true, icon: 'mcv'
+  },
   rigger: {
     race: 'terran', name: 'Rigger', hp: 60, armor: 0, size: 'small',
     speed: 0.62, targets: 'ground', attackType: 'concussive', damage: 5, cooldown: 1.0, range: 0.6,
@@ -99,6 +105,12 @@ export const UNITS = {
   },
 
   // ---------------- SKARN ----------------
+  broodmatron: {
+    race: 'skarn', name: 'Brood Matron', hp: 300, armor: 1, size: 'large',
+    speed: 0.5, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
+    supply: 1, minerals: 0, gas: 0, buildTime: 0, build: null,
+    sight: 10, mcv: true, deploysTo: 'broodNest', weaponless: true, spawnOnly: true, icon: 'broodmatron'
+  },
   skarling: {
     race: 'skarn', name: 'Skarling', hp: 40, armor: 0, size: 'small',
     speed: 0.66, targets: 'ground', attackType: 'concussive', damage: 4, cooldown: 1.0, range: 0.6,
@@ -150,6 +162,12 @@ export const UNITS = {
   },
 
   // ---------------- AURAXIS ----------------
+  atlaswalker: {
+    race: 'auraxis', name: 'Atlas Walker', hp: 220, shield: 220, armor: 1, size: 'large',
+    speed: 0.5, targets: 'ground', attackType: 'ignore', damage: 0, cooldown: 1, range: 0,
+    supply: 1, minerals: 0, gas: 0, buildTime: 0, build: null,
+    sight: 10, mcv: true, deploysTo: 'aegis', weaponless: true, spawnOnly: true, icon: 'atlaswalker'
+  },
   artificer: {
     race: 'auraxis', name: 'Artificer', hp: 20, shield: 20, armor: 0, size: 'small',
     speed: 0.66, targets: 'ground', attackType: 'explosive', damage: 5, cooldown: 1.0, range: 0.6,
