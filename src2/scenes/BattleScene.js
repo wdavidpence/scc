@@ -1991,8 +1991,8 @@ export class BattleScene extends Phaser.Scene {
     } else if (u.team === 0 && this.selection.has(u)) {
       this.audio?.death(false);
     }
-    // retaliation for AI
-    if (u.team === 0 && this.enemyRace) {
+    // retaliation for AI — only if the AI actually sees the kill spot (v2.45: blind until spotted)
+    if (u.team === 0 && this.enemyRace && this.units.some(a => a.team === 1 && !a.dead && Math.hypot(a.x - u.x, a.y - u.y) < ((a.def.sight || 6) + (a.flying ? 2 : 0)) * TILE)) {
       this.aiState.lastSeenPlayerPos = { x: u.x, y: u.y };
       this.aiState.aggroUntil = this.gameTime + 12;
     }
@@ -3855,7 +3855,14 @@ export class BattleScene extends Phaser.Scene {
       const prim = RACE_INFO[race].primary;
       const primaries = this.buildings.filter(b => b.team === team && !b.dead && b.buildId === prim);
       if (primaries.length < 2) {
-        const nat = { x: PXW * (team === 1 ? 0.66 : 0.34), y: PXH * (team === 1 ? 0.62 : 0.38) };
+        // v2.45: expand toward a DISCOVERED mineral field (near own base), not a hardcoded coord
+        const base = primaries[0] || this.buildings.find(b => b.team === team && !b.dead && b.def.primary);
+        let nat = null;
+        if (base) {
+          const fields = this.minerals.filter(m => m.amount > 200 && Math.hypot(m.x - base.x, m.y - base.y) < TILE * 40);
+          if (fields.length) nat = fields.reduce((a, c) => (Math.hypot(c.x - base.x, c.y - base.y) > Math.hypot(a.x - base.x, a.y - base.y) ? c : a));
+        }
+        if (!nat) nat = { x: PXW * (team === 1 ? 0.66 : 0.34), y: PXH * (team === 1 ? 0.62 : 0.38) };
         if (this.placementValidAI(prim, nat.x, nat.y, team)) {
           s.expanded = true;
           this.spend(team, BUILDINGS[prim].minerals, BUILDINGS[prim].gas || 0);
@@ -3986,25 +3993,39 @@ export class BattleScene extends Phaser.Scene {
       s.harassAt = prof.harassAt;
       const squad = fast.slice(0, 3);
       s.harvestSquad = squad;
-      // attack-move at player's visible miners or natural expansion direction
+      // attack-move at player's visible miners; if blind, probe a random enemy-half direction
       const victim = this.units.find(u => u.team === 0 && u.def.worker && this.isVisible(u.x, u.y));
-      const tgt = victim ? { x: victim.x, y: victim.y } : { x: PXW * 0.30 + Math.random() * 80, y: PXH * 0.32 + Math.random() * 80 };
+      const tgt = victim ? { x: victim.x, y: victim.y } : { x: PXW * (0.15 + Math.random() * 0.35), y: PXH * (0.15 + Math.random() * 0.35) };
       squad.forEach(u => u.issueMove(tgt.x, tgt.y, true));
     } else {
       s.harvestSquad = s.harvestSquad.filter(u => !u.dead);
     }
 
-    // ---- scouts: drop an skywarden/scout toward player base periodically ----
+    // ---- scouts: fan out under fog to GATHER intel (v2.45: no hardcoded player coords) ----
     s.scoutAt = (s.scoutAt ?? 40) - 1;
     if (s.scoutAt <= 0) {
       s.scoutAt = 55;
+      if (!s.scoutAxes) s.scoutAxes = [[0.30, 0.55], [0.55, 0.30], [0.42, 0.42], [0.25, 0.30], [0.50, 0.55]];
+      s.scoutAxisI = ((s.scoutAxisI ?? -1) + 1) % s.scoutAxes.length;
+      const ax = s.scoutAxes[s.scoutAxisI];
+      const sx = PXW * ax[0] + (Math.random() * 120 - 60), sy = PXH * ax[1] + (Math.random() * 120 - 60);
       if (race === 'skarn') {
         const ov = army.find(u => u.kind === 'skywarden');
-        if (ov) { ov.issueMove(PXW * 0.25, PXH * 0.28, false); }
+        if (ov) { ov.issueMove(sx, sy, false); }
         else { const pool = eb.find(b => b.buildId === 'broodNest' && b.queue.length === 0); pool?.queueUnit('skywarden'); }
       } else {
         const sc = army.find(u => !u.def.worker && (u.flying || u.kind === 'duster' || u.kind === 'scout'));
-        sc?.issueMove(PXW * 0.22 + Math.random() * 100, PXH * 0.22 + Math.random() * 100, false);
+        sc?.issueMove(sx, sy, false);
+      }
+    }
+    // intel refine: bank player contacts that AI units can actually see (distance vs sight)
+    {
+      const seesAI = (x, y) => this.units.some(a => a.team === team && !a.dead && Math.hypot(a.x - x, a.y - y) < ((a.def.sight || 6) + (a.flying ? 2 : 0)) * TILE);
+      for (const pu of this.units) {
+        if (pu.team === 0 && !pu.dead && seesAI(pu.x, pu.y)) { s.lastSeenPlayerPos = { x: pu.x, y: pu.y }; break; }
+      }
+      for (const pb of this.buildings) {
+        if (pb.team === 0 && !pb.dead && seesAI(pb.x, pb.y)) { s.lastSeenPlayerPos = { x: pb.x, y: pb.y }; break; }
       }
     }
 
@@ -4019,7 +4040,9 @@ export class BattleScene extends Phaser.Scene {
     if ((ready.length >= 6 && (advantage >= threshold || s.nextAttackAt <= -20)) || (aggro && ready.length > 5) || (rushEarly && ready.length >= 4)) {
       if (rushEarly) s.rushed = true;
       s.nextAttackAt = prof.attackGap;
-      const tgt = s.lastSeenPlayerPos || { x: PXW * 0.2, y: PXH * 0.2 };
+      // v2.45: attack only toward LAST SPOTTED contact — no hardcoded player-base knowledge.
+      // Without intel, commit to a random mid-map axis and let scouts refine it.
+      const tgt = s.lastSeenPlayerPos || { x: PXW * (0.35 + Math.random() * 0.3), y: PXH * (0.35 + Math.random() * 0.3) };
       // split force: main push + flank
       const flank = ready.slice(Math.ceil(ready.length * prof.flankSplit));
       for (const u of ready.slice(0, Math.ceil(ready.length * prof.flankSplit))) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
