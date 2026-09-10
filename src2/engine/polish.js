@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MAP_W, MAP_H, TILE } from '../data/sc1.js';
 
 // polish.js — v2.25 micro-feedback layer: click markers, floats, sweeps, badges, confetti.
 // Self-contained: every method guards on scene state; cheap tweens, auto-destroy.
@@ -454,10 +455,10 @@ export class PolishFX {
       const cc = s.blightCanvases && s.blightCanvases[t];
       if (!cc) continue;
       for (let tries = 0; tries < 10; tries++) {
-        const tx = Phaser.Math.Clamp(((vw.x + Math.random() * vw.width) / 16) | 0, 0, 95);
-        const ty = Phaser.Math.Clamp(((vw.y + Math.random() * vw.height) / 16) | 0, 0, 95);
-        if (!cc.cells[ty * 96 + tx]) continue;
-        const x = tx * 16 + 8 + (Math.random() * 8 - 4), y = ty * 16 + 8 + (Math.random() * 8 - 4);
+        const tx = Phaser.Math.Clamp(((vw.x + Math.random() * vw.width) / TILE) | 0, 0, MAP_W - 1);
+        const ty = Phaser.Math.Clamp(((vw.y + Math.random() * vw.height) / TILE) | 0, 0, MAP_H - 1);
+        if (!cc.cells[ty * MAP_W + tx]) continue;
+        const x = tx * TILE + 8 + (Math.random() * 8 - 4), y = ty * TILE + 8 + (Math.random() * 8 - 4);
         const col = t === 0 ? 0x5a2a7a : 0x7a2a3a;
         const b = s.add.circle(x, y, 1 + Math.random() * 1.6, col, 0.75).setDepth(9);
         s.tweens.add({ targets: b, y: y - 6 - Math.random() * 5, alpha: 0, scale: 1.6, duration: 700 + Math.random() * 500, onComplete: () => { const r = s.add.circle(x, y - 8, 2.4, col, 0).setStrokeStyle(1, col, 0.7).setDepth(9); s.tweens.add({ targets: r, scale: 1.8, alpha: 0, duration: 220, onComplete: () => r.destroy() }); } });

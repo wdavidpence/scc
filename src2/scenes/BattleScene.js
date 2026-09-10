@@ -1,7 +1,7 @@
 // BattleScene — the SCC2 world: terrain, fog of war, blight, selection,
 // commands, economy, combat, and the AI commander.
 import Phaser from 'phaser';
-import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE } from '../data/sc1.js';
+import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_H } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
@@ -15,8 +15,6 @@ import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
 import { PolishFX } from '../engine/polish.js';
 
-const MAP_W = 96;   // tiles
-const MAP_H = 96;
 const FOGRES = 4;   // v2.44: fog/intel canvas pixels per tile — smooth vision edges
 const PXW = MAP_W * TILE;
 const PXH = MAP_H * TILE;
@@ -157,6 +155,8 @@ export class BattleScene extends Phaser.Scene {
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
     this.flows.nav = this.nav;
+    this.buildMountains(); // v2.45: impassable ridges + carved chokepoints before anything is placed
+    this.placeResources(); // v2.45: minerals/geysers/crates on free ground after mountains exist
     this.blockTerrain();
     this.createFog();
     this.createBlightLayers();
@@ -1000,44 +1000,71 @@ export class BattleScene extends Phaser.Scene {
       this.textures.get('terrain').refresh();
     }
 
-    // mineral lines near each base
-    const mineralLine = (bx, by, dir) => {
-      const out = [];
-      for (let i = 0; i < 8; i++) {
-        const x = bx + dir * (i % 4) * TILE + ((rnd() * 12) | 0) - 6;
-        const y = by + (i > 3 ? TILE * 2 : 0) + ((rnd() * 10) | 0) - 5;
-        const m = { x, y, amount: 1500, id: nextObjId() };
-        this.minerals.push(m);
-        out.push(m);
-        const spr = this.add.image(x, y, this.textures.exists('ai-minerals') ? 'ai-minerals' : 'minerals').setDepth(15);
-        if (this.textures.exists('ai-minerals')) spr.setScale(0.75 + (rnd() * 0.3));
-        m.sprite = spr;
-      }
-      return out;
-    };
-    mineralLine(PXW * 0.16, PXH * 0.16, 1);
-    mineralLine(PXW * 0.84, PXH * 0.84, -1);
-
-    // geysers
-    const gey = (x, y) => {
-      const g = { x, y, gas: 2500, id: nextObjId(), workers: [] };
-      this.geysers.push(g);
-      g.spr = this.add.image(x, y, this.textures.exists('ai-geyser') ? 'ai-geyser' : 'geyser').setDepth(15);
-      if (this.textures.exists('ai-geyser')) g.spr.setScale(0.7);
-    };
-    gey(PXW * 0.22, PXH * 0.26);
-    gey(PXW * 0.78, PXH * 0.74);
-    gey(PXW * 0.5, PXH * 0.16);
-    gey(PXW * 0.5, PXH * 0.84);
+    // mineral fields: v2.45 scattered across the whole map, hidden under fog until scouted
+    // (placement moved to placeResources() — runs AFTER buildMountains so nothing sits on solid rock)
     this.geyserTiles = new Map();
     // AAA: geysers remember their sprite + full gas for depletion visuals
     for (const g of this.geysers) { g.full = g.gas; }
     // mineral patches: remember full amount for shrink visuals
     for (const m of this.minerals) { m.full = m.amount; }
+  }
+
+  // v2.45: resource + crate + critter placement, run after mountains/blocking so everything lands on free ground
+  placeResources() {
+    const rnd = this.rng();
+    const nextObjId = () => (this._objId = (this._objId || 1000) + 1);
+    const freeTile = (tx, ty, r) => {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = tx + dx, y = ty + dy;
+        if (x < 3 || y < 3 || x >= MAP_W - 3 || y >= MAP_H - 3) return false;
+        if (this.nav.solid[this.nav.idx(x, y)]) return false;
+      }
+      return true;
+    };
+    const farFromAll = (tx, ty, list, min) => list.every(p => Math.abs(p.tx - tx) + Math.abs(p.ty - ty) > min);
+    const tx0 = Math.floor(PXW * 0.12 / TILE), ty0s = Math.floor(PXH * 0.12 / TILE);
+    const tx1 = Math.floor(PXW * 0.88 / TILE), ty1 = Math.floor(PXH * 0.88 / TILE);
+    // starter patch guaranteed near each spawn (deployable start needs one close)
+    const patchSpots = [{ tx: tx0 + 6, ty: ty0s + 4 }, { tx: tx1 - 6, ty: ty1 - 4 }];
+    let guard = 0;
+    while (patchSpots.length < 12 && guard++ < 400) {
+      const tx = 8 + ((rnd() * (MAP_W - 16)) | 0), ty = 8 + ((rnd() * (MAP_H - 16)) | 0);
+      if (!freeTile(tx, ty, 3)) continue;
+      if (!farFromAll(tx, ty, patchSpots, 16)) continue;
+      patchSpots.push({ tx, ty });
+    }
+    for (const sp of patchSpots) {
+      for (let i = 0; i < 8; i++) {
+        const x = sp.tx * TILE + (i % 4) * TILE + ((rnd() * 10) | 0) - 5;
+        const y = sp.ty * TILE + (i > 3 ? TILE * 2 : 0) + ((rnd() * 8) | 0) - 4;
+        if (!freeTile(Math.floor(x / TILE), Math.floor(y / TILE), 0)) continue;
+        const m = { x, y, amount: 1500, id: nextObjId() };
+        this.minerals.push(m);
+        const spr = this.add.image(x, y, this.textures.exists('ai-minerals') ? 'ai-minerals' : 'minerals').setDepth(15);
+        if (this.textures.exists('ai-minerals')) spr.setScale(0.75 + (rnd() * 0.3));
+        m.sprite = spr;
+      }
+    }
+    const geySpots = [];
+    guard = 0;
+    while (geySpots.length < 6 && guard++ < 300) {
+      const tx = 10 + ((rnd() * (MAP_W - 20)) | 0), ty = 10 + ((rnd() * (MAP_H - 20)) | 0);
+      if (!freeTile(tx, ty, 2)) continue;
+      if (!farFromAll(tx, ty, geySpots, 28)) continue;
+      if (!farFromAll(tx, ty, patchSpots, 6)) continue;
+      geySpots.push({ tx, ty });
+      const g = { x: tx * TILE + 8, y: ty * TILE + 8, gas: 2500, id: nextObjId(), workers: [] };
+      this.geysers.push(g);
+      g.spr = this.add.image(g.x, g.y, this.textures.exists('ai-geyser') ? 'ai-geyser' : 'geyser').setDepth(15);
+      if (this.textures.exists('ai-geyser')) g.spr.setScale(0.7);
+      this.nav.blockRect(-4, tx - 1, ty - 1, tx + 1, ty + 1);
+    }
+    for (const g of this.geysers) { g.full = g.gas; }
+    for (const m of this.minerals) { m.full = m.amount; }
 
     // SC1 power-up crates: scattered pickups, random payload on claim
     this.crates = [];
-    const crateSpots = [[0.30, 0.42], [0.68, 0.30], [0.44, 0.66], [0.58, 0.52], [0.15, 0.62], [0.86, 0.40], [0.36, 0.20], [0.62, 0.82]];
+    const crateSpots = [[0.30, 0.42], [0.68, 0.30], [0.44, 0.66], [0.58, 0.52], [0.15, 0.62], [0.86, 0.40], [0.36, 0.20], [0.62, 0.82], [0.72, 0.55], [0.25, 0.80]];
     for (const [fx, fy] of crateSpots) {
       const x = PXW * fx, y = PXH * fy;
       const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
@@ -1051,8 +1078,8 @@ export class BattleScene extends Phaser.Scene {
 
     // SC1 critters: small scavengers that scamper when anything gets close
     this.critters = [];
-    for (let i = 0; i < 7; i++) {
-      const x = PXW * (0.2 + Math.random() * 0.6), y = PXH * (0.2 + Math.random() * 0.6);
+    for (let i = 0; i < 10; i++) {
+      const x = PXW * (0.15 + Math.random() * 0.7), y = PXH * (0.15 + Math.random() * 0.7);
       const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
       if (this.nav && this.nav.solid[this.nav.idx(tx, ty)]) continue;
       const spr = this.add.image(x, y, 'critter').setDepth(16).setFlipX(Math.random() < 0.5);
@@ -1062,14 +1089,130 @@ export class BattleScene extends Phaser.Scene {
 
   rng() { let s = 1234567; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
 
+  // v2.45: impassable mountain ridges with carved chokepoints.
+  // Guarantees: HQ zones clear, both HQs connected via carved passes.
+  buildMountains() {
+    const solid = this.nav.solid;
+    const rnd = this.rng();
+    const ridges = [];
+    // 1) mid-map diagonal wall from top edge toward bottom, broken in the middle
+    const wall = [];
+    for (let ty = 6; ty < MAP_H - 6; ty++) {
+      const cx = Math.round(MAP_W * 0.5 + Math.sin(ty * 0.09 + 1.7) * 11);
+      for (let w = -2; w <= 2; w++) if (rnd() < 0.88) wall.push([cx + w, ty]);
+      if (ty > MAP_H * 0.42 && ty < MAP_H * 0.58) continue; // central valley gap
+      const c2 = cx + 12 + Math.round(Math.sin(ty * 0.13) * 4);
+      for (let w = -1; w <= 1; w++) if (rnd() < 0.85) wall.push([c2 + w, ty]); // broken eastern spur
+    }
+    ridges.push(wall);
+    // 2) two horizontal ridge fingers from west and east edges, leaving two lanes each
+    for (const side of [0, 1]) {
+      for (const fy of side ? [0.30, 0.72] : [0.22, 0.64]) {
+        const finger = [];
+        const lanes = side ? [0.55, 0.85] : [0.12, 0.42];
+        for (let tx = side ? MAP_W * 0.58 : MAP_W * 0.08; tx < (side ? MAP_W - 6 : MAP_W * 0.46); tx++) {
+          const ty = Math.round(MAP_H * fy + Math.sin(tx * 0.11 + fy * 9) * 5);
+          if (lanes.some(L => tx > MAP_W * L - 4 && tx < MAP_W * L + 4)) continue; // carved lane
+          for (let h = -1; h <= 1; h++) if (rnd() < 0.9) finger.push([tx, ty + h]);
+        }
+        ridges.push(finger);
+      }
+    }
+    // 3) scattered knolls through open center
+    const knolls = [];
+    for (let k = 0; k < 14; k++) {
+      const kx = 14 + ((rnd() * (MAP_W - 28)) | 0), ky = 14 + ((rnd() * (MAP_H - 28)) | 0);
+      const kr = 2 + ((rnd() * 3) | 0);
+      for (let dy = -kr; dy <= kr; dy++) for (let dx = -kr; dx <= kr; dx++) {
+        if (dx * dx + dy * dy > kr * kr) continue;
+        if (rnd() < 0.82) knolls.push([kx + dx, ky + dy]);
+      }
+    }
+    ridges.push(knolls);
+
+    // paint solid, protecting HQ clear zones
+    const hqClear = [
+      { x: Math.floor(MAP_W * 0.12), y: Math.floor(MAP_H * 0.12), r: 12 },
+      { x: Math.floor(MAP_W * 0.88), y: Math.floor(MAP_H * 0.88), r: 12 },
+    ];
+    const inHqClear = (tx, ty) => hqClear.some(h => Math.abs(tx - h.x) <= h.r && Math.abs(ty - h.y) <= h.r);
+    this.mountains = [];
+    for (const ridge of ridges) {
+      for (const [tx, ty] of ridge) {
+        if (tx < 3 || ty < 3 || tx >= MAP_W - 3 || ty >= MAP_H - 3) continue;
+        if (inHqClear(tx, ty)) continue;
+        solid[this.nav.idx(tx, ty)] = 1;
+        this.mountains.push([tx, ty]);
+      }
+    }
+
+    // flood-fill connectivity check from HQ A; carve straight passes through any blocking cells on the corridor until HQ B reachable
+    const pass = () => {
+      const seen = new Uint8Array(MAP_W * MAP_H);
+      const q = [hqClear[0].x + hqClear[0].y * MAP_W];
+      seen[q[0]] = 1;
+      let touchedB = false;
+      while (q.length) {
+        const i = q.pop();
+        const x = i % MAP_W, y = (i / MAP_W) | 0;
+        if (Math.abs(x - hqClear[1].x) <= 6 && Math.abs(y - hqClear[1].y) <= 6) { touchedB = true; break; }
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 1 || ny < 1 || nx >= MAP_W - 1 || ny >= MAP_H - 1) continue;
+          const ni = nx + ny * MAP_W;
+          if (seen[ni] || solid[ni]) continue;
+          seen[ni] = 1; q.push(ni);
+        }
+      }
+      return touchedB;
+    };
+    let carveGuard = 0;
+    while (!pass() && carveGuard++ < 40) {
+      // carve a 2-wide jagged corridor at a random diagonal crossing point of the mid band
+      const midY = Math.round(MAP_H * (0.15 + Math.random() * 0.7));
+      for (let tx = Math.floor(MAP_W * 0.15); tx <= Math.ceil(MAP_W * 0.85); tx++) {
+        const ty = midY + Math.round(Math.sin(tx * 0.35 + carveGuard) * 2);
+        solid[this.nav.idx(tx, ty)] = 0;
+        solid[this.nav.idx(tx, ty + 1)] = 0;
+        this.mountains = this.mountains.filter(([mx, my]) => !(mx === tx && (my === ty || my === ty + 1)));
+      }
+    }
+
+    // paint mountains into the terrain texture: dark cliff mass + lit top edge
+    const gx = this.terrainCtx;
+    const mset = new Set(this.mountains.map(([mx, my]) => mx + ',' + my));
+    if (gx) {
+      for (const [tx, ty] of this.mountains) {
+        const x = tx * TILE, y = ty * TILE;
+        gx.fillStyle = '#1a2129'; gx.fillRect(x, y, TILE, TILE);
+        gx.fillStyle = '#262f3a'; gx.fillRect(x + 1, y + 1, TILE - 2, TILE - 4);
+        if (!mset.has(tx + ',' + (ty - 1))) { gx.fillStyle = 'rgba(210,225,245,0.20)'; gx.fillRect(x, y, TILE, 2); }
+        if (!mset.has(tx + ',' + (ty + 1))) { gx.fillStyle = 'rgba(0,0,0,0.55)'; gx.fillRect(x, y + TILE - 3, TILE, 3); }
+        gx.fillStyle = 'rgba(0,0,0,0.25)'; gx.fillRect(x + ((tx * 7 + ty * 13) % TILE), y + ((tx * 3 + ty * 5) % TILE), 3, 2);
+      }
+      this.textures.get('terrain').refresh();
+    }
+    // scatter big rock sprites over ridge tops for 3D silhouette pop
+    this._mountainSprs = [];
+    const rockKey = this.textures.exists('ai-rock0') ? 'ai-rock' : 'rock';
+    let painted = new Set();
+    for (const [tx, ty] of this.mountains) {
+      if ((tx * 31 + ty * 57) % 7 !== 0) continue; // sparse sprite pass over solid mass
+      if (this.nav.blocked[this.nav.idx(tx, ty)]) continue;
+      const key = this.textures.exists('ai-rock0') ? 'ai-rock' + ((tx + ty) % 3) : rockKey;
+      const im = this.add.image(tx * TILE + 8, ty * TILE + 4, key).setDepth(24).setScale(1.1 + ((tx * ty) % 5) * 0.12).setFlipX(((tx + ty) % 2) === 0);
+      this._mountainSprs.push(im);
+      painted.add(`${tx},${ty}`);
+    }
+  }
+
   blockTerrain() {
-    for (const r of this.rockTiles) this.nav.blockRect(-2, r.tx, r.ty, r.tx, r.ty);
+    for (const r of this.rockTiles) { if (this.nav.solid[this.nav.idx(r.tx, r.ty)]) continue; this.nav.blockRect(-2, r.tx, r.ty, r.tx, r.ty); }
     for (let t = 0; t < MAP_W; t++) { this.nav.solid[this.nav.idx(t, 0)] = 1; this.nav.solid[this.nav.idx(t, MAP_H - 1)] = 1; }
     for (let ty = 0; ty < MAP_H; ty++) { this.nav.solid[this.nav.idx(0, ty)] = 1; this.nav.solid[this.nav.idx(MAP_W - 1, ty)] = 1; }
     for (const m of this.minerals) { this.nav.blockRect(-3, Math.floor(m.x / TILE), Math.floor(m.y / TILE), Math.floor(m.x / TILE), Math.floor(m.y / TILE)); }
     for (const g of this.geysers) { this.nav.blockRect(-4, Math.floor(g.x / TILE) - 1, Math.floor(g.y / TILE) - 1, Math.floor(g.x / TILE) + 1, Math.floor(g.y / TILE) + 1); }
   }
-
   // ---------------- fog of war ----------------
   createFog() {
     this.fogCanvas = document.createElement('canvas');

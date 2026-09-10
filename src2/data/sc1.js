@@ -6,6 +6,9 @@
 // Targets: ground / air / both
 
 export const TILE = 16;
+// v2.45: much larger battlefield with mountains/chokepoints
+export const MAP_W = 160;   // tiles (was 96)
+export const MAP_H = 160;
 
 // Damage multipliers by attack type vs unit size (SC1 rules)
 export const SIZE_MULT = {

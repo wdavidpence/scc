@@ -1,6 +1,6 @@
 // HUD for SCC2: resources, command card, selection panel, minimap, alerts.
 import Phaser from 'phaser';
-import { UNITS, BUILDINGS, TECHS, RACE_INFO, TILE } from '../data/sc1.js';
+import { UNITS, BUILDINGS, TECHS, RACE_INFO, TILE, MAP_W, MAP_H } from '../data/sc1.js';
 
 export class HudScene extends Phaser.Scene {
   constructor() { super('Hud'); }
@@ -292,8 +292,8 @@ export class HudScene extends Phaser.Scene {
   }
 
   mmClick(px, py, button) {
-    const wx = ((px - this.mmX) / this.mmSize) * 96 * TILE;
-    const wy = ((py - this.mmY) / this.mmSize) * 96 * TILE;
+    const wx = ((px - this.mmX) / this.mmSize) * MAP_W * TILE;
+    const wy = ((py - this.mmY) / this.mmSize) * MAP_H * TILE;
     if (button === 2) { this.scene.get('Battle').placeBeacon(wx, wy); return; }
     this.scene.get('Battle').events.emit('hud:camera', { x: wx, y: wy });
   }
@@ -925,7 +925,7 @@ export class HudScene extends Phaser.Scene {
   drawMinimap(b) {
     const g = this.mmG;
     g.clear();
-    const s = this.mmSize / (96 * TILE);
+    const s = this.mmSize / (MAP_W * TILE);
     // polish: rotating radar sweep + framed bezel
     b.polish?.radarSweep(g, this.mmX, this.mmY, this.mmSize);
     b.polish?.mmFrame(g, this.mmX, this.mmY, this.mmSize);
@@ -933,12 +933,20 @@ export class HudScene extends Phaser.Scene {
     for (const t of [0, 1]) {
       const cells = b.blightCanvases[t].cells;
       g.fillStyle(t === 0 ? 0x24406e : 0x5a2340, 0.85);
-      for (let i = 0; i < cells.length; i++) if (cells[i]) { g.fillRect(this.mmX + ((i % 96) * 16) * s, this.mmY + (((i / 96) | 0) * 16) * s, 2, 2); }
+      for (let i = 0; i < cells.length; i++) if (cells[i]) { g.fillRect(this.mmX + ((i % MAP_W) * TILE) * s, this.mmY + (((i / MAP_W) | 0) * TILE) * s, 2, 2); }
     }
+    // v2.45: resources only appear once scouted (no always-known economy leak)
     g.fillStyle(0x2c4a7a, 0.9);
-    for (const m of b.minerals) if (m.amount > 0) g.fillCircle(this.mmX + m.x * s, this.mmY + m.y * s, 1.6);
+    for (const m of b.minerals) {
+      if (m.amount <= 0) continue;
+      if (!b.seen[b.nav.idx(Math.floor(m.x / TILE), Math.floor(m.y / TILE))]) continue;
+      g.fillCircle(this.mmX + m.x * s, this.mmY + m.y * s, 1.6);
+    }
     g.fillStyle(0x3ad0a0, 0.9);
-    for (const ge of b.geysers) g.fillCircle(this.mmX + ge.x * s, this.mmY + ge.y * s, 2);
+    for (const ge of b.geysers) {
+      if (!b.seen[b.nav.idx(Math.floor(ge.x / TILE), Math.floor(ge.y / TILE))]) continue;
+      g.fillCircle(this.mmX + ge.x * s, this.mmY + ge.y * s, 2);
+    }
     for (const bl of b.buildings) {
       if (bl.dead) continue;
       const vis = b.isVisible(bl.x, bl.y) || bl.team === 0;

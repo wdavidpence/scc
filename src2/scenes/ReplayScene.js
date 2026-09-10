@@ -1,9 +1,9 @@
 // Replay viewer: scrubs tactical snapshots recorded during battle (localStorage).
 // v2.37: polished scrubber — event markers, transport buttons, speed cycle, hover time, tick ruler.
 import Phaser from 'phaser';
-import { TILE } from '../data/sc1.js';
+import { TILE, MAP_W, MAP_H } from '../data/sc1.js';
 
-const MAP_PX = 96 * TILE;
+const MAP_PX = MAP_W * TILE;
 
 export class ReplayScene extends Phaser.Scene {
   constructor() { super('Replay'); }
