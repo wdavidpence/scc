@@ -1,6 +1,7 @@
 // HUD for SCC2: resources, command card, selection panel, minimap, alerts.
 import Phaser from 'phaser';
 import { UNITS, BUILDINGS, TECHS, RACE_INFO, TILE, MAP_W, MAP_H } from '../data/sc1.js';
+import { CH } from '../engine/chrome.js';
 
 export class HudScene extends Phaser.Scene {
   constructor() { super('Hud'); }
@@ -8,12 +9,13 @@ export class HudScene extends Phaser.Scene {
   init(data) { this.race = data.race || 'terran'; this.world = data.world; }
 
   preload() {
-    // v2.40: AI chrome plate for HUD panels
-    if (!this.textures.exists('ai-hud_chrome')) this.load.image('ai-hud_chrome', 'assets/ai/hud_chrome.png');
+    // v2.46: chrome is now fully procedural (engine/chrome.js) — the old AI
+    // hud_chrome.png load raced itself on scene restarts ("key already in use").
   }
 
   create() {
     this.W = this.scale.width; this.H = this.scale.height;
+    CH.init(this); // v2.46: bake 9-slice chrome, resource icons, shroud, cursor frames
     // v2.41: 4-tier HUD type scale + uniform drop shadow — intercept add.text once
     const self = this;
     const TIERS = [10, 12, 16, 24, 40];
@@ -78,9 +80,18 @@ export class HudScene extends Phaser.Scene {
 
   createTopBar() {
     this.top = this.add.graphics();
-    this.topBG = this.add.rectangle(0, 0, this.W, 34, 0x05080e, 0.92).setOrigin(0, 0).setScrollFactor(0);
-    this.resText = this.add.text(12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#dbe7ff' }).setScrollFactor(0);
-    this.tickTxt = this.add.text(200, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#7db4ff', fontStyle: 'bold' }).setScrollFactor(0).setAlpha(0);
+    // v2.46: nine-slice chrome strip replaces the flat rect
+    this.topPanel = CH.panel(this, 'chr-topbar', 0, 0, this.W, 34, { depth: 0 });
+    this.topBG = this.add.rectangle(0, 0, this.W, 34, 0x05080e, 0.55).setOrigin(0, 0).setScrollFactor(0).setDepth(-1);
+    // v2.46: resource icon segments (icon + value), SC1-style gutter rhythm
+    const iconY = 9;
+    this._resNums = [];
+    const num = (x) => { const t = this.add.text(x, 8, '0', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#dbe7ff' }).setScrollFactor(0); this._resNums.push(t); return t; };
+    const mkIco = (x, key) => { if (this.textures.exists(key)) return this.add.image(x, iconY + 8, key).setScrollFactor(0); return null; };
+    this.icoMin = mkIco(10, 'ico-mineral'); this.resMin = num(30);
+    this.icoGas = mkIco(118, 'ico-gas'); this.resGas = num(138);
+    this.icoSup = mkIco(224, 'ico-supply'); this.resSup = num(244);
+    this.tickTxt = this.add.text(340, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#7db4ff', fontStyle: 'bold' }).setScrollFactor(0).setAlpha(0);
     this.timeText = this.add.text(this.W / 2, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#8fa3c8' }).setOrigin(0.5, 0).setScrollFactor(0);
     this.selCount = this.add.text(this.W - 12, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#6ee7a0' }).setOrigin(1, 0).setScrollFactor(0);
     this.apmText = this.add.text(this.W - 150, 8, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fb3d8' }).setOrigin(0.5, 0).setScrollFactor(0);
@@ -282,6 +293,15 @@ export class HudScene extends Phaser.Scene {
       this.mmTerrain.setDisplaySize(this.mmSize, this.mmSize);
     }
     this.mmFrame = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x2b313a, 1).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3b444f);
+    // v2.46: fibrous shroud tile over the explored-but-unseen fog area (minimap-only visual)
+    if (this.textures.exists('chr-shroud')) {
+      this.mmShroud = this.add.image(this.mmX, this.mmY, 'chr-shroud').setOrigin(0, 0).setScrollFactor(0).setDisplaySize(this.mmSize, this.mmSize).setAlpha(0.85);
+      this._mmShroudCv = document.createElement('canvas'); this._mmShroudCv.width = 160; this._mmShroudCv.height = 160;
+      this._mmShroudCtx = this._mmShroudCv.getContext('2d');
+      if (this.textures.exists('mm_shroud')) this.textures.remove('mm_shroud'); // restart: rebind fresh canvas
+      this.textures.addCanvas('mm_shroud', this._mmShroudCv);
+      this.mmShroud.setTexture('mm_shroud');
+    }
     this.mmG = this.add.graphics().setScrollFactor(0);
     const zone = this.add.zone(this.mmX, this.mmY, this.mmSize, this.mmSize).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     this.mmZone = zone;
@@ -300,6 +320,8 @@ export class HudScene extends Phaser.Scene {
 
   createCommandCard() {
     this.cardBG = this.add.graphics().setScrollFactor(0);
+    // v2.46: nine-slice chrome backing for the command card area
+    this._cardPanel = CH.panel(this, 'chr-card', 4, this.H - 128, Math.min(this.W - 210, 78 * Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84))) + 24), 124, { depth: -1, alpha: 0.92 });
     this.cardTitle = this.add.text(12, this.H - 116, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fb3d8' }).setScrollFactor(0);
     this.buttons = [];
   }
@@ -389,7 +411,7 @@ export class HudScene extends Phaser.Scene {
     if (!this._neT) this._neT = this.add.text(this.W / 2, 34, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontWeight: 'bold', color: '#ff6060' }).setOrigin(0.5).setScrollFactor(0).setDepth(95).setStroke(2, 0x000000, 0.8);
     this._neT.setText(msg || 'NOT ENOUGH MINERALS').setAlpha(1).setScale(1.06);
     this.tweens.add({ targets: this._neT, alpha: 0, scale: 1, duration: 900, ease: 'Quad.easeOut' });
-    if (this.resText) { const c = this.resText.color; this.resText.setColor('#ff6060'); this.time.delayedCall(350, () => { if (this.resText?.active) this.resText.setColor(c); }); }
+    if (this.resText) { this.resText.setColor('#ff6060'); this.time.delayedCall(350, () => { if (this.resText?.active !== false) this.resText.setColor('#dbe7ff'); }); }
   }
 
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
@@ -531,6 +553,8 @@ export class HudScene extends Phaser.Scene {
         rows.push('__hold');
         if (b.hasBuilding('scienceFacility', 0)) rows.push('__scan');
       }
+      // v2.46: DEPLOY button when an MCV-class vehicle is selected
+      if ((info.units || []).some(u => u.def && u.def.mcv)) rows.unshift('__deploy');
       let i = 0;
       const cols = Math.max(1, Math.min(5, Math.floor((this.W - 24) / 74)));
       const abil = {
@@ -547,7 +571,9 @@ export class HudScene extends Phaser.Scene {
         __storm: ['PSI STORM [V]', () => b.events.emit('hud:castStorm')],
         __patrol: ['PATROL [P]', () => b.events.emit('hud:patrol')],
         __hold: ['HOLD [H]', () => b.events.emit('hud:command', 'hold')],
-        __scan: ['SCAN [T]', () => b.events.emit('hud:scan')]
+        __scan: ['SCAN [T]', () => b.events.emit('hud:scan')],
+        // v2.46 backlog: MCV deploy button in the command card (was D-key only)
+        __deploy: ['DEPLOY [D]', () => { const m = b.selection && [...b.selection].find(u => !u.dead && u.def.mcv); if (m) b.deployMCV(m); }]
       };
       // live grey-out conditions per ability (energy/tech gates read from selection each tick)
       const hasKind = (bt, ...ks) => bt.selection && [...bt.selection].some(u => !u.dead && ks.includes(u.kind));
@@ -846,7 +872,13 @@ export class HudScene extends Phaser.Scene {
     const T = b.hotseat ? (b.activeTeam ?? 0) : 0;
     const p = b.players[T];
     const capped = p.supplyUsed >= p.supplyCap;
-    this.resText.setText(`MIN ${this.fmt(p.minerals)}   GAS ${this.fmt(p.gas)}   SUPPLY ${Math.floor(p.supplyUsed)}/${p.supplyCap}${capped ? ' !' : ''}`);
+    // v2.46: icon+number layout (icons baked in chrome.js; legacy resText kept as alias)
+    this.resText = { setText: () => {}, setColor: (c) => { for (const t of this._resNums) if (t?.active) t.setColor(c); }, width: 300, active: true };
+    this.resMin.setText(this.fmt(p.minerals));
+    this.resGas.setText(this.fmt(p.gas));
+    this.resSup.setText(`${Math.floor(p.supplyUsed)}/${p.supplyCap}`).setColor('#dbe7ff');
+    if (this.icoSup) this.icoSup.setTint(capped ? 0xff5c5c : 0xffffff);
+    if (capped) this.resSup.setColor('#ff5c5c');
     // v2.26: income rate readout (+N/min) once your economy is collecting
     {
       const nowMs2 = performance.now();
@@ -922,10 +954,34 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
+  // v2.46: shroud pass — unexplored tiles go opaque dark, explored-but-unseen get the
+  // fibrous fog texture, currently-explored intel reads through. Repaints at 2Hz.
+  drawShroud(b) {
+    if (!this.mmShroud || !this._mmShroudCtx) return;
+    const now = b.gameTime || 0;
+    if (now - (this._shroudAt || -9) < 0.5) return;
+    this._shroudAt = now;
+    const ctx = this._mmShroudCtx, res = this._mmShroudCv.width / MAP_W;
+    ctx.clearRect(0, 0, this._mmShroudCv.width, this._mmShroudCv.height);
+    if (!this._shroudPat) this._shroudPat = ctx.createPattern(this.textures.get('chr-shroud').getSourceImage(), 'repeat');
+    // per-tile: unexplored = opaque void; explored = translucent fibrous shroud
+    for (let i = 0; i < b.seen.length; i++) {
+      const tx = i % MAP_W, ty = (i / MAP_W) | 0;
+      if (!b.seen[i]) { ctx.fillStyle = '#05070d'; ctx.fillRect(tx * res, ty * res, res, res); continue; }
+      ctx.globalAlpha = 0.30; ctx.fillStyle = '#5b6678';
+      ctx.fillRect(tx * res, ty * res, res, res);
+      ctx.globalAlpha = 0.22; ctx.fillStyle = this._shroudPat;
+      ctx.fillRect(tx * res, ty * res, res, res);
+      ctx.globalAlpha = 1;
+    }
+    this.textures.get('mm_shroud').refresh();
+  }
+
   drawMinimap(b) {
     const g = this.mmG;
     g.clear();
     const s = this.mmSize / (MAP_W * TILE);
+    this.drawShroud(b);
     // polish: rotating radar sweep + framed bezel
     b.polish?.radarSweep(g, this.mmX, this.mmY, this.mmSize);
     b.polish?.mmFrame(g, this.mmX, this.mmY, this.mmSize);
@@ -1112,12 +1168,15 @@ export class HudScene extends Phaser.Scene {
   handleResize() {
     this.W = this.scale.width; this.H = this.scale.height;
     this.topBG.setSize(this.W, 34);
+    if (this.topPanel) this.topPanel.resize(this.W, 34);
     this.timeText.setPosition(this.W / 2, 8);
     this.selCount.setPosition(this.W - 12, 8);
     this.speedBtn.setPosition(this.W - 70, 4);
     this.mmX = this.W - this.mmSize - 8;
     this.mmBG.setPosition(this.mmX, this.mmY);
     this.mmFrame.setPosition(this.mmX, this.mmY);
+    if (this.mmShroud) this.mmShroud.setPosition(this.mmX, this.mmY);
+    if (this._cardPanel) { this._cardPanel.obj.setPosition(4, this.H - 128); this._cardPanel.resize(Math.min(this.W - 210, 78 * Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84))) + 24), 124); }
     if (this.gameOver) { this.goDim.setSize(this.W, this.H); this.goTitle.setPosition(this.W / 2, this.H / 2 - 20); }
   }
 }

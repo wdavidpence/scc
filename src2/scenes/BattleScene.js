@@ -1276,7 +1276,9 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     visCtx.filter = 'none';
-    const stamp = (cx, cy, r, layer) => {
+    const stamp = (cx, cy, r, layer = 'seen') => {
+      // v2.46 FIX: v2.45 left layer undefined at every call site, so `layer === 'seen'`
+      // never fired and the seen-map stayed permanently 0 (world fully black, blind HUD).
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (dx * dx + dy * dy > r * r) continue;

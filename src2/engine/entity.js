@@ -896,12 +896,16 @@ export class Unit {
     if (this.hp >= this.maxHp && this.shield >= this.maxShield) return;
     const w = 16;
     const ratio = Math.max(0, this.hp / this.maxHp);
-    g.fillStyle(0x000000, 0.5); g.fillRect(-w / 2 - 1, -14, w + 2, 3);
-    g.fillStyle(ratio > 0.5 ? 0x3ddc6a : ratio > 0.25 ? 0xffd23f : 0xff4444);
-    g.fillRect(-w / 2, -13, w * ratio, 1);
+    // v2.46: beveled gauge — dark chassis, lit core, top gloss line
+    const col = ratio > 0.5 ? 0x3ddc6a : ratio > 0.25 ? 0xffd23f : 0xff4444;
+    g.fillStyle(0x02040a, 0.85); g.fillRect(-w / 2 - 1, -15, w + 2, 5);
+    g.fillStyle(col); g.fillRect(-w / 2, -14, w * ratio, 3);
+    g.fillStyle(0xffffff, 0.28); g.fillRect(-w / 2, -14, w * ratio, 1);
+    g.fillStyle(0x000000, 0.35); g.fillRect(-w / 2, -12, w * ratio, 1);
     if (this.maxShield > 0) {
-      g.fillStyle(0x000000, 0.5); g.fillRect(-w / 2 - 1, -17, w + 2, 3);
-      g.fillStyle(0x4ea1ff); g.fillRect(-w / 2, -16, w * (this.shield / this.maxShield), 1);
+      g.fillStyle(0x02040a, 0.85); g.fillRect(-w / 2 - 1, -19, w + 2, 4);
+      g.fillStyle(0x4ea1ff); g.fillRect(-w / 2, -18, w * (this.shield / this.maxShield), 2);
+      g.fillStyle(0xcfe8ff, 0.5); g.fillRect(-w / 2, -18, w * (this.shield / this.maxShield), 1);
     }
   }
 
@@ -1182,15 +1186,22 @@ export class Building {
     const w = Math.max(24, this.def.w * TILE * 0.7);
     const ratio = Math.max(0, this.hp / this.maxHp);
     const y = -(this.def.h * TILE) / 2 - 6;
-    g.fillStyle(0x000000, 0.5); g.fillRect(-w / 2 - 1, y - 1, w + 2, 4);
-    g.fillStyle(ratio > 0.5 ? 0x3ddc6a : ratio > 0.25 ? 0xffd23f : 0xff4444);
-    g.fillRect(-w / 2, y, w * ratio, 2);
+    // v2.46: structural gauge — chassis plate, gloss, segmented notches every 8px
+    const col = ratio > 0.5 ? 0x3ddc6a : ratio > 0.25 ? 0xffd23f : 0xff4444;
+    g.fillStyle(0x02040a, 0.88); g.fillRect(-w / 2 - 2, y - 2, w + 4, 7);
+    g.fillStyle(col); g.fillRect(-w / 2, y - 1, w * ratio, 4);
+    g.fillStyle(0xffffff, 0.25); g.fillRect(-w / 2, y - 1, w * ratio, 1);
+    g.fillStyle(0x000000, 0.4); g.fillRect(-w / 2, y + 2, w * ratio, 1);
+    g.fillStyle(0x02040a, 0.5);
+    for (let x = -w / 2 + 8; x < -w / 2 + w * ratio; x += 8) g.fillRect(x, y - 1, 1, 4);
     if (this.maxShield > 0) {
-      g.fillStyle(0x4ea1ff); g.fillRect(-w / 2, y - 3, w * (this.shield / this.maxShield), 1);
+      g.fillStyle(0x4ea1ff); g.fillRect(-w / 2, y - 4, w * (this.shield / this.maxShield), 2);
+      g.fillStyle(0xcfe8ff, 0.45); g.fillRect(-w / 2, y - 4, w * (this.shield / this.maxShield), 1);
     }
     if (!this.built) {
-      g.fillStyle(0x000000, 0.5); g.fillRect(-w / 2 - 1, y + 5, w + 2, 4);
-      g.fillStyle(0xffd23f); g.fillRect(-w / 2, y + 6, w * Math.min(1, this.constructionProgress / this.buildTime), 2);
+      g.fillStyle(0x02040a, 0.85); g.fillRect(-w / 2 - 2, y + 7, w + 4, 6);
+      g.fillStyle(0xffd23f); g.fillRect(-w / 2, y + 8, w * Math.min(1, this.constructionProgress / this.buildTime), 3);
+      g.fillStyle(0xffffff, 0.3); g.fillRect(-w / 2, y + 8, w * Math.min(1, this.constructionProgress / this.buildTime), 1);
     }
   }
 }
