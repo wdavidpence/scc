@@ -23,7 +23,7 @@ const BUILDING_FP = { commandCenter:[5,4], supplyDepot:[2,2], refinery:[4,3], ba
 const UNIT_TARGET = { // desired on-screen footprint px at zoom1 (16px world tiles) — generous for AI detail
   battlecruiser: [56, 36], ark: [56, 36], tank: [34, 20], ballista: [36, 22], wraith: [36, 18], dropship: [36, 18],
   tremorclaw: [38, 22], burrower: [42, 18], skywarden: [42, 22], sporecaster: [32, 28], corroder: [30, 24], voidlance: [38, 16],
-  razorspine: [26, 16], sentinel: [26, 26], aegisX: 0 };
+  razorspine: [26, 16], sentinel: [26, 26], mcv: [40, 28], broodmatron: [42, 30], atlaswalker: [40, 30], aegisX: 0 };
 const UNIT_DEFAULT = { small: 24, medium: 28, large: 34 };
 export const EMBLEM_PAD = 7; // v2.42: canvas pad added around emblem-baked units; consumers must compensate scale
 const LARGE = ['tank','ballista','wraith','battlecruiser','dropship','tremorclaw','skywarden','burrower','sentinel','ark','voidlance','sporecaster','corroder','razorspine'];
@@ -118,8 +118,14 @@ export function applyAIKit(scene) {
     if (!scene.textures.exists(srcKey)) continue;
     const src = scene.textures.get(srcKey).getSourceImage();
     const tgt = UNIT_TARGET[k] || [LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small, LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small];
+    // v2.45.2: supersample 2x — was baking at exactly target px so any display >1 zoom upscaled blurry
+    const TGT2 = [tgt[0] * 2, tgt[1] * 2];
     for (let team = 0; team < 3; team++) {
-      try { bakeSprite(scene, srcKey, `u-${k}-t${team}`, team, tgt, true); n++; } catch (e) { console.warn('ai-kit unit', k, String(e)); }
+      try { bakeSprite(scene, srcKey, `u-${k}-t${team}`, team, TGT2, true); n++; } catch (e) { console.warn('ai-kit unit', k, String(e)); }
+      // emblem pad adds 7px each side to the baked canvas; preserve the v2.42 total screen footprint
+      const fin = scene.textures.get(`u-${k}-t${team}`).getSourceImage();
+      const body = fin.width - EMBLEM_PAD * 2;
+      if (body > 0) { scene.__emblemScale = scene.__emblemScale || {}; scene.__emblemScale[`u-${k}-t${team}`] = (tgt[0] + EMBLEM_PAD * 2) / fin.width; }
       // regenerate walk frames from the baked sprite (cut halves, offset legs)
       const finished = scene.textures.get(`u-${k}-t${team}`).getSourceImage();
       const FW = finished.width, FH = finished.height;

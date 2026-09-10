@@ -53,10 +53,12 @@ export class Unit {
       this.shadow.setAlpha(this.flying ? 0.45 : 0.7); // v2.44: stronger grounding
     }
     this.sprite = world.add.image(0, this.flying ? -8 : 0, key);
+    // v2.45.2: emblem-compensating scale so 2x supersampled bakes display at the classic footprint, sharp
+    const es = (world.__emblemScale && world.__emblemScale[key]) || 1;
     const sizeScale = this.def.size === 'large' ? 1.25 : this.def.size === 'medium' ? 1.08 : 1;
-    if (this.flying) { this.sprite.setScale(1.06 * sizeScale); this.container.setDepth(40); } else { this.sprite.setScale(sizeScale); this.container.setDepth(30); }
+    if (this.flying) { this.sprite.setScale(1.06 * sizeScale * es); this.container.setDepth(40); } else { this.sprite.setScale(sizeScale * es); this.container.setDepth(30); }
     if (this.shadow) this.shadow.setScale(sizeScale);
-    this.baseScale = (this.flying ? 1.06 : 1) * sizeScale;
+    this.baseScale = (this.flying ? 1.06 : 1) * sizeScale * es;
     this.hpBar = world.add.graphics();
     this.container.add([this.shadow || [], this.sprite, this.hpBar].flat());
     this.selected = false;
