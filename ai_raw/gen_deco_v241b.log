@@ -1,0 +1,17 @@
+retry deco_grass code=200 sz=5054
+retry deco_grass code=000 sz=5054
+retry deco_grass code=200 sz=5054
+retry deco_grass code=200 sz=5054
+FAIL deco_grass
+retry deco_fungal code=200 sz=6639
+retry deco_fungal code=200 sz=6639
+retry deco_fungal code=200 sz=6639
+retry deco_fungal code=200 sz=6639
+FAIL deco_fungal
+retry deco_spire code=200 sz=8329
+retry deco_spire code=200 sz=8329
+retry deco_spire code=200 sz=8329
+retry deco_spire code=200 sz=8329
+FAIL deco_spire
+DONE
+DECO_DONE

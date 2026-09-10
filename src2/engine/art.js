@@ -666,19 +666,20 @@ function createBuildingTextures(scene) {
 
 function createFx(scene) {
   // soft ground shadow blob (per-size, tinted by caller alpha)
+  // v2.44: denser contact core so units read as grounded, not floating
   makeTex(scene, 'shadow-s', 20, 10, (ctx) => {
     const g = ctx.createRadialGradient(10, 5, 1, 10, 5, 9);
-    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(0,0,0,0.4)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(10, 5, 9.5, 4.5, 0, 0, 7); ctx.fill();
   });
   makeTex(scene, 'shadow-m', 26, 12, (ctx) => {
     const g = ctx.createRadialGradient(13, 6, 1, 13, 6, 12);
-    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(0,0,0,0.4)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(13, 6, 12.5, 5.5, 0, 0, 7); ctx.fill();
   });
   makeTex(scene, 'shadow-l', 40, 16, (ctx) => {
     const g = ctx.createRadialGradient(20, 8, 2, 20, 8, 18);
-    g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(0,0,0,0.4)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(20, 8, 19, 7.5, 0, 0, 7); ctx.fill();
   });
   makeTex(scene, 'spark', 8, 8, (ctx) => {

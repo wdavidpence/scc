@@ -17,6 +17,7 @@ import { PolishFX } from '../engine/polish.js';
 
 const MAP_W = 96;   // tiles
 const MAP_H = 96;
+const FOGRES = 4;   // v2.44: fog/intel canvas pixels per tile — smooth vision edges
 const PXW = MAP_W * TILE;
 const PXH = MAP_H * TILE;
 
@@ -1072,22 +1073,22 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- fog of war ----------------
   createFog() {
     this.fogCanvas = document.createElement('canvas');
-    this.fogCanvas.width = MAP_W; this.fogCanvas.height = MAP_H;
+    this.fogCanvas.width = MAP_W * FOGRES; this.fogCanvas.height = MAP_H * FOGRES; // v2.44: 4px/tile — soft edges, no tile staircase
     this.fogCtx = this.fogCanvas.getContext('2d');
-    this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W, MAP_H);
+    this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W * FOGRES, MAP_H * FOGRES);
     this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
-    this.fogImg.setOrigin(0.5).setScale(TILE).setDepth(500).setAlpha(0.48); // v2.41: 0.55->0.48, still fully hides unseen, less banding
+    this.fogImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(500).setAlpha(0.48); // v2.44: FOGRES px/tile; v2.41: 0.55->0.48
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
     this._eventPings = []; // minimap event pings {x,y,t,color,big}
     this.autoMine = true; // GAP 65 mining automation toggle (J)
     this.visCanvas = document.createElement('canvas');
-    this.visCanvas.width = MAP_W; this.visCanvas.height = MAP_H;
+    this.visCanvas.width = MAP_W * FOGRES; this.visCanvas.height = MAP_H * FOGRES; // v2.44: FOGRES px/tile
     this.visCtx = this.visCanvas.getContext('2d');
     this.visTex = this.textures.addCanvas('vis', this.visCanvas);
     this.visImg = this.add.image(PXW / 2, PXH / 2, 'vis');
-    this.visImg.setOrigin(0.5).setScale(TILE).setDepth(499).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(1);
+    this.visImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(499).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(1);
     this.fogDirty = true;
     this.fogTimer = 0;
     // v2.40: AI mist overlay baked through the fog mask (soft edge from softCut upscale)
@@ -1095,7 +1096,10 @@ export class BattleScene extends Phaser.Scene {
       const mc = document.createElement('canvas'); mc.width = 768; mc.height = 768;
       const mx = mc.getContext('2d');
       const src = this.textures.get('ai-fog_mist').getSourceImage();
-      this._fogPat = mx.createPattern(src, 'repeat');
+      // v2.44: pre-blur the mist tile so its own texture isn't a crisp repeat grid
+      const bl = document.createElement('canvas'); bl.width = src.width; bl.height = src.height;
+      const bx2 = bl.getContext('2d'); bx2.filter = 'blur(2px)'; bx2.drawImage(src, 0, 0);
+      this._fogPat = mx.createPattern(bl, 'repeat');
       this.mistCanvas = mc; this.mistCtx = mx;
       this.textures.addCanvas('fog_mist', mc);
       this.fogMistImg = this.add.image(PXW / 2, PXH / 2, 'fog_mist');
@@ -1105,25 +1109,28 @@ export class BattleScene extends Phaser.Scene {
 
   updateFog() {
     const { visCtx, fogCtx } = this;
-    visCtx.clearRect(0, 0, MAP_W, MAP_H);
-    // darken everything unseen
-    fogCtx.fillStyle = '#000';
+    visCtx.clearRect(0, 0, MAP_W * FOGRES, MAP_H * FOGRES);
+    // darken everything unseen (v2.44: FOGRES px/tile for smooth edges; tinted deep blue, not void black)
+    fogCtx.fillStyle = '#060a14';
     for (let i = 0; i < this.seen.length; i++) {
-      if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx, ty, 1, 1); }
+      if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx * FOGRES, ty * FOGRES, FOGRES, FOGRES); }
     }
     // explored => dim gray (seen), currently visible => transparent in vis layer
     // SC1 gradual intel: freshly-explored tiles start bright, stale intel darkens over ~40s
+    // v2.44: blur pass so intel tint gradients instead of tiling into squares
+    visCtx.filter = 'blur(6px)';
     for (let ty = 0; ty < MAP_H; ty++) {
       for (let tx = 0; tx < MAP_W; tx++) {
         const i = tx + ty * MAP_W;
         if (!this.seen[i]) continue;
         const ls = this.lastSeen[i] || 0;
         const age = Math.max(0, this.gameTime - ls);
-        const a = Math.min(0.48, 0.14 + (age / 40) * 0.34); // v2.41: lighter stale-intel dim (was .62/.18) — explored ground stays readable
+        const a = Math.min(0.48, 0.14 + (age / 40) * 0.34); // v.41: lighter stale-intel dim — explored ground stays readable
         visCtx.fillStyle = `rgba(150,158,176,${a.toFixed(2)})`;
-        visCtx.fillRect(tx, ty, 1, 1);
+        visCtx.fillRect(tx * FOGRES, ty * FOGRES, FOGRES, FOGRES);
       }
     }
+    visCtx.filter = 'none';
     const stamp = (cx, cy, r, layer) => {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -1145,19 +1152,20 @@ export class BattleScene extends Phaser.Scene {
       stamp(u.x, u.y, (u.cloaked || u.burrowed) ? 1 : u.def.sight + elevSight);
     }
     for (const b of this.buildings) { if (!b.dead) stamp(b.x, b.y, b.def.sight || 5); }
+    fogCtx.globalCompositeOperation = 'destination-out';
+    visCtx.globalCompositeOperation = 'destination-out';
+    // v2.44: vision holes punched at FOGRES resolution with wider feather -> smooth curved edges
     const softCut = (ctx, cx, cy, r) => {
       if (!isFinite(cx) || !isFinite(cy)) return;
-      const rr = Math.max(1.5, isFinite(r) ? r : 4);
-      const grad = ctx.createRadialGradient(cx, cy, rr * 0.42, cx, cy, rr); // v2.41: wider open center, gentler edge
+      const rr = Math.max(6, (isFinite(r) ? r : 4) * FOGRES);
+      const grad = ctx.createRadialGradient(cx, cy, rr * 0.5, cx, cy, rr); // open center, feathered rim
       grad.addColorStop(0, 'rgba(0,0,0,1)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.fill();
     };
-    fogCtx.globalCompositeOperation = 'destination-out';
-    visCtx.globalCompositeOperation = 'destination-out';
-    for (const u of this.units) { if (!u.dead) { softCut(visCtx, u.x / TILE, u.y / TILE, u.def.sight); } }
-    for (const b of this.buildings) { if (!b.dead) { softCut(visCtx, b.x / TILE, b.y / TILE, (b.def.sight || 5)); } }
+    for (const u of this.units) { if (!u.dead) { softCut(visCtx, u.x / TILE * FOGRES, u.y / TILE * FOGRES, u.def.sight); } }
+    for (const b of this.buildings) { if (!b.dead) { softCut(visCtx, b.x / TILE * FOGRES, b.y / TILE * FOGRES, (b.def.sight || 5)); } }
     fogCtx.globalCompositeOperation = 'source-over';
     visCtx.globalCompositeOperation = 'source-over';
     // v2.40: bake AI mist into unseen areas — pattern fill, punch soft holes at vision sources
@@ -1181,12 +1189,17 @@ export class BattleScene extends Phaser.Scene {
       mx.globalCompositeOperation = 'source-over';
       this.textures.get('fog_mist').refresh();
     }
-    // repopulate holes in fog: fog = black where unseen only
-    fogCtx.clearRect(0, 0, MAP_W, MAP_H);
-    fogCtx.fillStyle = '#000';
+    // repopulate holes in fog: fog = deep-blue-black where unseen only
+    // v2.44: punch feathered holes in fog too (was tile-staircase hard edges on the black layer)
+    fogCtx.clearRect(0, 0, MAP_W * FOGRES, MAP_H * FOGRES);
+    fogCtx.fillStyle = '#060a14';
     for (let i = 0; i < this.seen.length; i++) {
-      if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx, ty, 1, 1); }
+      if (!this.seen[i]) { const tx = i % MAP_W, ty = (i / MAP_W) | 0; fogCtx.fillRect(tx * FOGRES, ty * FOGRES, FOGRES, FOGRES); }
     }
+    fogCtx.globalCompositeOperation = 'destination-out';
+    for (const u of this.units) { if (!u.dead) { softCut(fogCtx, u.x / TILE * FOGRES, u.y / TILE * FOGRES, u.def.sight); } }
+    for (const b of this.buildings) { if (!b.dead) { softCut(fogCtx, b.x / TILE * FOGRES, b.y / TILE * FOGRES, (b.def.sight || 5)); } }
+    fogCtx.globalCompositeOperation = 'source-over';
     this.textures.get('fog').refresh();
     this.textures.get('vis').refresh();
   }
@@ -2229,9 +2242,9 @@ export class BattleScene extends Phaser.Scene {
         if ((u.kills || 0) > 0) lines.push(`Kills ${u.kills}`);
         if (u.maxEnergy) lines.push(`Energy ${Math.round(u.energy)}/${u.maxEnergy}`);
         if (u.burrowed) lines.push('BURROWED');
-        this._hoverTip.setText(lines).setPosition(p.x, p.y - 6).setAlpha(1);
+        this._hoverTip.setText(lines).setPosition(...this._tipPos(p.x, p.y - 6)).setAlpha(1);
       } else if (bb) {
-        this._hoverTip.setText([bb.def.name, `HP ${Math.ceil(bb.hp)}/${bb.maxHp}${bb.maxShield ? '  Sh ' + Math.ceil(bb.shield) : ''}`, bb.built ? '' : `Building ${(Math.min(1, bb.constructionProgress / bb.buildTime) * 100 | 0)}%`].filter(Boolean)).setPosition(p.x, p.y - 6).setAlpha(1);
+        this._hoverTip.setText([bb.def.name, `HP ${Math.ceil(bb.hp)}/${bb.maxHp}${bb.maxShield ? '  Sh ' + Math.ceil(bb.shield) : ''}`, bb.built ? '' : `Building ${(Math.min(1, bb.constructionProgress / bb.buildTime) * 100 | 0)}%`].filter(Boolean)).setPosition(...this._tipPos(p.x, p.y - 6)).setAlpha(1);
       } else this._hoverTip.setAlpha(0);
     });
     // pinch zoom (touch)
@@ -2341,6 +2354,14 @@ export class BattleScene extends Phaser.Scene {
   wp(p) { return { x: p.worldX, y: p.worldY }; }
 
   dragBox(a, b) { return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }; }
+
+  // v2.44: keep hover stat-card clear of the objectives list (top-left) — flip it under the cursor when it would collide
+  _tipPos(x, y) {
+    const tip = this._hoverTip;
+    const w = tip.width || 120, h = tip.height || 40;
+    if (x < 240 && y - h < 140) return [Math.min(this.scale.width - w - 8, x + 18), y + 14];
+    return [x, y];
+  }
 
   drawBox(r) {
     this.box.clear();

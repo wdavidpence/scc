@@ -50,7 +50,7 @@ export class Unit {
     const shadowKey = this.def.size === 'large' ? 'shadow-l' : this.def.size === 'medium' ? 'shadow-m' : 'shadow-s';
     if (world.textures.exists(shadowKey)) {
       this.shadow = world.add.image(2, (this.def.size === 'large' ? 7 : 5), shadowKey);
-      this.shadow.setAlpha(this.flying ? 0.35 : 0.55);
+      this.shadow.setAlpha(this.flying ? 0.45 : 0.7); // v2.44: stronger grounding
     }
     this.sprite = world.add.image(0, this.flying ? -8 : 0, key);
     const sizeScale = this.def.size === 'large' ? 1.25 : this.def.size === 'medium' ? 1.08 : 1;
