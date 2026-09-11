@@ -200,7 +200,10 @@ export class PolishFX {
   radarSweep(g, mmX, mmY, size) {
     const s = this.s;
     if (!s) return;
-    this._radarA = ((this._radarA || 0) + 0.02) % (Math.PI * 2);
+    const prev = this._radarA || 0;
+    this._radarA = (prev + 0.02) % (Math.PI * 2);
+    // v2.56: soft sonar ping each time the sweep completes a revolution
+    if (this._radarA < prev) s.audio?.tone?.(1180, 0.09, 'sine', 0.018, -260);
     const cx = mmX + size / 2, cy = mmY + size / 2, r = size / 2 - 2;
     const a = this._radarA;
     g.lineStyle(1, 0x6ee7a0, 0.35);
@@ -499,6 +502,38 @@ export class PolishFX {
         s.tweens.add({ targets: b, y: y - 6 - Math.random() * 5, alpha: 0, scale: 1.6, duration: 700 + Math.random() * 500, onComplete: () => { const r = s.add.circle(x, y - 8, 2.4, col, 0).setStrokeStyle(1, col, 0.7).setDepth(9); s.tweens.add({ targets: r, scale: 1.8, alpha: 0, duration: 220, onComplete: () => r.destroy() }); } });
         break;
       }
+    }
+  }
+
+  // 32b) v2.56 weather ambience: race-flavored particles over the battlefield.
+  // terran = drifting dust motes, skarn = floating spore flakes, auraxis =
+  // falling light-motes. Camera-local (scrollFactor 0), cheap budget aware.
+  weatherFX(dt) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    const acc = ((s.players && s.players[0] && RACE_INFO[s.players[0].race]) || {}).accent || 0x6ee7a0;
+    const race = (s.players && s.players[0] && s.players[0].race) || 'terran';
+    this._wxT = (this._wxT || 0) - dt;
+    if (this._wxT > 0) return;
+    this._wxT = 0.12 + Math.random() * 0.15;
+    if (!this._cheap(s)) return;
+    const W = s.scale.width, H = s.scale.height;
+    if (race === 'skarn') {
+      // spore flakes: slow drifting amber specks with a lazy sway
+      const x = Math.random() * W, y = Math.random() * H;
+      const p = s.add.circle(x, y, 1 + Math.random() * 1.4, 0xffb070, 0.34).setScrollFactor(0).setDepth(9000);
+      s.tweens.add({ targets: p, y: y - 40 - Math.random() * 30, x: x + (Math.random() * 60 - 30), alpha: 0, duration: 2600 + Math.random() * 1400, ease: 'Sine.easeInOut', onComplete: () => p.destroy() });
+    } else if (race === 'auraxis') {
+      // light motes: gentle falling glints in race accent
+      const x = Math.random() * W, y = -4;
+      const p = s.add.rectangle(x, y, 1.5, 3, acc, 0.4).setScrollFactor(0).setDepth(9000).setRotation(Math.random() * 0.6 - 0.3);
+      s.tweens.add({ targets: p, y: y + 90 + Math.random() * 60, alpha: 0, duration: 2200 + Math.random() * 1000, ease: 'Sine.easeIn', onComplete: () => p.destroy() });
+    } else {
+      // terran dust motes: horizontal drift like wind-blown grit
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const x = dir > 0 ? -4 : W + 4, y = Math.random() * H;
+      const p = s.add.circle(x, y, 0.8 + Math.random(), 0xc8b890, 0.28).setScrollFactor(0).setDepth(9000);
+      s.tweens.add({ targets: p, x: x + dir * (70 + Math.random() * 90), y: y + (Math.random() * 24 - 12), alpha: 0, duration: 2000 + Math.random() * 1200, ease: 'Sine.easeOut', onComplete: () => p.destroy() });
     }
   }
 
@@ -936,6 +971,7 @@ export class PolishFX {
     const hurt = (ctx.units || []).filter(u => !u.dead && u.team === 0 && u._lastHurtT && (ctx.gameTime - u._lastHurtT) < 1.2).length;
     if (hurt >= 2) this.underAttack(ctx.units.find(u => !u.dead && u.team === 0 && u._lastHurtT)?.x);
     this.blightBubbles(dt);
+    this.weatherFX(dt); // v2.56 race weather ambience
     this.cloakScan(dt);
     this.ambient(dt);
     this.selGlowTick();

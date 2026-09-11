@@ -370,6 +370,19 @@ export class Audio2 {
     this.bark(a[Math.floor(Math.random() * a.length)], 0.85, 0.95);
   }
   buildBark() { if (this.voPlay('build', this.racePitch || 1)) return; const L = ['Construction started.', 'Building.', 'Task began.']; this.bark(L[Math.floor(Math.random() * L.length)], 0.9); }
+  // v2.56: race-flavored voice when a structure is selected (SC1-style).
+  // Distinct cadence from unit selects; ~0.7s rate-limited by bark().
+  buildingBark(buildId) {
+    if (this._lastBarkSel && buildId === this._lastBarkSel.buildId && Date.now() - this._lastBarkSel.t < 4000) return;
+    this._lastBarkSel = { buildId, t: Date.now() };
+    const L = {
+      terran: ['Systems online.', 'Structural. Functional.', 'Command post reporting.', 'Facility standing by.'],
+      skarn: ['The hive pulsed.', 'It breathes.', 'Flesh binds stone.', 'Brood structure awake.'],
+      auraxis: ['The spire listens.', 'Light held in lattice.', 'Sanctum answers.', 'Warp steady.']
+    };
+    const a = L[this.race] || L.terran;
+    this.bark(a[Math.floor(Math.random() * a.length)], 0.78, 0.98);
+  }
   adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
   groupBark(n) { this.bark('Group ' + n, 0.95, 1.15); }

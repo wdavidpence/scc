@@ -2703,7 +2703,7 @@ export class BattleScene extends Phaser.Scene {
 
   selectBuilding(b) {
     this.selectedBuilding = b;
-    if (b) this.clearSelection();
+    if (b) { this.clearSelection(); if (b.team === 0) this.audio?.buildingBark?.(b.buildId); } // v2.56: structure select voice
     this.events.emit('hud:selection', { building: b ? { buildId: b.buildId, name: b.def.name, hp: Math.ceil(b.hp), maxHp: b.maxHp, queue: b.queue.map(q => ({ kind: q.kind || q.research, remaining: Math.ceil(q.remaining), label: UNITS[q.kind]?.name || TECHS[q.research]?.name })), canProduce: Object.keys(UNITS).filter(k => UNITS[k].build === b.buildId && b.canProduce(k)) } : null });
   }
 
