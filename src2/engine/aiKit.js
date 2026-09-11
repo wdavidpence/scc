@@ -55,6 +55,24 @@ function bakeSprite(scene, srcKey, outKey, team, target, emblem) {
     p[i] = r * (1 - mix) + tr * mix; p[i + 1] = g * (1 - mix) + tg * mix; p[i + 2] = b * (1 - mix) + tb * mix;
   }
   x.putImageData(d, 0, 0);
+  // v2.58 CRISP: unsharp mask — undo the smoothing blur from downscale so sprite edges stay crisp
+  if (W >= 16 && H >= 16) {
+    const s2 = x.getImageData(0, 0, W, H); const sp = s2.data;
+    const copy = Uint8ClampedArray.from(sp);
+    const AMT = 0.75;
+    for (let yy = 1; yy < H - 1; yy++) {
+      for (let xx = 1; xx < W - 1; xx++) {
+        const i = (yy * W + xx) * 4;
+        if (copy[i + 3] < 40) continue;
+        for (let ch = 0; ch < 3; ch++) {
+          const k = i + ch;
+          const blur = (copy[k - 4] + copy[k + 4] + copy[k - W * 4] + copy[k + W * 4] + copy[k]) / 5;
+          sp[k] = Math.max(0, Math.min(255, copy[k] + AMT * (copy[k] - blur)));
+        }
+      }
+    }
+    x.putImageData(s2, 0, 0);
+  }
   // rim glow: tinted silhouette offsets behind
   const rim = document.createElement('canvas'); rim.width = W; rim.height = H;
   const rx = rim.getContext('2d');
@@ -118,14 +136,13 @@ export function applyAIKit(scene) {
     if (!scene.textures.exists(srcKey)) continue;
     const src = scene.textures.get(srcKey).getSourceImage();
     const tgt = UNIT_TARGET[k] || [LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small, LARGE.includes(k) ? UNIT_DEFAULT.large : UNIT_DEFAULT.small];
-    // v2.45.2: supersample 2x — was baking at exactly target px so any display >1 zoom upscaled blurry
-    const TGT2 = [tgt[0] * 2, tgt[1] * 2];
+    // v2.58 CRISP-1:1: bake at EXACT display footprint (body tgt + emblem pad) instead of 2x + 0.61 fractional
+    // downscale. Fractional nearest/smooth resample made every walking sprite shimmer. Bake once, scale 1.0 forever.
+    const TGT2 = [tgt[0], tgt[1]];
     for (let team = 0; team < 3; team++) {
       try { bakeSprite(scene, srcKey, `u-${k}-t${team}`, team, TGT2, true); n++; } catch (e) { console.warn('ai-kit unit', k, String(e)); }
-      // emblem pad adds 7px each side to the baked canvas; preserve the v2.42 total screen footprint
-      const fin = scene.textures.get(`u-${k}-t${team}`).getSourceImage();
-      const body = fin.width - EMBLEM_PAD * 2;
-      if (body > 0) { scene.__emblemScale = scene.__emblemScale || {}; scene.__emblemScale[`u-${k}-t${team}`] = (tgt[0] + EMBLEM_PAD * 2) / fin.width; }
+      // v2.58: baked at native display size — footprint is exact, no fractional compensation
+      if (scene.__emblemScale) delete scene.__emblemScale[`u-${k}-t${team}`];
       // regenerate walk frames from the baked sprite (cut halves, offset legs)
       const finished = scene.textures.get(`u-${k}-t${team}`).getSourceImage();
       const FW = finished.width, FH = finished.height;

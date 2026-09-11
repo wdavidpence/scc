@@ -12,6 +12,7 @@ export function createGame2(parent = 'game') {
     backgroundColor: '#0c141f',
     pixelArt: true,
     antialias: false,
+    roundPixels: true, // v2.58: snap every sprite to whole pixels — kills walk shimmer
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.NO_CENTER,
