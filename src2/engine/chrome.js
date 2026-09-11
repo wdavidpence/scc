@@ -62,6 +62,97 @@ function panelFace(ctx, w, h, opts = {}) {
   if (accent) { ctx.globalAlpha = 0.5; ctx.fillStyle = accent; ctx.fillRect(7, 6, w - 14, 1); ctx.globalAlpha = 1; }
 }
 
+// v2.48 chip base plate: small engraved metal tile, accent-lit bevel.
+function chipBase(ctx, w, h, col) {
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#232f42'); g.addColorStop(0.18, '#101827'); g.addColorStop(1, '#05080f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#46586f'; ctx.fillRect(0, 0, w, 1); ctx.fillRect(0, 0, 1, h);
+  ctx.fillStyle = '#02040a'; ctx.fillRect(0, h - 1, w, 1); ctx.fillRect(w - 1, 0, 1, h);
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+  ctx.strokeRect(1.5, 1.5, w - 3, h - 3); ctx.globalAlpha = 1;
+}
+
+// Glyph vocab drawn centered at origin, accent color, chunky at 14px.
+const GL = {
+  attack: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-4.5, 4.5); ctx.lineTo(4, -4); ctx.stroke();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(5.5, -5.5); ctx.lineTo(1.2, -4.4); ctx.lineTo(4.4, -1.2); ctx.closePath(); ctx.fill();
+    ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(-4.5, 4.5, 2, 0, Math.PI * 2); ctx.stroke(); },
+  stop: (ctx, c) => { ctx.fillStyle = c; ctx.fillRect(-4, -4, 8, 8);
+    ctx.fillStyle = '#05080f'; ctx.fillRect(-2.4, -2.4, 4.8, 4.8); },
+  deploy: (ctx, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(4.4, 1); ctx.lineTo(1.8, 1); ctx.lineTo(1.8, 4.6); ctx.lineTo(-1.8, 4.6); ctx.lineTo(-1.8, 1); ctx.lineTo(-4.4, 1); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = c; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-5, 5.5); ctx.lineTo(5, 5.5); ctx.stroke(); },
+  siege: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-5.5, -1); ctx.lineTo(5.5, -1); ctx.stroke();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(-2.6, 2.6, 2.2, 0, Math.PI * 2); ctx.arc(2.6, 2.6, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#05080f'; ctx.beginPath(); ctx.arc(-2.6, 2.6, 0.9, 0, Math.PI * 2); ctx.arc(2.6, 2.6, 0.9, 0, Math.PI * 2); ctx.fill(); },
+  burrow: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.quadraticCurveTo(0, 7, 5.5, 3); ctx.stroke();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(3.6, 0.5, 0, 3.4); ctx.quadraticCurveTo(-3.6, 0.5, 0, -5); ctx.closePath(); ctx.fill(); },
+  stim: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-5.5, 0.5); ctx.lineTo(-2, 0.5); ctx.lineTo(-0.4, -3); ctx.lineTo(1.6, 4); ctx.lineTo(3, 0.5); ctx.lineTo(5.5, 0.5); ctx.stroke(); },
+  cloak: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 1, 4.4, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5.5, 1); ctx.lineTo(5.5, 1); ctx.stroke();
+    ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.moveTo(-3, -2.2); ctx.lineTo(-1.4, -3.4); ctx.moveTo(1.6, -2.6); ctx.lineTo(3.2, -3.6); ctx.stroke(); ctx.globalAlpha = 1; },
+  merge: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-2.4, 0, 3.4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(2.4, 0, 3.4, 0, Math.PI * 2); ctx.stroke(); },
+  darkmerge: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-2.4, 0, 3.4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(2.4, 0, 3.4, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#d8ccff'; ctx.beginPath(); ctx.arc(0, 0, 1.4, 0, Math.PI * 2); ctx.fill(); },
+  maelstrom: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 5, 0.4, Math.PI * 1.7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 2.6, Math.PI * 1.1, Math.PI * 0.6); ctx.stroke(); },
+  guardian: (ctx, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, -5.5); ctx.lineTo(4.8, -1.4); ctx.lineTo(3.2, 4.8); ctx.lineTo(-3.2, 4.8); ctx.lineTo(-4.8, -1.4); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#05080f'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(0, 2.6); ctx.stroke(); },
+  devourer: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 1.4, 4.4, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = c; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 3 - 1, 1.4); ctx.lineTo(i * 3, 5); ctx.lineTo(i * 3 + 1, 1.4); ctx.closePath(); ctx.fill(); } },
+  caustic: (ctx, c) => { ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(-2.2, -1.6, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(2.4, 0.4, 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-0.4, 3.4, 1.5, 0, Math.PI * 2); ctx.fill(); },
+  storm: (ctx, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(1.4, -5.5); ctx.lineTo(-3.4, 0.6); ctx.lineTo(-0.4, 0.6); ctx.lineTo(-1.6, 5.5); ctx.lineTo(3.4, -0.8); ctx.lineTo(0.4, -0.8); ctx.closePath(); ctx.fill(); },
+  patrol: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-5, 3.4); ctx.lineTo(-1.6, 3.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(1.6, -3.4); ctx.lineTo(5, -3.4); ctx.stroke();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(-5, 1); ctx.lineTo(-5, 5.8); ctx.lineTo(-1.6, 3.4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(5, -1); ctx.lineTo(5, -5.8); ctx.lineTo(1.6, -3.4); ctx.closePath(); ctx.fill(); },
+  hold: (ctx, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, -5.5); ctx.lineTo(4.8, 4.8); ctx.lineTo(-4.8, 4.8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#05080f'; ctx.fillRect(-1, -1.6, 2, 3.4); },
+  scan: (ctx, c) => { ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 5, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 2.4, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+    ctx.fillStyle = c; ctx.fillRect(-0.7, -5.4, 1.4, 3); },
+  train: (ctx, c) => { ctx.fillStyle = c; ctx.fillRect(-5, 2, 10, 2.6);
+    ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-3.4, 2); ctx.lineTo(-3.4, -4.4); ctx.lineTo(3.4, -4.4); ctx.lineTo(3.4, 2); ctx.stroke(); },
+  build: (ctx, c) => { ctx.save(); ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = c; ctx.fillRect(-1, -1.4, 7.4, 2.8); ctx.fillRect(-4.6, -4.6, 3.6, 9.2);
+    ctx.restore();
+    ctx.strokeStyle = c; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-5.4, 5.4); ctx.lineTo(1, 0); ctx.stroke(); },
+  upgrade: (ctx, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, -5.5); ctx.lineTo(4.4, 0.4); ctx.lineTo(1.7, 0.4); ctx.lineTo(1.7, 5.4); ctx.lineTo(-1.7, 5.4); ctx.lineTo(-1.7, 0.4); ctx.lineTo(-4.4, 0.4); ctx.closePath(); ctx.fill(); },
+};
+
+// key -> [accent color, glyph fn]
+const CHIP_SET = [
+  ['chip-attack', '#ff7a6e', GL.attack], ['chip-stop', '#ffd23f', GL.stop], ['chip-deploy', '#6ee7a0', GL.deploy],
+  ['chip-siege', '#ffb054', GL.siege], ['chip-burrow', '#d8a06a', GL.burrow], ['chip-stim', '#ff8fa3', GL.stim],
+  ['chip-cloak', '#8f7dff', GL.cloak], ['chip-merge', '#ffe9a8', GL.merge], ['chip-mergeDark', '#d8ccff', GL.darkmerge],
+  ['chip-mael', '#7dd3ff', GL.maelstrom], ['chip-guardian', '#a8e6a3', GL.guardian], ['chip-devourer', '#c9a0ff', GL.devourer],
+  ['chip-caustic', '#b7e34a', GL.caustic], ['chip-storm', '#9fb8ff', GL.storm], ['chip-patrol', '#7fe0d4', GL.patrol],
+  ['chip-hold', '#e0c98f', GL.hold], ['chip-scan', '#66d9ff', GL.scan], ['chip-train', '#4ea1ff', GL.train],
+  ['chip-upgrade', '#ffd23f', GL.upgrade], ['chip-build', '#9fd68f', GL.build],
+];
+
+// v2.48 chip lookup: command id -> baked chip texture key ('' = no chip).
+export const CHIPS = {
+  attack: 'chip-attack', stop: 'chip-stop', deploy: 'chip-deploy',
+  siege: 'chip-siege', burrow: 'chip-burrow', stim: 'chip-stim', cloak: 'chip-cloak',
+  merge: 'chip-merge', mergeDark: 'chip-mergeDark', maelstrom: 'chip-mael',
+  morphG: 'chip-guardian', morphD: 'chip-devourer', caustic: 'chip-caustic',
+  storm: 'chip-storm', patrol: 'chip-patrol', hold: 'chip-hold', scan: 'chip-scan',
+  train: 'chip-train', upgrade: 'chip-upgrade', build: 'chip-build',
+};
+
 export const CH = {
   SLICE: 10,
 
@@ -134,6 +225,28 @@ export const CH = {
     bake(scene, 'cur-attack', 24, 28, (ctx) => crosshair(ctx, '#ff5c5c'));
     bake(scene, 'cur-cast', 24, 28, (ctx) => crosshair(ctx, '#8f7dff'));
     bake(scene, 'cur-place', 24, 28, (ctx) => crosshair(ctx, '#6ee7a0'));
+    // v2.48 command-card glyph chips: engraved 14px metal tiles, one per command.
+    // Base plate is shared; glyph strokes are per-key vector art in accent color.
+    for (const [key, col, draw] of CHIP_SET) {
+      bake(scene, key, 14, 14, (ctx, w, h) => { chipBase(ctx, w, h, col); ctx.save(); ctx.translate(w / 2, h / 2); draw(ctx, col); ctx.restore(); });
+    }
+    // v2.48 tooltip 9-slice (dark panel, gold hairline inner edge)
+    bake(scene, 'chr-tip', 64, 40, (ctx, w, h) => {
+      panelFace(ctx, w, h, { tone: 'dark' });
+      ctx.strokeStyle = '#c9a23f'; ctx.globalAlpha = 0.75; ctx.lineWidth = 1;
+      ctx.strokeRect(3.5, 3.5, w - 7, h - 7); ctx.globalAlpha = 1;
+    });
+    // v2.48 killfeed row strip (low profile, tintable per team outcome)
+    bake(scene, 'chr-kfrow', 96, 15, (ctx, w, h) => {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#1b2738'); g.addColorStop(0.2, '#0a121e'); g.addColorStop(1, '#04070c');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#46586f'; ctx.fillRect(0, 0, w, 1);
+      ctx.fillStyle = '#02040a'; ctx.fillRect(0, h - 1, w, 1);
+      ctx.globalAlpha = 0.18; ctx.fillStyle = '#9fb6d4';
+      for (let x = 14; x < w - 4; x += 12) ctx.fillRect(x, 2, 6, 1);
+      ctx.globalAlpha = 1;
+    });
     // v2.47 vignette frame (screen overlay, radial transparent->dark)
     bake(scene, 'grade-vignette', 512, 288, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);

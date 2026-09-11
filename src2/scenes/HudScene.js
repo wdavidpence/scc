@@ -1,7 +1,7 @@
 // HUD for SCC2: resources, command card, selection panel, minimap, alerts.
 import Phaser from 'phaser';
 import { UNITS, BUILDINGS, TECHS, RACE_INFO, TILE, MAP_W, MAP_H } from '../data/sc1.js';
-import { CH } from '../engine/chrome.js';
+import { CH, CHIPS } from '../engine/chrome.js';
 
 export class HudScene extends Phaser.Scene {
   constructor() { super('Hud'); }
@@ -396,18 +396,33 @@ export class HudScene extends Phaser.Scene {
     const self = this;
     const bg = this.add.rectangle(x, y, w, h, 0x18202c, 1).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     const brd = this.add.rectangle(x, y, w, h, 0x2f3a49, 0).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3f4a5a);
-    const txt = this.add.text(x + w / 2, y + h / 2, label, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#dbe7ff', align: 'center' }).setOrigin(0.5).setScrollFactor(0);
+    // v2.48: baked glyph chip in the button's top-left corner; label drops below it.
+    // If the label carries an '[X]' hotkey suffix, strip it and badge the corner instead.
+    let chip = null;
+    const chipKey = opts.chip && this.textures.exists(opts.chip) ? opts.chip : null;
+    const textY = chipKey ? y + h / 2 + 5 : y + h / 2;
+    if (chipKey) {
+      const hk = opts.hotkey || (typeof label === 'string' ? (label.match(/\[([A-Z])\]/) || [])[1] : null);
+      if (hk && typeof label === 'string') label = label.replace(/ ?\[[A-Z]\]/, '');
+      chip = this.add.image(x + 11, y + 11, chipKey).setScrollFactor(0).setDepth(150);
+      if (hk) {
+        chip._hk = this.add.text(x + w - 4, y + 4, hk, { fontFamily: 'Menlo, monospace', fontSize: '8px', color: '#8fa3c8' }).setOrigin(1, 0).setScrollFactor(0).setDepth(153);
+      }
+    }
+    const txt = this.add.text(x + w / 2, textY, label, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#dbe7ff', align: 'center' }).setOrigin(0.5).setScrollFactor(0);
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
-    const btn = { bg, brd, txt, hit, x, y, w, h, label, disabled: false, _disReason: '', _check: opts.state || null,
+    const btn = { bg, brd, txt, hit, chip, x, y, w, h, label, disabled: false, _disReason: '', _check: opts.state || null,
       setDisabled(on, reason = '') {
         on = !!on;
         if (this.disabled === on && this._disReason === reason) return;
         this.disabled = on; this._disReason = reason;
         txt.setColor(on ? '#6b7686' : '#dbe7ff');
+        if (chip) chip.setAlpha(on ? 0.35 : 1);
+        if (chip && chip._hk) chip._hk.setColor(on ? '#4d5766' : '#8fa3c8');
         if (on) bg.setFillStyle(0x10161f, 1); else bg.setFillStyle(0x18202c, 1);
         self.redrawDisabled();
       },
-      setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, ny + h / 2); hit.setPosition(nx, ny); if (this.disabled) self.redrawDisabled(); } };
+      setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, chipKey ? ny + h / 2 + 5 : ny + h / 2); hit.setPosition(nx, ny); if (chip) chip.setPosition(nx + 11, ny + 11); if (chip && chip._hk) chip._hk.setPosition(nx + w - 4, ny + 4); if (this.disabled) self.redrawDisabled(); } };
     hit.on('pointerdown', () => {
       if (btn.disabled) { const ctx = self.disCtx(btn._disReason); self.scene.get('Battle').audio?.announcer?.(ctx); self.flashNotEnough(self.disMsg(btn._disReason)); return; }
       self.flash(bg); self.scene.get('Battle').audio?.uiClick?.(); cb();
@@ -449,7 +464,7 @@ export class HudScene extends Phaser.Scene {
 
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
 
-  // SC1-style hover tooltip (cost/time/requirements/kills)
+  // SC1-style hover tooltip — v2.48: baked chr-tip 9-slice panel backing
   showTip(cx, topY, lines) {
     this.hideTip();
     const arr = Array.isArray(lines) ? lines : [lines];
@@ -457,13 +472,18 @@ export class HudScene extends Phaser.Scene {
     const h = arr.length * 14 + 10;
     const x = Math.min(this.W - w - 6, Math.max(6, cx - w / 2));
     const y = Math.max(6, topY - h);
-    this._tipG = this.add.graphics().setScrollFactor(0).setDepth(90);
-    this._tipG.fillStyle(0x05080f, 0.95).fillRoundedRect(x, y, w, h, 4);
-    this._tipG.lineStyle(1, 0xffd23f, 0.8).strokeRoundedRect(x, y, w, h, 4);
+    if (this.textures.exists('chr-tip')) {
+      this._tipNs = CH.panel(this, 'chr-tip', x, y, w, h, { depth: 90, alpha: 0.97 });
+    } else {
+      this._tipG = this.add.graphics().setScrollFactor(0).setDepth(90);
+      this._tipG.fillStyle(0x05080f, 0.95).fillRoundedRect(x, y, w, h, 4);
+      this._tipG.lineStyle(1, 0xffd23f, 0.8).strokeRoundedRect(x, y, w, h, 4);
+    }
     this._tipT = this.add.text(x + 8, y + 5, arr.join('\n'), { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#dbe7ff', lineHeight: 14 }).setScrollFactor(0).setDepth(91);
   }
   hideTip() {
     if (this._tipG) { this._tipG.destroy(); this._tipG = null; }
+    if (this._tipNs) { if (this._tipNs.obj.active) this._tipNs.obj.destroy(); this._tipNs = null; }
     if (this._tipT) { this._tipT.destroy(); this._tipT = null; }
   }
 
@@ -474,7 +494,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   clearButtons() {
-    for (const b of this.buttons) { b.bg.destroy(); b.brd.destroy(); b.txt.destroy(); b.hit.destroy(); }
+    for (const b of this.buttons) { b.bg.destroy(); b.brd.destroy(); b.txt.destroy(); b.hit.destroy(); if (b.chip) { if (b.chip._hk) b.chip._hk.destroy(); b.chip.destroy(); } }
     this.buttons = [];
     if (this._disG) this._disG.clear();
   }
@@ -518,7 +538,7 @@ export class HudScene extends Phaser.Scene {
       const cols = Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84)));
       const unitRows = [];
       const prods = Object.keys(UNITS).filter(k => (def.produces?.includes(k) || UNITS[k].build === sel.buildId) && UNITS[k].race === race && !UNITS[k].summon);
-      for (const k of prods) unitRows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''),
+      for (const k of prods) unitRows.push({ label: UNITS[k].name.split(' ')[0], cb: () => b.events.emit('hud:queueUnit', { buildingId: sel.buildId, kind: k }), cost: UNITS[k].minerals + (UNITS[k].gas ? '/' + UNITS[k].gas : ''), chip: CHIPS.train,
         state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0; const p = bt.players[T]; const d = UNITS[k];
           if (p.supplyUsed + (d.supply || 0) > p.supplyCap) return 'supply';
           if (d.tech && !bt.techResearched(T, d.tech)) return 'tech';
@@ -532,7 +552,7 @@ export class HudScene extends Phaser.Scene {
         if (!t) continue;
         if (t.requiresTech && !b.techResearched(0, t.requiresTech)) continue;
         const done = b.techResearched(0, tId);
-        techRows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''),
+        techRows.push({ label: (done ? '✓' : '') + t.name.slice(0, 7), cb: () => b.events.emit('hud:queueResearch', { buildingId: sel.buildId, techId: tId }), cost: t.minerals + (t.gas ? '/' + t.gas : ''), chip: CHIPS.upgrade,
           state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0;
             if (bt.techResearched(T, tId)) return 'done';
             if (t.requiresTech && !bt.techResearched(T, t.requiresTech)) return 'tech';
@@ -551,11 +571,11 @@ export class HudScene extends Phaser.Scene {
       rows.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
         const x = 12 + col * 82, y = this.H - 96 + row * 44;
-        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb, r.tip, { state: r.state });
-        i++;
+        this.mkBtn(x, y, 78, 38, `${r.label}\n${r.cost}`, r.cb, r.tip, { state: r.state, chip: r.chip });
+        i++
       });
       if (def.rally === false && rows.length === 0) {
-        this.mkBtn(12, this.H - 96, 78, 38, 'STOP', () => b.events.emit('hud:command', 'stop'));
+        this.mkBtn(12, this.H - 96, 78, 38, 'STOP', () => b.events.emit('hud:command', 'stop'), null, { chip: CHIPS.stop });
       }
       return;
     }
@@ -623,18 +643,19 @@ export class HudScene extends Phaser.Scene {
         __scan: (bt) => bt._scanCd > 0 ? 'energy' : (!b.hasBuilding('scienceFacility', 0) ? 'tech' : ''),
       };
       const btnDefs = rows.map(bid => {
-        if (abil[bid]) return { label: abil[bid][0], cb: abil[bid][1], state: abilState[bid] || null };
-        return { label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid),
+        const chipKey = CHIPS[String(bid).replace(/^__/, '')] || (bid[0] === '_' ? '' : CHIPS.build);
+        if (abil[bid]) return { label: abil[bid][0], cb: abil[bid][1], state: abilState[bid] || null, chip: chipKey };
+        return { label: BUILDINGS[bid].name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() + '\n' + BUILDINGS[bid].name.split(' ')[0], cb: () => b.events.emit('hud:place', bid), chip: chipKey,
           state: (bt) => { const T = bt.hotseat ? (bt.activeTeam ?? 0) : 0; const d = BUILDINGS[bid];
             if (d.requires && !d.requires.every(r => bt.hasBuilding(r, T))) return 'tech';
             if (!bt.canAfford(T, d.minerals, d.gas)) return 'minerals';
             return ''; } };
       });
-      btnDefs.unshift({ label: 'STOP', cb: () => b.events.emit('hud:command', 'stop') });
-      btnDefs.unshift({ label: 'ATTACK\nMOVE', cb: () => b.events.emit('hud:attackMode') });
+      btnDefs.unshift({ label: 'STOP', cb: () => b.events.emit('hud:command', 'stop'), chip: CHIPS.stop });
+      btnDefs.unshift({ label: 'ATTACK\nMOVE', cb: () => b.events.emit('hud:attackMode'), chip: CHIPS.attack });
       btnDefs.slice(0, cols * 2).forEach((r) => {
         const col = i % cols, row = (i / cols) | 0;
-        this.mkBtn(12 + col * 72, this.H - 96 + row * 44, 68, 38, r.label, r.cb, null, { state: r.state });
+        this.mkBtn(12 + col * 72, this.H - 96 + row * 44, 68, 38, r.label, r.cb, null, { state: r.state, chip: r.chip });
         i++;
       });
       return;
@@ -1098,17 +1119,32 @@ export class HudScene extends Phaser.Scene {
   }
 
   // ---------------- v2.27 ----------------
-  // 55) kill feed ticker: bottom-left combat rows with weapon icons, 6s fade
+  // 55) kill feed ticker: v2.48 rows on baked chrome strips, weapon glyph, 6s fade
   killFeed(e) {
     if (!e) return;
     this._kf = this._kf || [];
-    this._kf.push({ born: this.time.now, mine: e.mine, line: `${e.killer}  ⚔  ${e.victim}` });
+    this._kf.push({ mine: e.mine, killer: e.killer, victim: e.victim });
     if (this._kf.length > 5) this._kf.shift();
-    if (!this._kfText) this._kfText = this.add.text(12, this.H - 236, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', lineHeight: 15, color: '#ffd0d0' }).setScrollFactor(0).setDepth(61).setAlpha(0.95);
-    this._kfText.setText(this._kf.map((m, i) => m.line).join('\n'));
-    this.tweens.killTweensOf(this._kfText);
-    this._kfText.setAlpha(0.95);
-    this.tweens.add({ targets: this._kfText, alpha: 0.55, delay: 4200, duration: 1800 });
+    // rebuild row objects on chr-kfrow strips (tinted by outcome)
+    if (this._kfRows) { for (const r of this._kfRows) { if (r.bg) r.bg.destroy(); if (r.ico) r.ico.destroy(); if (r.txt) r.txt.destroy(); } }
+    this._kfRows = [];
+    const x0 = 10, y0 = this.H - 238;
+    this._kf.forEach((m, i) => {
+      const y = y0 + i * 17;
+      const ok = this.textures.exists('chr-kfrow');
+      const bg = ok ? this.add.image(x0, y, 'chr-kfrow').setOrigin(0, 0).setScrollFactor(0).setDepth(60).setTint(m.mine ? 0x2a4a6e : 0x6e2a2a).setAlpha(0.88)
+        : this.add.rectangle(x0, y, 190, 15, m.mine ? 0x1c3a5a : 0x5a1c1c, 0.8).setOrigin(0, 0).setScrollFactor(0).setDepth(60);
+      const ico = this.textures.exists('chip-attack') ? this.add.image(x0 + 8, y + 7.5, 'chip-attack').setScrollFactor(0).setDepth(62).setScale(0.8) : null;
+      const txt = this.add.text(x0 + 18, y + 7.5, `${m.killer}  ⚔  ${m.victim}`, { fontFamily: 'Menlo, monospace', fontSize: '11px', color: m.mine ? '#cfe6ff' : '#ffd0d0' }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(62);
+      this._kfRows.push({ bg, ico, txt });
+    });
+    this._kfText = this._kfRows.length ? this._kfRows[this._kfRows.length - 1].txt : null;
+    if (!this._kfDecayT) this._kfDecayT = 0;
+    if (this._kfDecay) this.time.removeEvent(this._kfDecay);
+    this._kfDecay = this.time.delayedCall(4200, () => {
+      if (!this._kfRows) return;
+      for (const r of this._kfRows) { this.tweens.add({ targets: [r.bg, r.ico, r.txt].filter(Boolean), alpha: 0.25, duration: 1800 }); }
+    });
   }
 
   // 56) voice bark subtitle card (mirrors SpeechSynthesis barks)
@@ -1117,9 +1153,13 @@ export class HudScene extends Phaser.Scene {
     if (this._barkT) this._barkT.destroy();
     if (this._barkG) this._barkG.destroy();
     const w = Math.min(520, text.length * 7 + 40);
-    this._barkG = this.add.graphics().setScrollFactor(0).setDepth(70);
-    this._barkG.fillStyle(0x050a14, 0.88).fillRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
-    this._barkG.lineStyle(1, 0x6ee7a0, 0.85).strokeRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
+    if (this.textures.exists('chr-kfrow')) {
+      this._barkG = this.add.image(this.W / 2 - w / 2, this.H - 300, 'chr-kfrow').setOrigin(0, 0).setScrollFactor(0).setDepth(70).setDisplaySize(w, 30).setTint(0x1d4a38).setAlpha(0.92);
+    } else {
+      this._barkG = this.add.graphics().setScrollFactor(0).setDepth(70);
+      this._barkG.fillStyle(0x050a14, 0.88).fillRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
+      this._barkG.lineStyle(1, 0x6ee7a0, 0.85).strokeRoundedRect(this.W / 2 - w / 2, this.H - 300, w, 30, 5);
+    }
     this._barkT = this.add.text(this.W / 2, this.H - 285, '“' + text + '”', { fontFamily: 'Menlo, monospace', fontSize: '12px', fontStyle: 'italic', color: '#d7f5e3', wordWrap: { width: w - 16 } }).setOrigin(0.5).setScrollFactor(0).setDepth(71);
     this.tweens.add({ targets: [this._barkG, this._barkT], alpha: 0, delay: 3600, duration: 600, onComplete: () => { if (this._barkT && this._barkT.active) { this._barkT.destroy(); this._barkT = null; } if (this._barkG && this._barkG.active) { this._barkG.destroy(); this._barkG = null; } } });
   }
