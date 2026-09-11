@@ -1,6 +1,6 @@
 #!/bin/bash
 # v2.55.0 live verify: wait for bundle flip, marker sweep, live gate.
-TARGET=index-Bu3wg005.js
+TARGET=index-B5xljiej.js
 for i in $(seq 1 30); do
   B=$(curl -s https://wdavidpence.github.io/scc/ | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1)
   if [ "$B" = "$TARGET" ]; then echo "BUNDLE_LIVE=$B"; break; fi
