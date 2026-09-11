@@ -1,19 +1,37 @@
 // v2.19 gate: hover tooltips (unit stats w/ kills, building stats, command-card tips)
+// v2.52 harness repair: env-driven URL (default :4177 preview), canonical direct-boot,
+// real skarn enemy id, defensive scene guards.
 const { chromium } = require('/Users/davidpence/.hermes/node/lib/node_modules/playwright');
 (async () => {
   const browser = await chromium.launch({ headless: false, args: ['--use-gl=angle', '--enable-gpu'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
   const errors = [];
   page.on('pageerror', e => errors.push((e.stack || e.message).split('\n').slice(0, 2).join(' | ')));
-  await page.goto('http://127.0.0.1:5175/index2.html', { waitUntil: 'load' });
-  await page.waitForTimeout(1500);
+  const url = process.env.SCC_URL || 'http://127.0.0.1:4177/scc/';
+  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
   await page.evaluate(() => { try { localStorage.setItem('starfront.cutseen.v1', '1'); } catch (e) {} });
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(1200);
-  await page.evaluate(() => { const c = window.__SCC2.scene.getScene('Cut'); if (c && c.scene.isActive()) c.close(); });
-  const active = await page.evaluate(() => window.__SCC2.scene.isActive('Battle'));
-  if (!active) await page.evaluate(() => { const sm = window.__SCC2.scene; ['Title', 'Cut', 'Brief'].forEach(s => { if (sm.isActive(s)) sm.stop(s); }); sm.start('Battle', { race: 'terran', enemyRace: 'zerg', difficulty: 'normal' }); });
-  await page.waitForTimeout(3500);
+  await page.waitForFunction(() => window.__SCC2, null, { timeout: 60000 });
+  await page.evaluate(async () => {
+    const sm = window.__SCC2.scene;
+    for (const s of sm.getScenes(true)) sm.stop(s.scene.key);
+    await new Promise(r => setTimeout(r, 400));
+    sm.start('Battle', { race: 'terran', enemyRace: 'skarn', difficulty: 'normal' });
+    sm.start('Hud', { race: 'terran' });
+    await new Promise(r => setTimeout(r, 6000));
+    // deploy MCV so a team-0 building exists for the building/card tooltip checks
+    const b = window.__SCC2.scene.getScene('Battle');
+    const mcv = b.units.find(u => u.team === 0 && !u.dead && u.def.mcv);
+    if (mcv) {
+      const pd = mcv.def.deploysTo || 'commandCenter';
+      const min = b.minerals[0];
+      if (min) {
+        for (let r = 2; r < 14; r++) { let done = false; for (const [dx, dy] of [[r,0],[-r,0],[0,r],[0,-r]]) { if (b.placementValid(pd, min.x + dx * 16, min.y + dy * 16)) { mcv.setPos(min.x + dx * 16, min.y + dy * 16); done = true; break; } } if (done) break; }
+      }
+      b.deployMCV(mcv);
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  });
+  await page.waitForTimeout(1000);
 
   const out = {};
 
@@ -92,5 +110,12 @@ const { chromium } = require('/Users/davidpence/.hermes/node/lib/node_modules/pl
   await page.screenshot({ path: '/Users/davidpence/scc-work/verify/v219-tips.png' });
   console.log(JSON.stringify(out, null, 1));
   console.log('ERRORS', errors.length ? errors.slice(0, 4) : 'NONE');
+  // v2.52: real pass/fail gate (was report-only, always exit 0)
+  const ok = out.unitTip && out.unitTip.alpha > 0 && /Kills 7/.test(out.unitTip.text)
+    && out.buildTip && out.buildTip.alpha > 0 && /Command Center/.test(out.buildTip.text)
+    && out.cardTip && out.cardTip.has === true
+    && errors.length === 0;
+  console.log(ok ? 'GATE-V219 PASS' : 'GATE-V219 FAIL');
   await browser.close();
+  process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('FATAL', e.message); process.exit(1); });
