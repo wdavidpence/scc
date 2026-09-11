@@ -2604,7 +2604,12 @@ export class BattleScene extends Phaser.Scene {
   _tipPos(x, y) {
     const tip = this._hoverTip;
     const w = tip.width || 120, h = tip.height || 40;
-    if (x < 240 && y - h < 140) return [Math.min(this.scale.width - w - 8, x + 18), y + 14];
+    // v2.53.1: top-left corner flips parked the tip ON the objectives block
+    // (objText at 12,44). Flip to its right edge using live width instead.
+    const hud = this.scene.get('Hud');
+    const ob = hud && hud.objText ? hud.objText.getBounds() : null;
+    const minX = ob ? ob.right + 12 : 260;
+    if (x < 240 && y - h < 140) return [Math.min(this.scale.width - w - 8, Math.max(x + 18, minX)), Math.max(y + 14, 60)];
     return [x, y];
   }
 
