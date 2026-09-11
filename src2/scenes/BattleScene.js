@@ -461,7 +461,7 @@ export class BattleScene extends Phaser.Scene {
     CH.init(this);
     const SW = this.scale.width, SH = this.scale.height;
     this.gradeRect = this.add.rectangle(SW / 2, SH / 2, SW + 40, SH + 40, 0xffb066, 0.05).setDepth(49).setScrollFactor(0).setBlendMode(Phaser.BlendModes.OVERLAY);
-    this.vignetteImg = this.add.image(SW / 2, SH / 2, 'grade-vignette').setOrigin(0.5).setScrollFactor(0).setDepth(500).setDisplaySize(SW, SH).setAlpha(0.9);
+    this.vignetteImg = this.add.image(SW / 2, SH / 2, 'grade-vignette').setOrigin(0.5).setScrollFactor(0).setDepth(500).setDisplaySize(SW, SH).setAlpha(0.62); // v2.59: 0.9->0.62
     this.events.on('resize', (sz) => {
       const w = sz.width || this.scale.width, h = sz.height || this.scale.height;
       if (this.gradeRect?.active) { this.gradeRect.setPosition(w / 2, h / 2); this.gradeRect.setSize(w + 40, h + 40); }
@@ -582,7 +582,7 @@ export class BattleScene extends Phaser.Scene {
       this.gradeRect.fillColor = col;
       this.gradeRect.setAlpha(a);
     }
-    if (this.vignetteImg) this.vignetteImg.setAlpha(0.78 + night * 0.12);
+    if (this.vignetteImg) this.vignetteImg.setAlpha(0.62 + night * 0.10); // v2.59: 0.78+ -> lighter frame, corners stay readable
     // building window glows fade in at night
     for (const b of this.buildings) {
       if (!b._bglows) continue;
@@ -1016,12 +1016,22 @@ export class BattleScene extends Phaser.Scene {
       for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
         const i = ty * MAP_W + tx;
         if (this.elev[i]) {
-          if (hiPat) { gx.save(); gx.fillStyle = hiPat; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); gx.restore(); gx.fillStyle = 'rgba(210,225,245,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
-          else { gx.fillStyle = 'rgba(190,205,225,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
-          if (!this.elev[i - MAP_W]) { gx.fillStyle = 'rgba(0,0,0,0.45)'; gx.fillRect(tx * TILE, ty * TILE, TILE, 3); }
-          if (!this.elev[i + MAP_W]) { gx.fillStyle = 'rgba(255,255,255,0.10)'; gx.fillRect(tx * TILE, (ty + 1) * TILE - 2, TILE, 2); }
+          // v2.59: dithered scarp edges instead of flat fill blocks — highland blends into lowland
+          if (hiPat) { gx.save(); gx.fillStyle = hiPat; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); gx.restore(); }
+          gx.fillStyle = 'rgba(210,225,245,0.06)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+          const edge = (dy, up) => { // dither the boundary rows: alpha fades outward over 2 tiles
+            const nb = this.elev[(ty + dy) * MAP_W + tx];
+            if (nb) return;
+            for (let k = 0; k < 2; k++) {
+              const a = up ? (k === 0 ? 0.30 : 0.12) : (k === 0 ? 0.10 : 0.04);
+              gx.fillStyle = up ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * 0.6})`;
+              const yy = dy < 0 ? ty * TILE + k * 4 - (k ? 0 : 0) : (ty + 1) * TILE - 4 + k * 4;
+              for (let dx2 = 0; dx2 < TILE; dx2 += 2) if ((dx2 + ty * 3 + k) % 4 < (k === 0 ? 4 : 2)) gx.fillRect(tx * TILE + dx2, yy, 2, 4);
+            }
+          };
+          edge(-1, true); edge(1, false);
         }
-        if (this.ramp[i]) { gx.fillStyle = 'rgba(160,175,195,0.16)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
+        if (this.ramp[i]) { gx.fillStyle = 'rgba(160,175,195,0.10)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); }
       }
       // rock clusters: block pathing for ground (rockTiles already blocked); some destructible stay until destroyed
       this.terrainCtx = gx; this.terrainCanvas = gc;
@@ -1249,7 +1259,7 @@ export class BattleScene extends Phaser.Scene {
     this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W * FOGRES, MAP_H * FOGRES);
     this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
-    this.fogImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(500).setAlpha(0.48); // v2.44: FOGRES px/tile; v2.41: 0.55->0.48
+    this.fogImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(500).setAlpha(0.38); // v2.59: 0.48->0.38 — fog lifted so explored ground reads terrain, not black
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
     this._eventPings = []; // minimap event pings {x,y,t,color,big}

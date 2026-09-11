@@ -1126,9 +1126,9 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < b.seen.length; i++) {
       const tx = i % MAP_W, ty = (i / MAP_W) | 0;
       if (!b.seen[i]) { ctx.fillStyle = '#05070d'; ctx.fillRect(tx * res, ty * res, res, res); continue; }
-      ctx.globalAlpha = 0.30; ctx.fillStyle = '#5b6678';
+      ctx.globalAlpha = 0.16; ctx.fillStyle = '#7c8aa0';
       ctx.fillRect(tx * res, ty * res, res, res);
-      ctx.globalAlpha = 0.22; ctx.fillStyle = this._shroudPat;
+      ctx.globalAlpha = 0.14; ctx.fillStyle = this._shroudPat;
       ctx.fillRect(tx * res, ty * res, res, res);
       ctx.globalAlpha = 1;
     }
