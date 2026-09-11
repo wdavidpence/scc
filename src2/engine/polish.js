@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAP_W, MAP_H, TILE } from '../data/sc1.js';
+import { MAP_W, MAP_H, TILE, RACE_INFO } from '../data/sc1.js';
 
 // polish.js — v2.25 micro-feedback layer: click markers, floats, sweeps, badges, confetti.
 // Self-contained: every method guards on scene state; cheap tweens, auto-destroy.
@@ -252,15 +252,46 @@ export class PolishFX {
   }
 
   // 16) hovered unit glow ring (battle hover handler)
+  // v2.52: race-accent tint on friendly hover + rank pips (vet level shown
+  // as accent pips under the unit while hovered).
   hoverGlow(u) {
     const s = this.s;
     if (!s) return;
-    if (this._hoverKey === (u && u.id)) return;
+    if (this._hoverKey === (u && u.id) && u) {
+      // same unit still hovered: track it (units move)
+      if (this._hoverRing) { this._hoverRing.setPosition(u.x, u.y); }
+      if (this._hoverPips) {
+        const r = (u.def && u.def.size === 'large' ? 16 : 10);
+        const lv = u.level || 0;
+        this._hoverPips.clear();
+        for (let i = 0; i <= lv; i++) {
+          const px = u.x - lv * 3 + i * 6;
+          this._hoverPips.fillStyle(u.team === 0 ? this._hoverAcc : 0xffffff, 0.95); this._hoverPips.fillRect(px - 2, u.y + r + 2, 4, 2);
+          this._hoverPips.fillStyle(0x000000, 0.35); this._hoverPips.fillRect(px - 2, u.y + r + 4, 4, 1);
+        }
+      }
+      return;
+    }
     this._hoverKey = u && u.id;
     if (this._hoverRing) { this._hoverRing.destroy(); this._hoverRing = null; }
+    if (this._hoverPips) { this._hoverPips.destroy(); this._hoverPips = null; }
     if (!u) return;
-    this._hoverRing = s.add.circle(u.x, u.y, (u.def && u.def.size === 'large' ? 16 : 10), 0xffffff, 0.10).setStrokeStyle(1, 0xffffff, 0.35).setDepth(44);
-    s.events.once('shutdown', () => { this._hoverRing = null; });
+    const friendly = u.team === 0;
+    const acc = friendly ? ((RACE_INFO[(s.players && s.players[0] || {}).race] || {}).accent || 0xffffff) : 0xffffff;
+    this._hoverAcc = acc;
+    const r = (u.def && u.def.size === 'large' ? 16 : 10);
+    this._hoverRing = s.add.circle(u.x, u.y, r, acc, friendly ? 0.10 : 0.08).setStrokeStyle(1, acc, 0.45).setDepth(44);
+    const lv = u.level || 0;
+    if (lv > 0) {
+      const g = s.add.graphics().setDepth(45);
+      for (let i = 0; i <= lv; i++) {
+        const px = u.x - lv * 3 + i * 6;
+        g.fillStyle(acc, 0.95); g.fillRect(px - 2, u.y + r + 2, 4, 2);
+        g.fillStyle(0x000000, 0.35); g.fillRect(px - 2, u.y + r + 4, 4, 1);
+      }
+      this._hoverPips = g;
+    }
+    s.events.once('shutdown', () => { this._hoverRing = null; this._hoverPips = null; });
   }
 
   // 17) construction countdown arc over active sites

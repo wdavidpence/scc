@@ -2667,7 +2667,10 @@ export class BattleScene extends Phaser.Scene {
 
   showSelRing(u) {
     if (u._ring) u._ring.destroy();
-    const tc = u.team === 0 ? 0x6ee7a0 : u.team === 1 ? 0xff8a4a : 0xff5ce0;
+    // v2.52: race-accent unified selection rings — player units carry their
+    // race accent (matches card/ghost/rally chrome); enemies keep team colors.
+    const raceAcc = u.team === 0 ? (RACE_INFO[(this.players[0] || {}).race] || {}).accent : null;
+    const tc = raceAcc || (u.team === 0 ? 0x6ee7a0 : u.team === 1 ? 0xff8a4a : 0xff5ce0);
     u._ring = this.add.circle(0, 0, u.radius + 4, tc, 0.14).setStrokeStyle(2, tc, 1);
     u.container.add(u._ring);
     this.tweens.add({ targets: u._ring, alpha: { from: 1, to: 0.35 }, duration: 600, yoyo: true, repeat: -1 });
