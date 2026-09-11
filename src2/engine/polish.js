@@ -82,17 +82,21 @@ export class PolishFX {
   }
 
   // 5) building complete: gold radar sweep + sparkles
-  buildCompleteFX(x, y, big = false) {
+  buildCompleteFX(x, y, big = false, acc = null) {
     const s = this.s;
     if (!s) return;
     const r = big ? 90 : 56;
+    const col = acc != null ? acc : 0xffd23f;
     const g = s.add.graphics().setDepth(49);
-    g.lineStyle(2, 0xffd23f, 0.8);
+    g.lineStyle(2, col, 0.8);
     g.strokeCircle(x, y, 12);
     s.tweens.add({ targets: g, scale: r / 12, alpha: 0, duration: 700, ease: 'Cubic.easeOut', onComplete: () => g.destroy() });
+    // v2.50: additive bloom core in race accent
+    const bg = s.add.circle(x, y, big ? 34 : 22, col, 0.22).setDepth(49).setBlendMode(Phaser.BlendModes.ADD);
+    s.tweens.add({ targets: bg, scale: 1.8, alpha: 0, duration: 620, ease: 'Quad.easeOut', onComplete: () => bg.destroy() });
     for (let i = 0; i < (big ? 12 : 7); i++) {
       const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * (big ? 34 : 20);
-      const p = s.add.circle(x, y, 1.6, 0xffd23f, 1).setDepth(50);
+      const p = s.add.circle(x, y, 1.6, col, 1).setDepth(50);
       s.tweens.add({ targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d - 8, alpha: 0, scale: 0.2, duration: 500 + Math.random() * 300, ease: 'Quad.easeOut', onComplete: () => p.destroy() });
     }
   }

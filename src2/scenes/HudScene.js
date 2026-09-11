@@ -343,6 +343,10 @@ export class HudScene extends Phaser.Scene {
       this.mmTerrain.setDisplaySize(this.mmSize, this.mmSize);
     }
     this.mmFrame = this.add.rectangle(this.mmX, this.mmY, this.mmSize, this.mmSize, 0x2b313a, 1).setOrigin(0, 0).setScrollFactor(0).setStrokeStyle(1, 0x3b444f);
+    // v2.50: race-accent corner brackets on the minimap bezel
+    this.mmAcc = (RACE_INFO[this.race] || {}).accent || 0x4ea1ff;
+    this.mmBrackets = this.add.graphics().setScrollFactor(0).setDepth(2);
+    this.drawMmBrackets();
     // v2.46: fibrous shroud tile over the explored-but-unseen fog area (minimap-only visual)
     if (this.textures.exists('chr-shroud')) {
       this.mmShroud = this.add.image(this.mmX, this.mmY, 'chr-shroud').setOrigin(0, 0).setScrollFactor(0).setDisplaySize(this.mmSize, this.mmSize).setAlpha(0.85);
@@ -1198,11 +1202,27 @@ export class HudScene extends Phaser.Scene {
     if (this.mmChrome) { this.mmChrome.setPosition(this.mmX - 4, this.mmY - 4); this.mmChrome.setDisplaySize(nz + 8, nz + 8); }
     if (this.mmTerrain) { this.mmTerrain.setPosition(this.mmX, this.mmY); this.mmTerrain.setDisplaySize(nz, nz); }
     if (this.mmZone) { this.mmZone.setSize(nz, nz); this.mmZone.setPosition(this.mmX, this.mmY); }
+    this.drawMmBrackets(); // v2.50
     this.mmG.setScale(1);
     const b = this.scene.get('Battle');
     if (b && b.playSounds && b.playSounds.zoom) b.playSounds.zoom();
     this._mmZoomPop = { t: this.time.now };
     return true;
+  }
+
+  drawMmBrackets() {
+    if (!this.mmBrackets || !this.mmBrackets.active) return;
+    const g = this.mmBrackets; g.clear();
+    const L = 12, s = this.mmSize, x = this.mmX, y = this.mmY;
+    g.lineStyle(2, this.mmAcc, 0.9);
+    // TL
+    g.lineBetween(x, y + L, x, y); g.lineBetween(x, y, x + L, y);
+    // TR
+    g.lineBetween(x + s - L, y, x + s, y); g.lineBetween(x + s, y, x + s, y + L);
+    // BL
+    g.lineBetween(x, y + s - L, x, y + s); g.lineBetween(x, y + s, x + L, y + s);
+    // BR
+    g.lineBetween(x + s - L, y + s, x + s, y + s); g.lineBetween(x + s, y + s, x + s, y + s - L);
   }
 
   // 58) fleet census: top-bar silhouette counts, click selects all of type on screen

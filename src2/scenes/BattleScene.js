@@ -2102,7 +2102,7 @@ export class BattleScene extends Phaser.Scene {
       this.showRallyFlag(b);
     }
     this.audio?.buildComplete();
-    this.polish?.buildCompleteFX(b.x, b.y, !!b.def.primary);
+    this.polish?.buildCompleteFX(b.x, b.y, !!b.def.primary, (RACE_INFO[(this.players[b.team] || {}).race] || {}).accent);
   }
 
   drawPowerField(b) {
@@ -2191,10 +2191,14 @@ export class BattleScene extends Phaser.Scene {
 
   showRallyFlag(b) {
     if (b._rallyFlag) b._rallyFlag.destroy();
+    // v2.50: flag cloth in the owner's race accent color
+    const acc = (RACE_INFO[(this.players[b.team] || {}).race] || {}).accent || 0x6ee7a0;
     const fl = this.add.container(b.rallyPoint.x, b.rallyPoint.y).setDepth(48);
     const pole = this.add.rectangle(0, -6, 2, 14, 0xdbe7ff);
-    const flag = this.add.triangle(4, -11, 0, 0, 10, 3, 0, 6, 0x6ee7a0);
-    fl.add([pole, flag]);
+    const flag = this.add.triangle(4, -11, 0, 0, 10, 3, 0, 6, acc);
+    // accent glow under the cloth
+    const glow = this.add.circle(7, -10, 6, acc, 0.18).setBlendMode(Phaser.BlendModes.ADD);
+    fl.add([glow, pole, flag]);
     b._rallyFlag = fl;
     this.tweens.add({ targets: flag, scaleX: { from: 0.7, to: 1 }, duration: 200, yoyo: true, repeat: 1 });
     // SC1: flag persists while the rally point stands; cleared with the building or a new rally
