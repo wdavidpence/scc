@@ -2011,6 +2011,8 @@ export class BattleScene extends Phaser.Scene {
     }
     // minimap event ping on combat deaths
     if (!this.gameOver) this.addEventPing(u.x, u.y, u.team === 0 ? 0xff5c5c : 0xffb04a, !!u.isBoss || !!u.def.heavy);
+    // v2.57: heavy units thump the camera when they slam down in view
+    if (!u.isBoss && u.def.heavy && this.camNear(u.x, u.y) && !this.gameOver) this.shake(u.def.size === 'large' ? 6 : 4, 0.28);
     // polish: kill pop + streak taunts when the enemy dies in your vision
     if (u.team === 1 && this.currentlyVisible(u.x, u.y)) this.polish?.killPop(u.x, u.y, !!u.isBoss || !!u.def.heavy);
     // v2.27: kill log ticker + battle stats tally
@@ -2024,7 +2026,8 @@ export class BattleScene extends Phaser.Scene {
     if (u.team === 0 && !this.gameOver) this.polish?.underAttack(u.x, u.y);
     // F1: kill feedback — shake + credit + ultimate energy
     if (u.isBoss) {
-      this.shake(10, 0.6);
+      this.shake(14, 0.7); // v2.57: champion death now kicks the camera harder
+      if (this.camNear(u.x, u.y)) this.polish?.victorySpark(u.x, u.y, 0xffd23f); // v2.57 champion shard pop
       this.events.emit('hud:alert', 'CHAMPION SLAIN');
       this.audio?.objective();
       this.audio?.bossTheme(false);
@@ -2206,6 +2209,16 @@ export class BattleScene extends Phaser.Scene {
     const rr = this.add.circle(0, 0, 8, acc, 0).setStrokeStyle(1, acc, 0.7).setBlendMode(Phaser.BlendModes.ADD);
     fl.add(rr);
     this.tweens.add({ targets: rr, scale: 2.4, alpha: 0, repeat: -1, duration: 900, ease: 'Sine.easeOut', onRepeat: () => { rr.scale = 1; rr.alpha = 0.7; } });
+    // v2.57: rally-line feedback — dashed accent trace from building to the
+    // new rally point, 1.1s fade; shows spawn direction at a glance.
+    {
+      const lg = this.add.graphics().setDepth(46).setAlpha(0.85);
+      lg.lineStyle(1.5, acc, 1);
+      const dx = b.rallyPoint.x - b.x, dy = b.rallyPoint.y - b.y;
+      const len = Math.max(1, Math.hypot(dx, dy)), ux = dx / len, uy = dy / len;
+      for (let t = 0; t < len - 4; t += 9) lg.lineBetween(b.x + ux * t, b.y + uy * t, b.x + ux * Math.min(len - 4, t + 4.5), b.y + uy * Math.min(len - 4, t + 4.5));
+      this.tweens.add({ targets: lg, alpha: 0, duration: 1100, ease: 'Sine.easeIn', onComplete: () => lg.destroy() });
+    }
     // SC1: flag persists while the rally point stands; cleared with the building or a new rally
     b._rallyFlagPoint = { x: b.rallyPoint.x, y: b.rallyPoint.y };
   }
@@ -2328,6 +2341,11 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: u.sprite, tint: 0xffffff, duration: 500 });
       }
       this.events.emit('hud:alert', (t?.name || techId) + ' RESEARCH COMPLETE');
+      // v2.57: celebration burst at the lab — race-accent rings + spark column
+      if (lab && this.camNear(lab.x, lab.y)) {
+        const racc = (RACE_INFO[this.players[team].race] || {}).accent || 0xffd23f;
+        this.polish?.techCelebrate(lab.x, lab.y, racc);
+      }
     }
     this.audio?.researchComplete();
   }

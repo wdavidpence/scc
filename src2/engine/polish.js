@@ -101,6 +101,39 @@ export class PolishFX {
     }
   }
 
+  // 6a) v2.57 tech-complete celebration: rising sparkle column + triple
+  // staggered rings + brief ADD bloom at the research site. Bigger than
+  // buildCompleteFX readout so RESEARCH COMPLETE feels like an event.
+  techCelebrate(x, y, acc = 0xffd23f) {
+    const s = this.s;
+    if (!s || s.gameOver) return;
+    for (let k = 0; k < 3; k++) {
+      const ring = s.add.circle(x, y, 10 + k * 8, 0x000000, 0).setStrokeStyle(2, acc, 0.85 - k * 0.2).setDepth(500 + k).setBlendMode(Phaser.BlendModes.ADD);
+      ring._techFx = 'ring';
+      s.tweens.add({ targets: ring, scale: 3.4 - k * 0.4, alpha: 0, delay: k * 140, duration: 800, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+    }
+    const bloom = s.add.circle(x, y, 26, acc, 0.3).setDepth(499).setBlendMode(Phaser.BlendModes.ADD);
+    bloom._techFx = 'bloom';
+    s.tweens.add({ targets: bloom, scale: 2.2, alpha: 0, duration: 550, ease: 'Quad.easeOut', onComplete: () => bloom.destroy() });
+    for (let i = 0; i < 14; i++) {
+      const px = x + (Math.random() * 44 - 22);
+      const sp = s.add.circle(px, y + 6, 1 + Math.random() * 1.8, acc, 1).setDepth(501);
+      sp._techFx = 'spark';
+      s.tweens.add({ targets: sp, y: y - 40 - Math.random() * 36, x: px + (Math.random() * 16 - 8), alpha: 0, scale: 0.3, delay: Math.random() * 250, duration: 900 + Math.random() * 500, ease: 'Sine.easeOut', onComplete: () => sp.destroy() });
+    }
+  }
+
+  // 6b) v2.57 victory/rally spark: small accent shard pop for HUD-adjacent events
+  victorySpark(x, y, acc = 0x6ee7a0) {
+    const s = this.s;
+    if (!s) return;
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (Math.random() * 1.4 - 0.7);
+      const sp = s.add.rectangle(x, y, 2, 5, acc, 1).setDepth(502).setRotation(a);
+      s.tweens.add({ targets: sp, x: x + Math.cos(a) * (26 + Math.random() * 18), y: y + Math.sin(a) * (34 + Math.random() * 20), alpha: 0, duration: 520 + Math.random() * 260, ease: 'Quad.easeOut', onComplete: () => sp.destroy() });
+    }
+  }
+
   // 6) unit arrival: expanding spawn flash + dust ring
   spawnFlash(x, y, team = 0) {
     const s = this.s;
