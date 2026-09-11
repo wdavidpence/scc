@@ -97,11 +97,14 @@ export class HudScene extends Phaser.Scene {
       if (!this.cur || !this.cur.active) return;
       const now = this.time.now;
       const h0 = this._trailHead;
-      if (h0 && (p.x - h0.x) * (p.x - h0.x) + (p.y - h0.y) * (p.y - h0.y) > 900 && now - this._trailLast > 33) {
+      // v2.55: attack-move mode gets a hot crosshair trail + lower speed gate
+      const atkMode = this._curState === 'attack';
+      const gate = atkMode ? 400 : 900;
+      if (h0 && (p.x - h0.x) * (p.x - h0.x) + (p.y - h0.y) * (p.y - h0.y) > gate && now - this._trailLast > 33) {
         this._trailLast = now;
-        const sp = this.add.image(h0.x, h0.y, 'cur-normal').setScrollFactor(0).setDepth(9998).setTint(trailCol).setAlpha(0.35).setScale(0.8);
+        const sp = this.add.image(h0.x, h0.y, atkMode && this.textures.exists('cur-attack') ? 'cur-attack' : 'cur-normal').setScrollFactor(0).setDepth(9998).setTint(atkMode ? 0xff5c5c : trailCol).setAlpha(atkMode ? 0.5 : 0.35).setScale(0.8);
         this._trail.push(sp);
-        this.tweens.add({ targets: sp, alpha: 0, scale: 0.45, duration: 260, ease: 'Quad.easeOut', onComplete: () => sp.destroy() });
+        this.tweens.add({ targets: sp, alpha: 0, scale: 0.45, duration: atkMode ? 320 : 260, ease: 'Quad.easeOut', onComplete: () => sp.destroy() });
         while (this._trail.length > 10) { const o = this._trail.shift(); if (o.active) o.destroy(); }
       }
       this._trailHead = { x: p.x, y: p.y };
@@ -547,6 +550,7 @@ export class HudScene extends Phaser.Scene {
     for (const b of this.buttons) { b.bg.destroy(); b.brd.destroy(); b.txt.destroy(); b.hit.destroy(); if (b.chip) { if (b.chip._hk) b.chip._hk.destroy(); b.chip.destroy(); } }
     this.buttons = [];
     if (this._disG) this._disG.clear();
+    if (this.queueChipRow) this.queueChipRow.removeAll(true); // v2.55: chips only for building selection
   }
 
   mkTab(x, y, w, label, active, cb) {
@@ -582,6 +586,28 @@ export class HudScene extends Phaser.Scene {
       if (!this.queueText) this.queueText = this.add.text(12, this.H - 112, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#8fa3c8' }).setScrollFactor(0);
       const q = (sel.queue || []).map(it => it.research ? (TECHS[it.research]?.name || it.research).slice(0, 12) : (UNITS[it.kind]?.name || it.kind).split(' ')[0]);
       this.queueText.setText(q.length ? `QUEUE: ${q.join(' > ')}` : '');
+      // v2.55: per-item countdown chips above the command card — chip 0 is
+      // live (tinted fill drains as it trains, remaining %), later queue items
+      // are dimmer placeholders. Destroyed when the card clears.
+      if (!this.queueChipRow) {
+        this.queueChipRow = this.add.container(12, this.H - 150).setScrollFactor(0).setDepth(140);
+        this._qchipAcc = ({ terran: 0x4ea1ff, skarn: 0xff7b2e, auraxis: 0xa78bfa })[this.race] ?? 0x9fb8ff;
+      }
+      this.queueChipRow.removeAll(true);
+      // read LIVE queue from the scene's selectedBuilding (info.building is a
+      // flattened snapshot without `total`)
+      const liveQ = (b.selectedBuilding && !b.selectedBuilding.dead && b.selectedBuilding.buildId === sel.buildId ? b.selectedBuilding.queue : sel.queue) || [];
+      liveQ.slice(0, 6).forEach((it, qi) => {
+        const cx = qi * 46;
+        const bg = this.add.graphics();
+        bg.fillStyle(0x0a121d, 0.92).fillRoundedRect(cx, 0, 42, 14, 3);
+        bg.lineStyle(1, qi === 0 ? this._qchipAcc : 0x3f4a5a, qi === 0 ? 0.95 : 0.55);
+        bg.strokeRoundedRect(cx, 0, 42, 14, 3);
+        const nm = it.research ? (TECHS[it.research]?.name || it.research).slice(0, 6) : (UNITS[it.kind]?.name || it.kind).split(' ')[0].slice(0, 6);
+        const pct = qi === 0 ? `${Math.max(0, Math.ceil(100 * it.remaining / (it.total || 1)))}%` : '';
+        const tx = this.add.text(cx + 3, 7, qi === 0 ? pct : nm, { fontFamily: 'Menlo, monospace', fontSize: qi === 0 ? '9px' : '8px', color: qi === 0 ? '#dbe7ff' : '#7d90ad' }).setOrigin(0, 0.5);
+        this.queueChipRow.add([bg, tx]);
+      });
       // queue display + train buttons
       const def = BUILDINGS[sel.buildId];
       let i = 0;
@@ -1062,6 +1088,12 @@ export class HudScene extends Phaser.Scene {
         const q = (sb.queue || []).map(it => it.research ? (TECHS[it.research]?.name || it.research).slice(0, 12) : (UNITS[it.kind]?.name || it.kind).split(' ')[0]);
         const prog = sb.queue[0] ? ` ${Math.floor((1 - sb.queue[0].remaining / (sb.queue[0].total || 1)) * 100)}%` : '';
         this.queueText.setText(q.length ? `QUEUE: ${q.join(' > ')}${prog}` : '');
+        // v2.55: live-refresh chip 0 countdown without rebuilding the card
+        if (this.queueChipRow && sb.queue && sb.queue[0]) {
+          const pct = `${Math.max(0, Math.ceil(100 * sb.queue[0].remaining / (sb.queue[0].total || 1)))}%`;
+          const t0 = this.queueChipRow.list.find(o => o.type === 'Text');
+          if (t0 && t0.text !== pct) t0.setText(pct);
+        }
       }
     }
     this.drawMinimap(b);
@@ -1135,6 +1167,15 @@ export class HudScene extends Phaser.Scene {
       if (!vis) continue;
       g.fillStyle(bl.team === 0 ? 0x4ea1ff : 0xff7b2e, bl.built ? 1 : 0.5);
       g.fillRect(this.mmX + bl.x * s - 2, this.mmY + bl.y * s - 2, 4, 4);
+    }
+    // v2.55: rally-point flags on minimap — own always, enemy only while visible
+    for (const bl of b.buildings) {
+      if (bl.dead || !bl._rallyFlagPoint) continue;
+      const rp = bl._rallyFlagPoint;
+      if (bl.team !== 0 && !b.isVisible(rp.x, rp.y)) continue;
+      const racc = (RACE_INFO[(b.players[bl.team] || {}).race] || {}).accent || (bl.team === 0 ? 0x4ea1ff : 0xff7b2e);
+      g.fillStyle(racc, bl.team === 0 ? 0.95 : 0.8);
+      g.fillRect(this.mmX + rp.x * s - 1, this.mmY + rp.y * s - 1, 2, 2);
     }
     for (const u of b.units) {
       if (u.dead) continue;

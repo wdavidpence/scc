@@ -2201,6 +2201,11 @@ export class BattleScene extends Phaser.Scene {
     fl.add([glow, pole, flag]);
     b._rallyFlag = fl;
     this.tweens.add({ targets: flag, scaleX: { from: 0.7, to: 1 }, duration: 200, yoyo: true, repeat: 1 });
+    // v2.55: visibility ping + pulsing radar ring when the rally point is (re)set
+    if (b.team === 0) this.addEventPing(b.rallyPoint.x, b.rallyPoint.y, acc);
+    const rr = this.add.circle(0, 0, 8, acc, 0).setStrokeStyle(1, acc, 0.7).setBlendMode(Phaser.BlendModes.ADD);
+    fl.add(rr);
+    this.tweens.add({ targets: rr, scale: 2.4, alpha: 0, repeat: -1, duration: 900, ease: 'Sine.easeOut', onRepeat: () => { rr.scale = 1; rr.alpha = 0.7; } });
     // SC1: flag persists while the rally point stands; cleared with the building or a new rally
     b._rallyFlagPoint = { x: b.rallyPoint.x, y: b.rallyPoint.y };
   }
