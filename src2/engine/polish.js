@@ -688,6 +688,16 @@ export class PolishFX {
 
   // ---------------- v2.27 AAA layer ----------------
 
+  // v2.53: raw cam.scrollX/Y writes bypass Phaser bounds clamping (only
+  // setScroll/centerOn clamp) -> camera overscrolled past the map edge and
+  // the terrain texture wrapped/repeated down the screen margins. Clamp here.
+  clampCam(cam) {
+    const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom;
+    const b = cam._bounds || { x: 0, y: 0, width: 2560, height: 2560 };
+    cam.scrollX = Phaser.Math.Clamp(cam.scrollX, b.x, Math.max(b.x, b.width - vw));
+    cam.scrollY = Phaser.Math.Clamp(cam.scrollY, b.y, Math.max(b.y, b.height - vh));
+  }
+
   // 41) eased camera jump: all centerOn calls glide with an ease-out curve
   smoothCenter(x, y, dur = 320) {
     const s = this.s;
@@ -698,7 +708,7 @@ export class PolishFX {
     if (t.tw) t.tw.stop();
     t.pan.x = cam.scrollX; t.pan.y = cam.scrollY;
     const vw = cam.worldView;
-    t.tw = s.tweens.add({ targets: t.pan, x: x - vw.width / 2, y: y - vw.height / 2, duration: dur, ease: 'Cubic.easeOut', onUpdate: () => { cam.scrollX = t.pan.x; cam.scrollY = t.pan.y; } });
+    t.tw = s.tweens.add({ targets: t.pan, x: x - vw.width / 2, y: y - vw.height / 2, duration: dur, ease: 'Cubic.easeOut', onUpdate: () => { cam.scrollX = t.pan.x; cam.scrollY = t.pan.y; this.clampCam(cam); } });
   }
 
   // 42) camera follow: lock cam onto a moving unit until order/combat breaks it
@@ -722,6 +732,7 @@ export class PolishFX {
       const k = 1 - Math.pow(0.001, dt);
       cam.scrollX += (u.x - vw.width / 2 - cam.scrollX) * k;
       cam.scrollY += (u.y - vw.height / 2 - cam.scrollY) * k;
+      this.clampCam(cam);
     }
   }
 
@@ -742,6 +753,7 @@ export class PolishFX {
       cam.setZoom(z0 + (nz - z0) * v);
       cam.scrollX = sx0 + (nx - sx0) * v;
       cam.scrollY = sy0 + (ny - sy0) * v;
+      this.clampCam(cam);
       if (s.hotseat && s.cam2) { s.cam2.setZoom(cam.zoom); s.cam2.scrollX = cam.scrollX; s.cam2.scrollY = cam.scrollY; }
     } });
   }

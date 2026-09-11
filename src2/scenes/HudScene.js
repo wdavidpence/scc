@@ -808,7 +808,14 @@ export class HudScene extends Phaser.Scene {
   // ---------------- SC1 message log (GAP 35) ----------------
   createMsgLog() {
     this._msgLog = [];
-    this._logText = this.add.text(this.W - 260, 44, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#b9c8e8', lineHeight: 14, align: 'right' }).setScrollFactor(0).setDepth(60).setAlpha(0.95);
+    // v2.53: was auto-width at W-260 -> long lines ran THROUGH the minimap
+    // (mmX = W-198) and clipped off-screen. Fixed-width wrap column that
+    // ends 10px left of the minimap bezel.
+    const mmx = this.mmX || (this.W - 198);
+    const lw = Math.max(220, mmx - 18);
+    this._logW = lw;
+    this._logText = this.add.text(0, 44, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#b9c8e8', lineHeight: 14, align: 'right', wordWrap: { width: lw } }).setOrigin(1, 0).setScrollFactor(0).setDepth(60).setAlpha(0.95);
+    this._logText.setX(mmx - 10);
     this.events.once('shutdown', () => { this._msgLog = []; });
   }
 
@@ -1239,6 +1246,7 @@ export class HudScene extends Phaser.Scene {
     const nz = sizes[nxt];
     const oldX = this.mmX, oldY = this.mmY, os = this.mmSize;
     this.mmSize = nz; this.mmX = this.W - nz - 8;
+    if (this._logText && this._logW) { this._logText.setX(this.mmX - 10); } // v2.53 keep msg log clear of bezel (origin=1)
     this.mmBG.setSize(nz, nz); this.mmBG.setPosition(this.mmX, this.mmY);
     this.mmFrame.setSize(nz, nz); this.mmFrame.setPosition(this.mmX, this.mmY);
     if (this.mmChrome) { this.mmChrome.setPosition(this.mmX - 4, this.mmY - 4); this.mmChrome.setDisplaySize(nz + 8, nz + 8); }

@@ -3550,6 +3550,14 @@ export class BattleScene extends Phaser.Scene {
     if (Math.abs(this.panVY) < 4) this.panVY = 0;
     cam.scrollX += this.panVX * dt;
     cam.scrollY += this.panVY * dt;
+    // v2.53: raw scroll writes bypass bounds clamp -> cursor-held edge pan
+    // overscrolled past the map edge and the terrain texture wrapped down the
+    // screen margins. Clamp every frame after pan.
+    {
+      const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom, bd = cam._bounds || { x: 0, y: 0, width: 2560, height: 2560 };
+      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, bd.x, Math.max(bd.x, bd.width - vw));
+      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, bd.y, Math.max(bd.y, bd.height - vh));
+    }
     // AAA split-screen: commander B pans with IJKL (same inertia feel)
     if (this.hotseat && this.cam2 && this.keysB) {
       const kb = this.keysB;
@@ -3565,6 +3573,11 @@ export class BattleScene extends Phaser.Scene {
       if (Math.abs(this.panBVY) < 4) this.panBVY = 0;
       this.cam2.scrollX += this.panBVX * dt;
       this.cam2.scrollY += this.panBVY * dt;
+      {
+        const vw = this.cam2.width / this.cam2.zoom, vh = this.cam2.height / this.cam2.zoom, bd = this.cam2._bounds || { x: 0, y: 0, width: 2560, height: 2560 };
+        this.cam2.scrollX = Phaser.Math.Clamp(this.cam2.scrollX, bd.x, Math.max(bd.x, bd.width - vw));
+        this.cam2.scrollY = Phaser.Math.Clamp(this.cam2.scrollY, bd.y, Math.max(bd.y, bd.height - vh));
+      }
     }
     // autoscroll to selection back (Q handled elsewhere)
 
