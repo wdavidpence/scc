@@ -723,6 +723,19 @@ export class Unit {
     }
     b.constructionProgress += dt;
     b.workers.push(this);
+    // v2.54: construction rubble + dust — grinding kicks up drifting puffs
+    // at the site, throttled ~0.4s; matches the existing weld sparks.
+    if (!this._dustFxT || this._dustFxT <= 0) {
+      this._dustFxT = 0.35 + Math.random() * 0.25;
+      const dx = b.x + (Math.random() * b.def.w * TILE * 0.9 - b.def.w * TILE * 0.45);
+      const dy = b.y + (Math.random() * b.def.h * TILE * 0.5 - b.def.h * TILE * 0.1);
+      const puff = this.world.add.circle(dx, dy, 2 + Math.random() * 2.5, 0xc8b890, 0.5).setDepth(24);
+      this.world.tweens.add({ targets: puff, y: dy - 12 - Math.random() * 8, x: dx + (Math.random() * 14 - 7), scale: 2.4, alpha: 0, duration: 700 + Math.random() * 400, ease: 'Sine.easeOut', onComplete: () => puff.destroy() });
+      if (Math.random() < 0.35) {
+        const chip = this.world.add.rectangle(dx, dy, 2, 2, 0x8a7a5c, 0.95).setDepth(24).setRotation(Math.random() * 6.28);
+        this.world.tweens.add({ targets: chip, y: dy - 6, x: dx + (Math.random() * 18 - 9), alpha: 0, scale: 0.4, duration: 520, ease: 'Quad.easeOut', onComplete: () => chip.destroy() });
+      }
+    } else this._dustFxT -= dt;
     // F5: construction sparks at the build site
     if (!this._sparkT || this._sparkT <= 0) {
       this._sparkT = 0.25 + Math.random() * 0.2;
@@ -914,6 +927,8 @@ export class Unit {
 
 export class Building {
   constructor(world, team, buildId, x, y, opts = {}) {
+    // harness hook: lets QA scripts construct Buildings without importing
+    if (typeof window !== 'undefined') window.__SCCBuilding = Building;
     this.world = world;
     this.id = nextId++;
     this.team = team;

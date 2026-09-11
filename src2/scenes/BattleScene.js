@@ -2364,8 +2364,8 @@ export class BattleScene extends Phaser.Scene {
       }
       if (this.hotseat && this.cam2) this.autoTeamByPointer(p);
       if (this.patrolMode) {
-        if (!this._patrolAnchor) { this._patrolAnchor = { x: wp.x, y: wp.y }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); }
-        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: wp.x, y: wp.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); }
+        if (!this._patrolAnchor) { this._patrolAnchor = { x: wp.x, y: wp.y }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); this._patrolPingAt = this.gameTime; }
+        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: wp.x, y: wp.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); this._patrolPingAt = this.gameTime; }
         return;
       }
       if (p.button === 2) return;

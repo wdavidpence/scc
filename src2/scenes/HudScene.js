@@ -1159,6 +1159,41 @@ export class HudScene extends Phaser.Scene {
         g.fillCircle(bx, by, 1.6);
       }
     }
+    // v2.54: patrol routes on minimap — race-accent dashed line + endpoint
+    // ping rings that pulse for 4s after route (re)assignment; armed anchor
+    // shows a pulsing reticle while setting the second point.
+    for (const u of b.units) {
+      if (u.dead || u.team !== 0 || !u.patrolPoints || u.order?.type !== 'patrol') continue;
+      const pa = u.patrolPoints[0], pb2 = u.patrolPoints[1];
+      if (!pa || !pb2) continue;
+      g.lineStyle(1, this.mmAcc, 0.55);
+      const ax = this.mmX + pa.x * s, ay = this.mmY + pa.y * s, bx2 = this.mmX + pb2.x * s, by2 = this.mmY + pb2.y * s;
+      const segs = 7;
+      for (let i = 0; i < segs; i += 2) {
+        const t0 = i / segs, t1 = Math.min(1, (i + 1) / segs);
+        g.lineBetween(ax + (bx2 - ax) * t0, ay + (by2 - ay) * t0, ax + (bx2 - ax) * t1, ay + (by2 - ay) * t1);
+      }
+      g.fillStyle(this.mmAcc, 0.8);
+      g.fillCircle(ax, ay, 1.4); g.fillCircle(bx2, by2, 1.4);
+    }
+    {
+      const pk = Math.max(0, 1 - (b.gameTime - (b._patrolPingAt || -99)) / 4);
+      if (pk > 0) {
+        const pts = b.units.filter(u => !u.dead && u.team === 0 && u.patrolPoints && u.order?.type === 'patrol');
+        const seen = new Set();
+        for (const u of pts) for (const pt of u.patrolPoints) {
+          const key = Math.round(pt.x) + ',' + Math.round(pt.y);
+          if (seen.has(key)) continue; seen.add(key);
+          g.lineStyle(1.5, this.mmAcc, pk * 0.9);
+          g.strokeCircle(this.mmX + pt.x * s, this.mmY + pt.y * s, 2 + (1 - pk) * 8);
+        }
+      }
+    }
+    if (b.patrolMode && b._patrolAnchor) {
+      const k = 0.5 + 0.45 * Math.sin(b.gameTime * 6);
+      g.lineStyle(1, this.mmAcc, k);
+      g.strokeCircle(this.mmX + b._patrolAnchor.x * s, this.mmY + b._patrolAnchor.y * s, 3);
+    }
     // GAP: minimap event pings (combat/contact/building loss) — expanding rings
     for (const p of (b._eventPings || [])) {
       const k = Math.max(0, 1 - (b.gameTime - p.t) / 4);
