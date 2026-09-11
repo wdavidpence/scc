@@ -166,13 +166,28 @@ export const CH = {
       ctx.globalAlpha = 0.16; ctx.fillStyle = '#6ea8ff';
       ctx.fillRect(6, h - 3, w - 12, 2); ctx.globalAlpha = 1;
     });
-    // command card backing
+    // command card backing — per-race accent variants (v2.49): accent rail + diagonal score
     bake(scene, 'chr-card', 128, 96, (ctx, w, h) => {
       panelFace(ctx, w, h, { tone: 'blue' });
       ctx.globalAlpha = 0.10; ctx.strokeStyle = '#8fb8ff'; ctx.lineWidth = 1;
       for (let x = 12; x < w - 8; x += 16) { ctx.beginPath(); ctx.moveTo(x, 8); ctx.lineTo(x - 4, h - 8); ctx.stroke(); }
       ctx.globalAlpha = 1;
     });
+    const RACE_ACCENT = { terran: '#4ea1ff', skarn: '#ff7b2e', auraxis: '#a78bfa' };
+    for (const [rk, col] of Object.entries(RACE_ACCENT)) {
+      bake(scene, `chr-card-${rk}`, 128, 96, (ctx, w, h) => {
+        panelFace(ctx, w, h, { tone: 'blue', accent: col });
+        ctx.globalAlpha = 0.10; ctx.strokeStyle = col; ctx.lineWidth = 1;
+        for (let x = 12; x < w - 8; x += 16) { ctx.beginPath(); ctx.moveTo(x, 8); ctx.lineTo(x - 4, h - 8); ctx.stroke(); }
+        // glowing accent node bottom-left
+        ctx.globalAlpha = 0.5;
+        const rg = ctx.createRadialGradient(10, h - 10, 0.5, 10, h - 10, 7);
+        rg.addColorStop(0, col); rg.addColorStop(1, col + '00');
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(10, h - 10, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+      bake(scene, `cur-${rk}`, 24, 28, (ctx) => arrow(ctx, col));
+    }
     // resource icons (16px, chunky sci-fi readable at 1x)
     bake(scene, 'ico-mineral', 16, 16, (ctx, w, h) => {
       const g = ctx.createLinearGradient(2, 2, 14, 14);

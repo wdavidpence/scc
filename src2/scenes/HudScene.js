@@ -86,8 +86,25 @@ export class HudScene extends Phaser.Scene {
     this.cur = this.add.image(-100, -100, 'cur-normal').setScrollFactor(0).setDepth(10000);
     this._curState = 'normal';
     this._curTgt = null;
+    // v2.49: race-tinted normal cursor when the accent variant is baked
+    if (this.race && this.textures.exists(`cur-${this.race}`)) this.cur.setTexture(`cur-${this.race}`);
+    // v2.49: cursor trail — fading after-images on fast movement
+    this._trail = [];       // live ghost sprites
+    this._trailHead = null; // last sampled position
+    this._trailLast = 0;
+    const trailCol = ({ terran: 0x4ea1ff, skarn: 0xff7b2e, auraxis: 0xa78bfa })[this.race] ?? 0x9fb8ff;
     this.input.on('pointermove', (p) => {
       if (!this.cur || !this.cur.active) return;
+      const now = this.time.now;
+      const h0 = this._trailHead;
+      if (h0 && (p.x - h0.x) * (p.x - h0.x) + (p.y - h0.y) * (p.y - h0.y) > 900 && now - this._trailLast > 33) {
+        this._trailLast = now;
+        const sp = this.add.image(h0.x, h0.y, 'cur-normal').setScrollFactor(0).setDepth(9998).setTint(trailCol).setAlpha(0.35).setScale(0.8);
+        this._trail.push(sp);
+        this.tweens.add({ targets: sp, alpha: 0, scale: 0.45, duration: 260, ease: 'Quad.easeOut', onComplete: () => sp.destroy() });
+        while (this._trail.length > 10) { const o = this._trail.shift(); if (o.active) o.destroy(); }
+      }
+      this._trailHead = { x: p.x, y: p.y };
       this.cur.setPosition(p.x, p.y + 2);
       const b = this.scene.get('Battle');
       if (!b || !b.scene.isActive()) return;
@@ -354,7 +371,9 @@ export class HudScene extends Phaser.Scene {
   createCommandCard() {
     this.cardBG = this.add.graphics().setScrollFactor(0);
     // v2.46: nine-slice chrome backing for the command card area
-    this._cardPanel = CH.panel(this, 'chr-card', 4, this.H - 128, Math.min(this.W - 210, 78 * Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84))) + 24), 124, { depth: -1, alpha: 0.92 });
+    // v2.49: per-race accent variant when baked (terran/skarn/auraxis)
+    const raceKey = this.race && this.textures.exists(`chr-card-${this.race}`) ? `chr-card-${this.race}` : 'chr-card';
+    this._cardPanel = CH.panel(this, raceKey, 4, this.H - 128, Math.min(this.W - 210, 78 * Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84))) + 24), 124, { depth: -1, alpha: 0.92 });
     this.cardTitle = this.add.text(12, this.H - 116, '', { fontFamily: 'Menlo, monospace', fontSize: '12px', color: '#9fb3d8' }).setScrollFactor(0);
     this.buttons = [];
   }

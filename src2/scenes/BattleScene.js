@@ -3379,6 +3379,25 @@ export class BattleScene extends Phaser.Scene {
     this.ghostValid.lineStyle(2, ok ? 0x6ee7a0 : 0xff4444, 0.8);
     this.ghostValid.strokeRect(gx - (def.w * TILE) / 2, gy - (def.h * TILE) / 2, def.w * TILE, def.h * TILE);
     this.ghost.setTint(ok ? 0xffffff : 0xff5555);
+    // v2.49: race-accent ghost grade — tint the ghost toward the race palette,
+    // soft accent footprint wash, and a pulsing additive core under the ghost.
+    const acc = (RACE_INFO[this.players[this.activeTeam ?? 0].race] || {}).accent || 0x4ea1ff;
+    if (ok) {
+      this.ghost.setTint(Phaser.Display.Color.GetColor(
+        Math.round(255 * 0.55 + ((acc >> 16) & 255) * 0.45),
+        Math.round(255 * 0.55 + ((acc >> 8) & 255) * 0.45),
+        Math.round(255 * 0.55 + (acc & 255) * 0.45)));
+      if (!this.ghostGrade) {
+        this.ghostGrade = this.add.graphics().setDepth(500);
+        this.ghostGrade.setBlendMode(Phaser.BlendModes.ADD);
+      }
+      this.ghostGrade.clear();
+      this.ghostGrade.fillStyle(acc, 0.10).fillRect(gx - (def.w * TILE) / 2, gy - (def.h * TILE) / 2, def.w * TILE, def.h * TILE);
+      const pulse = 0.10 + 0.06 * Math.sin(this.gameTime * 6);
+      this.ghostGrade.fillStyle(acc, pulse).fillRoundedRect(gx - (def.w * TILE) / 2 + 2, gy - (def.h * TILE) / 2 + 2, def.w * TILE - 4, def.h * TILE - 4, 3);
+    } else if (this.ghostGrade) {
+      this.ghostGrade.clear();
+    }
     // v2.37: inline reason tag beside the ghost while dragging over blocked ground
     if (!ok) {
       if (!this._placeTag) this._placeTag = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', fontWeight: 'bold', color: '#ffb0b0', backgroundColor: '#160a0acc', padding: { x: 4, y: 2 } }).setOrigin(0.5, 1).setDepth(503);
@@ -3448,6 +3467,7 @@ export class BattleScene extends Phaser.Scene {
     if (this._placeTag) this._placeTag.setVisible(false);
     if (this.ghost) { this.ghost.destroy(); this.ghost = null; }
     if (this.ghostValid) { this.ghostValid.clear(); }
+    if (this.ghostGrade) { this.ghostGrade.clear(); } // v2.49
     this.input.setDefaultCursor('default');
   }
 

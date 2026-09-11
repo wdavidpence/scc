@@ -70,7 +70,7 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
     const hd = window.__SCC2.scene.getScene('Hud');
     return { exists: !!hd.cur && hd.cur.active, tex: hd.cur ? hd.cur.texture.key : '', x: hd.cur ? Math.round(hd.cur.x) : -1 };
   });
-  chk('CUR_FOLLOW', cur1.exists && cur1.tex === 'cur-normal' && cur1.x > 600, cur1);
+  chk('CUR_FOLLOW', cur1.exists && /^cur-(normal|terran|skarn|auraxis)$/.test(cur1.tex) && cur1.x > 600, cur1);
   await p.evaluate(() => { window.__SCC2.scene.getScene('Battle').events.emit('hud:attackMode'); });
   await p.mouse.move(710, 410);
   await p.waitForTimeout(120);
