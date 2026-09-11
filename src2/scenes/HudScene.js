@@ -488,9 +488,19 @@ export class HudScene extends Phaser.Scene {
   flash(bg) { bg.setFillStyle(0x3b82f6, 1); this.tweens.add({ targets: bg, fillAlpha: 1, duration: 90, onComplete: () => bg.setFillStyle(0x18202c, 1) }); }
 
   // SC1-style hover tooltip — v2.48: baked chr-tip 9-slice panel backing
+  // v2.51: cost rows get real mineral/gas/supply icon chips inline
+
   showTip(cx, topY, lines) {
     this.hideTip();
-    const arr = Array.isArray(lines) ? lines : [lines];
+    const arr0 = Array.isArray(lines) ? lines : [lines];
+    const arr = [...arr0];
+    // find a cost row like "Min 150  Gas 50  Sup 2" and iconify it
+    let cost = null;
+    const ci = arr.findIndex(l => /^Min \d+/.test(l.trim()));
+    if (ci >= 0) {
+      const m = /^Min (\d+)(?:\s+Gas (\d+))?(?:\s+Sup (\d+))?$/.exec(arr[ci].trim());
+      if (m) { cost = { m: +m[1], g: m[2] ? +m[2] : 0, s: m[3] ? +m[3] : 0, row: ci }; arr[ci] = (cost.g > 0 ? `${cost.m} + ${cost.g}` : `${cost.m}`) + (cost.s > 0 ? `  Sup ${cost.s}` : ''); }
+    }
     const w = Math.max(140, ...arr.map(l => l.length * 6.6)) + 16;
     const h = arr.length * 14 + 10;
     const x = Math.min(this.W - w - 6, Math.max(6, cx - w / 2));
@@ -503,11 +513,28 @@ export class HudScene extends Phaser.Scene {
       this._tipG.lineStyle(1, 0xffd23f, 0.8).strokeRoundedRect(x, y, w, h, 4);
     }
     this._tipT = this.add.text(x + 8, y + 5, arr.join('\n'), { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#dbe7ff', lineHeight: 14 }).setScrollFactor(0).setDepth(91);
+    // cost icons inline before the numbers on the cost row; the row text gets
+    // 2 leading spaces per icon (Menlo 10px ~= 6px advance) so digits clear them
+    if (cost) {
+      this._tipIcons = [];
+      let ix = x + 8;
+      const iy = y + 5 + cost.row * 14;
+      let pad = '';
+      if (this.textures.exists('ico-mineral')) { this._tipIcons.push(this.add.image(ix + 5, iy + 6, 'ico-mineral').setScrollFactor(0).setDepth(92).setScale(0.7)); ix += 12; pad += '  '; }
+      if (cost.g > 0 && this.textures.exists('ico-gas')) { this._tipIcons.push(this.add.image(ix + 5, iy + 6, 'ico-gas').setScrollFactor(0).setDepth(92).setScale(0.7)); ix += 12; pad += '  '; }
+      if (cost.s > 0 && this.textures.exists('ico-supply')) { this._tipIcons.push(this.add.image(ix + 5, iy + 6, 'ico-supply').setScrollFactor(0).setDepth(92).setScale(0.7)); ix += 12; pad += '  '; }
+      if (pad && this._tipT) {
+        const rows = this._tipT.text.split('\n');
+        rows[cost.row] = pad + rows[cost.row];
+        this._tipT.setText(rows.join('\n'));
+      }
+    }
   }
   hideTip() {
     if (this._tipG) { this._tipG.destroy(); this._tipG = null; }
     if (this._tipNs) { if (this._tipNs.obj.active) this._tipNs.obj.destroy(); this._tipNs = null; }
     if (this._tipT) { this._tipT.destroy(); this._tipT = null; }
+    if (this._tipIcons) { this._tipIcons.forEach(i => i.active && i.destroy()); this._tipIcons = null; }
   }
 
   incomeTick(txt, col) {
@@ -878,10 +905,22 @@ export class HudScene extends Phaser.Scene {
       const x = bx + i * (size + gap);
       const alive = ((battle.controlGroups && battle.controlGroups[g.n]) || []).filter(u => !u.dead).length;
       const empty = alive === 0;
-      this.groupBadgeG.fillStyle(0x0a1220, 0.92).fillRoundedRect(x, by, size, size, 4);
-      this.groupBadgeG.lineStyle(1, empty ? 0x3a3f48 : 0x6ee7a0, 1).strokeRoundedRect(x, by, size, size, 4);
-      this.groupBadgeTxts.push(this.add.text(x + size / 2, by + 7, String(g.n), { fontFamily: 'Menlo, monospace', fontSize: '11px', color: empty ? '#5a616c' : '#6ee7a0', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61));
+      const acc = (RACE_INFO[this.race] || {}).accent || 0x6ee7a0;
+      // v2.51: baked plate + accent stroke + pop tween on (re)render
+      if (this.textures.exists('chr-grpbadge')) {
+        const plate = this.add.image(x + size / 2, by + size / 2, 'chr-grpbadge').setScrollFactor(0).setDepth(60).setDisplaySize(size, size);
+        if (empty) plate.setTint(0x5a616c).setAlpha(0.6); else plate.setTint(acc);
+        this.groupBadgeTxts.push(plate);
+      } else {
+        this.groupBadgeG.fillStyle(0x0a1220, 0.92).fillRoundedRect(x, by, size, size, 4);
+      }
+      this.groupBadgeG.lineStyle(1, empty ? 0x3a3f48 : acc, 1).strokeRoundedRect(x + 0.5, by + 0.5, size - 1, size - 1, 4);
+      this.groupBadgeTxts.push(this.add.text(x + size / 2, by + 7, String(g.n), { fontFamily: 'Menlo, monospace', fontSize: '11px', color: empty ? '#5a616c' : '#eaf4ff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61));
       this.groupBadgeTxts.push(this.add.text(x + size / 2, by + 17, empty ? '—' : String(alive), { fontFamily: 'Menlo, monospace', fontSize: '8px', color: '#8fa3c8' }).setOrigin(0.5).setScrollFactor(0).setDepth(61));
+      if (!empty && this._grpPop !== g.n) {
+        this.tweens.add({ targets: this.groupBadgeTxts.slice(-3), scale: { from: 1.25, to: 1 }, duration: 160, ease: 'Back.easeOut' });
+      }
+      if (!empty) this._grpPop = g.n;
     });
   }
 
@@ -971,9 +1010,12 @@ export class HudScene extends Phaser.Scene {
     this.resText.setColor(capped ? '#ff5c5c' : '#dbe7ff');
     const idle = p.idleWorkers || 0;
     if (!this.idleTxt) {
-      this.idleTxt = this.add.text(this.W / 2 + 150, 14, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#ffd23f', backgroundColor: '#00000088', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(61);
+      this.idleTxt = this.add.text(this.W / 2 + 150, 14, '', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#ffd23f' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(61);
+      // v2.51: baked chip plate behind the IDLE counter
+      if (this.textures.exists('chr-idle')) this._idlePlate = this.add.image(this.W / 2 + 150, 22, 'chr-idle').setOrigin(0.5).setScrollFactor(0).setDepth(60).setVisible(false).setDisplaySize(64, 18);
     }
     if (this.idleTxt) { this.idleTxt.setText(idle > 0 ? `IDLE ${idle} ▶` : '').setVisible(idle > 0); }
+    if (this._idlePlate) { this._idlePlate.setVisible(idle > 0); if (idle > 0 && !this._idlePulse) { this._idlePulse = this.tweens.add({ targets: this._idlePlate, alpha: { from: 1, to: 0.55 }, duration: 600, yoyo: true, repeat: -1 }); } else if (idle === 0 && this._idlePulse) { this.tweens.killTweensOf(this._idlePlate); this._idlePulse = null; this._idlePlate.setAlpha(1); } }
     // SC1 idle-worker cycle: click the IDLE chip to jump+select each idle worker in turn
     if (idle > 0 && !this._idleInteractive) {
       this._idleInteractive = true;

@@ -262,6 +262,27 @@ export const CH = {
       for (let x = 14; x < w - 4; x += 12) ctx.fillRect(x, 2, 6, 1);
       ctx.globalAlpha = 1;
     });
+    // v2.51 control-group badge plate (accent stroke drawn by caller; baked plate + notch)
+    bake(scene, 'chr-grpbadge', 24, 24, (ctx, w, h) => {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#16233a'); g.addColorStop(1, '#060b14');
+      ctx.fillStyle = g;
+      const r = 5;
+      ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.quadraticCurveTo(w, 0, w, r);
+      ctx.lineTo(w, h - r); ctx.quadraticCurveTo(w, h, w - r, h); ctx.lineTo(r, h);
+      ctx.quadraticCurveTo(0, h, 0, h - r); ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#46586f'; ctx.fillRect(2, 1, w - 4, 1);
+      ctx.fillStyle = '#02040a'; ctx.fillRect(2, h - 2, w - 4, 1);
+    });
+    // v2.51 idle-worker chip plate (pulsing gold ring baked edge)
+    bake(scene, 'chr-idle', 48, 18, (ctx, w, h) => {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#241d0a'); g.addColorStop(1, '#0c0902');
+      ctx.fillStyle = g; ctx.fillRoundRect ? (ctx.beginPath(), ctx.roundRect(0.5, 0.5, w - 1, h - 1, 4), ctx.fill()) : ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#ffd23f'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect ? (ctx.beginPath(), ctx.roundRect(0.5, 0.5, w - 1, h - 1, 4), ctx.stroke()) : ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+      ctx.globalAlpha = 1;
+    });
     // v2.47 vignette frame (screen overlay, radial transparent->dark)
     bake(scene, 'grade-vignette', 512, 288, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
