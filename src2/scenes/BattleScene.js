@@ -191,6 +191,49 @@ export class BattleScene extends Phaser.Scene {
         if (seen[i - 1] || seen[i + 1] || seen[i - W] || seen[i + W]) p[i * 4 + 3] = Math.min(p[i * 4 + 3], 170);
       }
       if (removed < W * H * 0.10) return false; // looks like a genuine opaque art — skip
+      // v2.63 EDGE SCRUB: the radial edgefade is elliptical (x*0.75) so side-flank
+      // centers survive at ~50% alpha carrying cool painted-sky bands (audit: 20%+
+      // residual ring on rock0/2 + minerals). Second flood keyed from ALL edges on
+      // SKY-COLOR (cool desaturated: b>=r, low sat, lum>24) instead of darkness —
+      // warm rock bodies (r>b) are untouched.
+      const seen2 = new Uint8Array(W * H);
+      const stack2 = [];
+      const isSky = (i) => {
+        const r = p[i * 4], g = p[i * 4 + 1], bb = p[i * 4 + 2];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * bb;
+        const sat = Math.max(r, g, bb) - Math.min(r, g, bb);
+        return bb >= r - 4 && sat < 70 && lum > 24; // cool gray-blue haze (probe: painted flanks sat 31-65; warm rock r>b never matches)
+      };
+      const push2 = (px, py) => {
+        if (px < 0 || py < 0 || px >= W || py >= H) return;
+        // v2.63 BAND CAP: cool baked sky hugs the border ~1-2px; these rock bodies are
+        // ALSO blue-gray (same hue family) — an unbounded flood tunnels into shaded rock
+        // (control probe: rock2 core 78.7% -> 47.2%). Confine scrub to a 4px edge band.
+        const dEdge = Math.min(px, py, W - 1 - px, H - 1 - py);
+        if (dEdge > 4) return;
+        const i = py * W + px;
+        if (seen2[i] || p[i * 4 + 3] === 0) return;
+        if (!isSky(i)) return;
+        seen2[i] = 1; stack2.push(i);
+      };
+      for (let px = 0; px < W; px++) { push2(px, 0); push2(px, H - 1); }
+      for (let py = 0; py < H; py++) { push2(0, py); push2(W - 1, py); }
+      while (stack2.length) {
+        const i = stack2.pop();
+        const px = i % W, py = (i / W) | 0;
+        push2(px + 1, py); push2(px - 1, py); push2(px, py + 1); push2(px, py - 1);
+      }
+      let scrubbed = 0;
+      for (let i = 0; i < W * H; i++) if (seen2[i] && !seen[i]) { p[i * 4 + 3] = 0; scrubbed++; }
+      if (scrubbed > W * H * 0.35) { /* scrub ate the art body — abandon second pass */ }
+      else if (scrubbed > 0) {
+        // feather survivors adjacent to the new holes
+        for (let py = 1; py < H - 1; py++) for (let px = 1; px < W - 1; px++) {
+          const i = py * W + px;
+          if (seen2[i] || p[i * 4 + 3] === 0) continue;
+          if (seen2[i - 1] || seen2[i + 1] || seen2[i - W] || seen2[i + W]) p[i * 4 + 3] = Math.min(p[i * 4 + 3], 150);
+        }
+      }
       // v2.60 EDGEFADE: radial alpha falloff kills the rectangular silhouette completely —
       // outer band fades to 0; subject sits mid-frame so it survives, baked haze at edges dies.
       for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
