@@ -153,6 +153,64 @@ export class BattleScene extends Phaser.Scene {
     try { createBuildingsAAA(this); } catch (e) { console.warn('AAA buildings fallback', String(e)); }
     // v2.39 deep AI kit: repaint unit/structure/fx keys in-place (safe no-op if assets absent)
     try { this._aiBaked = applyAIKit(this); } catch (e) { console.warn('ai-kit fallback', String(e)); this._aiBaked = 0; }
+    // v2.60 KEYCUT: Pollinations rocks/minerals/geysers ship with painted skies baked in —
+    // flood-key corner-connected dark background out so sprites stop drawing ghost panels.
+    const floodKey = (key) => {
+      if (!this.textures.exists(key)) return false;
+      const src = this.textures.get(key).getSourceImage();
+      const W = src.width, H = src.height;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d', { willReadFrequently: true });
+      x.drawImage(src, 0, 0);
+      const d = x.getImageData(0, 0, W, H);
+      const p = d.data;
+      const lum = (i) => 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+      const thr = 30; // dark baked-sky band
+      const seen = new Uint8Array(W * H);
+      const stack = [];
+      const push = (px, py) => {
+        if (px < 0 || py < 0 || px >= W || py >= H) return;
+        const i = py * W + px;
+        if (seen[i]) return;
+        if (lum(i * 4) > thr) return;
+        seen[i] = 1; stack.push(i);
+      };
+      for (let px = 0; px < W; px++) { push(px, 0); push(px, H - 1); }
+      for (let py = 0; py < H; py++) { push(0, py); push(W - 1, py); }
+      while (stack.length) {
+        const i = stack.pop();
+        const px = i % W, py = (i / W) | 0;
+        push(px + 1, py); push(px - 1, py); push(px, py + 1); push(px, py - 1);
+      }
+      let removed = 0;
+      for (let i = 0; i < W * H; i++) if (seen[i]) { p[i * 4 + 3] = 0; removed++; }
+      // feather: alpha-blend surviving pixels adjacent to removed (kill 1px hard seams)
+      for (let py = 1; py < H - 1; py++) for (let px = 1; px < W - 1; px++) {
+        const i = py * W + px;
+        if (seen[i] || p[i * 4 + 3] === 0) continue;
+        if (seen[i - 1] || seen[i + 1] || seen[i - W] || seen[i + W]) p[i * 4 + 3] = Math.min(p[i * 4 + 3], 170);
+      }
+      if (removed < W * H * 0.10) return false; // looks like a genuine opaque art — skip
+      // v2.60 EDGEFADE: radial alpha falloff kills the rectangular silhouette completely —
+      // outer band fades to 0; subject sits mid-frame so it survives, baked haze at edges dies.
+      for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
+        const i = py * W + px;
+        if (p[i * 4 + 3] === 0) continue;
+        const nx = (px / (W - 1)) * 2 - 1, ny = (py / (H - 1)) * 2 - 1;
+        const rr = Math.sqrt(nx * nx * 0.75 + ny * ny);
+        const k = Math.min(1, Math.max(0, (rr - 0.55) / 0.45)); // full until 0.55, 0 at 1.0
+        p[i * 4 + 3] = Math.round(p[i * 4 + 3] * (1 - k * k));
+      }
+      x.putImageData(d, 0, 0);
+      this.textures.remove(key);
+      this.textures.addCanvas(key, c);
+      return true;
+    };
+    try {
+      let keyed = 0;
+      for (const k of ['ai-rock0', 'ai-rock1', 'ai-rock2', 'ai-minerals', 'ai-geyser']) if (floodKey(k)) keyed++;
+      this._keycutN = keyed;
+    } catch (e) { console.warn('keycut fallback', String(e)); }
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
     this.flows.nav = this.nav;
@@ -916,6 +974,21 @@ export class BattleScene extends Phaser.Scene {
     if (this.textures.exists('terrain')) this.textures.remove('terrain');
     this.textures.addCanvas('terrain', gc);
     this.add.image(PXW / 2, PXH / 2, 'terrain').setOrigin(0.5).setDepth(0);
+    // v2.60 GROUND SPATTER: baked pebble/moss/scorch micro-tiles scattered across the whole
+    // map (depth 1, under everything) so no region reads flat — especially under fog/shroud.
+    if (!this.textures.exists('spatter1')) {
+      const mk = (key, draw) => { const c = document.createElement('canvas'); c.width = 32; c.height = 32; const x = c.getContext('2d'); draw(x); this.textures.addCanvas(key, c); };
+      const rs = (() => { let s = 0xc0ffee2; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; })();
+      mk('spatter1', (x) => { for (let i = 0; i < 12; i++) { const px = (rs() * 30) | 0, py = (rs() * 30) | 0, r = 1 + rs() * 2; x.fillStyle = rs() < 0.5 ? 'rgba(180,200,190,0.10)' : 'rgba(10,14,12,0.16)'; x.beginPath(); x.ellipse(px, py, r, r * 0.7, 0, 0, 7); x.fill(); } });
+      mk('spatter2', (x) => { for (let i = 0; i < 7; i++) { const px = (rs() * 30) | 0, py = (rs() * 30) | 0; x.strokeStyle = 'rgba(90,150,110,0.14)'; x.lineWidth = 1; x.beginPath(); x.moveTo(px, py); x.lineTo(px + rs() * 4 - 2, py - 3 - rs() * 3); x.stroke(); } });
+      mk('spatter3', (x) => { for (let i = 0; i < 5; i++) { const px = (rs() * 28) | 0, py = (rs() * 28) | 0, r = 2 + rs() * 3; const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, 'rgba(40,60,55,0.20)'); g.addColorStop(1, 'rgba(40,60,55,0)'); x.fillStyle = g; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); } });
+    }
+    this._spatterImgs = [];
+    for (let i = 0; i < 420; i++) {
+      const k = ['spatter1', 'spatter2', 'spatter3'][i % 3];
+      const im = this.add.image((rnd() * PXW) | 0, (rnd() * PXH) | 0, k).setDepth(1).setAlpha(0.85 + rnd() * 0.15).setFlipX(rnd() < 0.5);
+      this._spatterImgs.push(im);
+    }
     // rock clusters / chokepoints
     this.rockClusters = [];
     const placeCluster = (cx, cy, size) => {

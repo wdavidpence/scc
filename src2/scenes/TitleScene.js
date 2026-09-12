@@ -59,6 +59,15 @@ export class TitleScene extends Phaser.Scene {
     }
     const glow = this.add.circle(this.W / 2, -80, 340, 0x2c5d9e, 0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(3);
     this.tweens.add({ targets: glow, alpha: { from: 0.22, to: 0.5 }, duration: 2600, yoyo: true, repeat: -1 });
+    // v2.60 DEPTH: parallax dust motes drifting across the key art — sells atmosphere + scale
+    this._dust = [];
+    for (let i = 0; i < 34; i++) {
+      const far = i % 2 === 0;
+      const m = this.add.circle(Math.random() * this.W, Math.random() * this.H, far ? 0.8 : 1.6, far ? 0xa9c6e8 : 0xdcecff, far ? 0.10 : 0.20).setScrollFactor(0).setDepth(4).setBlendMode(Phaser.BlendModes.ADD);
+      m._vx = (far ? 4 : 11) * (0.7 + Math.random() * 0.6);
+      m._vy = -(far ? 2 : 5) * (0.6 + Math.random() * 0.8);
+      this._dust.push(m);
+    }
 
     // film grain on the title too
     if (!this.textures.exists('grain')) {
@@ -159,6 +168,31 @@ export class TitleScene extends Phaser.Scene {
     // hero art in WORLD space so the mask aligns
     let img = null;
     if (this.textures.exists('hero_' + race)) {
+      // v2.60: unsharp hero portraits (soft AI renders read plasticky at card size)
+      if (!this.textures.get('hero_' + race).__sharpened) {
+        const s = this.textures.get('hero_' + race).getSourceImage();
+        const W = s.width, H = s.height;
+        const hc = document.createElement('canvas'); hc.width = W; hc.height = H;
+        const hx = hc.getContext('2d', { willReadFrequently: true });
+        hx.drawImage(s, 0, 0);
+        try {
+          const id = hx.getImageData(0, 0, W, H); const p = id.data;
+          const cp = Uint8ClampedArray.from(p);
+          const A = 0.6;
+          for (let yy = 1; yy < H - 1; yy++) for (let xx = 1; xx < W - 1; xx++) {
+            const i = (yy * W + xx) * 4;
+            for (let ch = 0; ch < 3; ch++) {
+              const k = i + ch;
+              const blur = (cp[k - 4] + cp[k + 4] + cp[k - W * 4] + cp[k + W * 4] + cp[k]) / 5;
+              p[k] = Math.max(0, Math.min(255, cp[k] + A * (cp[k] - blur)));
+            }
+          }
+          hx.putImageData(id, 0, 0);
+          this.textures.remove('hero_' + race);
+          const t = this.textures.addCanvas('hero_' + race, hc);
+          t.__sharpened = true;
+        } catch (e) { /* opaque canvas - keep original */ }
+      }
       const tex = this.textures.get('hero_' + race).getSourceImage();
       const ih = h - 34;
       const sc = Math.max((w - 8) / tex.width, ih / tex.height); // cover
@@ -285,6 +319,12 @@ export class TitleScene extends Phaser.Scene {
 
   _titleTick(t) {
     const dt = Math.min(100, t - (this._lastAttractT || t)) / 1000; this._lastAttractT = t;
+    // v2.60: parallax dust drift + wrap
+    if (this._dust) for (const m of this._dust) {
+      m.x += m._vx * dt; m.y += m._vy * dt;
+      if (m.x > this.W + 4) m.x = -4;
+      if (m.y < -4) { m.y = this.H + 4; m.x = Math.random() * this.W; }
+    }
     if (this.grain && Math.random() < 0.5) this.grain.setTilePosition(Math.random() * 128, Math.random() * 128);
     if (this._clockTxt) {
       const s = Math.floor(t / 1000);
@@ -327,9 +367,9 @@ export class TitleScene extends Phaser.Scene {
     const sx = 16, sy = 60;
     const pw = 216;
     const panel = this.add.graphics().setDepth(5);
-    panel.fillStyle(0x0a1220, 0.72).fillRoundedRect(sx - 4, sy - 6, pw, 28 + UPGRADES.length * 24, 5);
-    panel.lineStyle(1, 0x2f3a49, 0.8).strokeRoundedRect(sx - 4, sy - 6, pw, 28 + UPGRADES.length * 24, 5);
-    const t = this.add.text(sx, sy, 'FIELD REQUISITIONS', { fontFamily: BODY, fontSize: '11px', color: '#7d93ba', fontWeight: '700', letterSpacing: 2 });
+    panel.fillStyle(0x0a1220, 0.92).fillRoundedRect(sx - 4, sy - 6, pw, 28 + UPGRADES.length * 24, 5); // v2.60: ghosted -> legible panel
+    panel.lineStyle(1, 0x4ea1ff, 0.5).strokeRoundedRect(sx - 4, sy - 6, pw, 28 + UPGRADES.length * 24, 5);
+    const t = this.add.text(sx, sy, 'FIELD REQUISITIONS', { fontFamily: BODY, fontSize: '11px', color: '#a8c2e8', fontWeight: '700', letterSpacing: 2 });
     this.shopTexts.push(t);
     UPGRADES.forEach((u, i) => {
       const owned = !!this.camp.owned[u.id];
