@@ -110,11 +110,12 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
   chk('WEATHER_RACE_SKARN', wxRace.ok === true, wxRace);
 
   // 5. no leftover flood: motes auto-destroy (count bounded after another 6s)
+  // v2.61: cadence doubled + terran secondary ember -> cap raised 30->60
   const bounded = await p.evaluate(async () => {
     const bt = window.__SCC2.scene.getScene('Battle');
     await new Promise(r => setTimeout(r, 6000));
     const n = bt.children.list.filter(o => o.active && o.depth === 9000 && o.scrollFactorX === 0).length;
-    return { ok: n < 30, n };
+    return { ok: n < 60, n };
   });
   chk('WEATHER_BOUNDED', bounded.ok === true, bounded);
 

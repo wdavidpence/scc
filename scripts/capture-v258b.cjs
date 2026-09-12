@@ -27,7 +27,7 @@ const { chromium } = require(path.join('/Users/davidpence/.hermes/node/lib/node_
   });
   await p.waitForTimeout(3500);
   const du = await p.evaluate(() => new Promise(r => window.__SCC2.renderer.snapshot(i => r(i.src))));
-  fs.writeFileSync('qa-shots/wow257/06-combat-v258b.png', Buffer.from(du.split(',')[1], 'base64'));
+  fs.writeFileSync('qa-shots/wow257/08-combat-v260.png', Buffer.from(du.split(',')[1], 'base64'));
   console.log('captured');
   await b.close();
 })().catch(e => { console.log('E', String(e).slice(0, 200)); process.exit(1); });

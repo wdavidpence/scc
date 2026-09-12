@@ -548,7 +548,7 @@ export class PolishFX {
     const race = (s.players && s.players[0] && s.players[0].race) || 'terran';
     this._wxT = (this._wxT || 0) - dt;
     if (this._wxT > 0) return;
-    this._wxT = 0.12 + Math.random() * 0.15;
+    this._wxT = 0.05 + Math.random() * 0.07; // v2.61: ~2x mote density for battle ambience
     if (!this._cheap(s)) return;
     const W = s.scale.width, H = s.scale.height;
     if (race === 'skarn') {
@@ -567,6 +567,12 @@ export class PolishFX {
       const x = dir > 0 ? -4 : W + 4, y = Math.random() * H;
       const p = s.add.circle(x, y, 0.8 + Math.random(), 0xc8b890, 0.28).setScrollFactor(0).setDepth(9000);
       s.tweens.add({ targets: p, x: x + dir * (70 + Math.random() * 90), y: y + (Math.random() * 24 - 12), alpha: 0, duration: 2000 + Math.random() * 1200, ease: 'Sine.easeOut', onComplete: () => p.destroy() });
+      // v2.61: occasional secondary ember trailing the gust for density
+      if (Math.random() < 0.45) {
+        const y2 = Math.random() * H;
+        const q = s.add.circle(dir > 0 ? -4 : W + 4, y2, 0.6 + Math.random() * 0.7, 0xd8c9a0, 0.22).setScrollFactor(0).setDepth(9000);
+        s.tweens.add({ targets: q, x: q.x + dir * (60 + Math.random() * 80), y: y2 + (Math.random() * 30 - 15), alpha: 0, duration: 2400 + Math.random() * 1200, ease: 'Sine.easeOut', onComplete: () => q.destroy() });
+      }
     }
   }
 

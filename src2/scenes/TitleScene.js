@@ -41,8 +41,12 @@ export class TitleScene extends Phaser.Scene {
 
     // ---- painted backdrop (real key art) over graded wash fallback ----
     const bgG = this.add.graphics().setDepth(0);
-    bgG.fillGradientStyle(0x14283f, 0x14283f, 0x060b16, 0x060b16, 1);
-    bgG.fillRect(0, 0, this.W, this.H);
+    // v2.61 SKYTINT: 4-stop atmospheric gradient (near-black zenith -> steel
+    // midband -> horizon glow) so the fallback wash reads as sky, not a flat block.
+    bgG.fillGradientStyle(0x050a14, 0x050a14, 0x2d5178, 0x2d5178, 1);
+    bgG.fillRect(0, 0, this.W, this.H * 0.74);
+    bgG.fillGradientStyle(0x2d5178, 0x2d5178, 0x04070f, 0x04070f, 1);
+    bgG.fillRect(0, this.H * 0.74, this.W, this.H * 0.26);
     if (this.textures.exists('cin_titlebg')) {
       const tex = this.textures.get('cin_titlebg').getSourceImage();
       const sc = Math.max(this.W / tex.width, this.H / tex.height) * 1.06;

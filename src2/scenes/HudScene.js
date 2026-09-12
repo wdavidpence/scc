@@ -1149,6 +1149,31 @@ export class HudScene extends Phaser.Scene {
       g.fillStyle(t === 0 ? 0x24406e : 0x5a2340, 0.85);
       for (let i = 0; i < cells.length; i++) if (cells[i]) { g.fillRect(this.mmX + ((i % MAP_W) * TILE) * s, this.mmY + (((i / MAP_W) | 0) * TILE) * s, 2, 2); }
     }
+    // v2.61 ELEV_PAINT: plateaus read as shaded highland on the minimap — scarp
+    // ring darker, plateau face lifted light; rock tiles painted dark with a lit
+    // north edge so mountain ridges are legible at 1px/tile. Fog-gated: mmG sits
+    // above the shroud image, so only paint tiles the player has actually seen.
+    if (b.elev) {
+      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+        const i = ty * MAP_W + tx;
+        if (!b.seen[i]) continue;
+        if (!b.elev[i]) continue;
+        const ex = this.mmX + tx * s, ey = this.mmY + ty * s;
+        const nb = (dx2, dy2) => { const nx = tx + dx2, ny = ty + dy2; return nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H && b.elev[ny * MAP_W + nx]; };
+        g.fillStyle(0xb9cbe6, 0.16);
+        g.fillRect(ex, ey, Math.ceil(s), Math.ceil(s));
+        if (!nb(0, -1)) { g.fillStyle(0xe8f1ff, 0.30); g.fillRect(ex, ey, Math.ceil(s), 1); }
+        if (!nb(0, 1)) { g.fillStyle(0x0a0f1c, 0.35); g.fillRect(ex, ey + Math.max(1, Math.ceil(s) - 1), Math.ceil(s), 1); }
+      }
+    }
+    for (const r of (b.rockTiles || [])) {
+      if (!b.seen[b.nav.idx(r.tx, r.ty)]) continue;
+      const ex = this.mmX + r.tx * s, ey = this.mmY + r.ty * s;
+      g.fillStyle(0x232b38, 0.9);
+      g.fillRect(ex, ey, Math.ceil(s), Math.ceil(s));
+      g.fillStyle(0x5b6b80, 0.5);
+      g.fillRect(ex, ey, Math.ceil(s), 1);
+    }
     // v2.45: resources only appear once scouted (no always-known economy leak)
     g.fillStyle(0x2c4a7a, 0.9);
     for (const m of b.minerals) {
