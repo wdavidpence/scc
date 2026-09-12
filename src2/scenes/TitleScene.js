@@ -262,6 +262,9 @@ export class TitleScene extends Phaser.Scene {
     const opts = field === 'diff' ? ['easy', 'normal', 'hard'] : RACE_ORDER;
     const labels = field === 'diff' ? { easy: 'EASY', normal: 'NORMAL', hard: 'BRUTAL' } : { terran: 'TERRAN', skarn: 'SKARN', auraxis: 'AURAXIS' };
     if (!this.choices) this.choices = [];
+    // v2.62 FIX: scene instances survive restart — purge this field's stale
+    // entries from previous creates or refreshChoice setColor-crashes destroyed texts.
+    this.choices = this.choices.filter(c => c.field !== field);
     opts.forEach((o, i) => {
       const bx = x + 118 + i * 128, by = y;
       const r = this.add.rectangle(bx, by, 116, 32, 0x101822, 1).setStrokeStyle(1, 0x2f3a49).setInteractive({ useHandCursor: true }).setDepth(5);
@@ -283,6 +286,7 @@ export class TitleScene extends Phaser.Scene {
 
   refreshChoice(field) {
     const cur = this.pick[field === 'race' ? 'race' : field === 'enemy' ? 'enemy' : 'difficulty'];
+    this.choices = this.choices.filter(c => { try { return c.t && c.t.active && c.r && c.r.active; } catch (e) { return false; } });
     for (const c of this.choices) {
       if (c.field !== field) continue;
       if (c.val === cur) { c.r.setFillStyle(0x1c5da8, 1).setStrokeStyle(2, 0x4ea1ff); c.t.setColor('#eaf4ff'); }

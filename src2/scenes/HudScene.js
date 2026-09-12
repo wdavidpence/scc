@@ -353,11 +353,12 @@ export class HudScene extends Phaser.Scene {
     // v2.46: fibrous shroud tile over the explored-but-unseen fog area (minimap-only visual)
     if (this.textures.exists('chr-shroud')) {
       this.mmShroud = this.add.image(this.mmX, this.mmY, 'chr-shroud').setOrigin(0, 0).setScrollFactor(0).setDisplaySize(this.mmSize, this.mmSize).setAlpha(0.85);
+    if (!this.textures.exists('mm_shroud')) {
       this._mmShroudCv = document.createElement('canvas'); this._mmShroudCv.width = 160; this._mmShroudCv.height = 160;
       this._mmShroudCtx = this._mmShroudCv.getContext('2d');
-      if (this.textures.exists('mm_shroud')) this.textures.remove('mm_shroud'); // restart: rebind fresh canvas
       this.textures.addCanvas('mm_shroud', this._mmShroudCv);
       this.mmShroud.setTexture('mm_shroud');
+    }
     }
     this.mmG = this.add.graphics().setScrollFactor(0);
     const zone = this.add.zone(this.mmX, this.mmY, this.mmSize, this.mmSize).setOrigin(0, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
@@ -396,13 +397,58 @@ export class HudScene extends Phaser.Scene {
   createGameOverPanel() {
     this.goPanel = this.add.container(0, 0).setDepth(2000).setScrollFactor(0).setAlpha(0).setVisible(false);
     const dim = this.add.rectangle(0, 0, 1, 1, 0x02040a, 0.82);
-    const title = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '40px', color: '#ffffff' }).setOrigin(0.5);
+    // v2.62 GO PANEL CHROME: accent-framed debrief — top/bottom accent rules,
+    // side ticks, framed stat row, pulsing return prompt. Race accent from RACE_INFO.
+    const acc = (RACE_INFO[this.race] || {}).accent || 0x4ea1ff;
+    this._goAcc = acc;
+    const chrome = this.add.graphics();
+    this.goChrome = chrome;
+    const title = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '40px', color: '#ffffff', fontStyle: '900' }).setOrigin(0.5);
+    const halo = this.add.circle(0, 0, 120, acc, 0.10).setBlendMode(Phaser.BlendModes.ADD);
+    this.goHalo = halo;
     const stats = this.add.text(0, 2, '', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#ffd23f' }).setOrigin(0.5);
     const sub = this.add.text(0, 30, 'click to return', { fontFamily: 'Menlo, monospace', fontSize: '14px', color: '#8fa3c8' }).setOrigin(0.5);
-    this.goPanel.add([dim, title, stats, sub]);
+    this.goPanel.add([dim, chrome, halo, title, stats, sub]);
     this.goTitle = title; this.goDim = dim; this.goStats = stats; this.goSub = sub;
-    this.input.on('pointerdown', () => { if (!this.gameOver) return; this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title'); });
+    // v2.62 ONE-SHOT return: clear gameOver BEFORE stopping so repeat pointerdowns
+    // can't re-queue start('Title') onto the live instance (double-create crash).
+    this.input.on('pointerdown', () => {
+      if (!this.gameOver || this._goReturning) return;
+      this._goReturning = true;
+      this.gameOver = null;
+      this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title');
+    });
   }
+
+  // v2.62: single layout source for the debrief panel — showGameOver AND resize call it.
+  _goLayout(r) {
+    if (!this.goPanel || !this.goPanel.visible) return;
+    const acc = (r === 'victory' ? 0x6ee7a0 : 0xff5c5c);
+    const cy = this.H / 2;
+    this.goTitle.setPosition(this.W / 2, cy - 60);
+    if (this.goHalo) { this.goHalo.setPosition(this.W / 2, cy - 60); this.goHalo.setFillStyle(acc, 0.10); }
+    const g = this.goChrome; g.clear();
+    const bw = Math.min(640, this.W - 120);
+    const x0 = this.W / 2 - bw / 2, x1 = this.W / 2 + bw / 2;
+    // accent rules with tapered ends + corner brackets
+    g.lineStyle(2, acc, 0.85);
+    g.lineBetween(x0 + 26, cy - 96, x1 - 26, cy - 96);
+    g.lineBetween(x0 + 26, cy + 52, x1 - 26, cy + 52);
+    g.lineStyle(1, acc, 0.45);
+    g.lineBetween(x0 + 4, cy - 92, x0 + 4, cy + 48);
+    g.lineBetween(x1 - 4, cy - 92, x1 - 4, cy + 48);
+    g.fillStyle(acc, 0.9);
+    g.fillCircle(x0 + 26, cy - 96, 2.5); g.fillCircle(x1 - 26, cy - 96, 2.5);
+    g.fillCircle(x0 + 26, cy + 52, 2.5); g.fillCircle(x1 - 26, cy + 52, 2.5);
+    // stat row frame plate behind the stats text
+    g.fillStyle(0x0a1220, 0.72);
+    g.fillRect(this.W / 2 - 240, cy - 28, 480, 26);
+    g.lineStyle(1, 0x3b444f, 0.9);
+    g.strokeRect(this.W / 2 - 240, cy - 28, 480, 26);
+    if (this.goStats) this.goStats.setPosition(this.W / 2, cy - 15);
+    if (this.goSub) this.goSub.setPosition(this.W / 2, cy + 14);
+  }
+
 
   // v2.36: SC1-style grey-out command card. opts.state = (battle)=>reason|'' evaluated
   // live on every hud:tick — reasons: minerals|supply|tech|energy|nocrew|done|place.
@@ -978,25 +1024,34 @@ export class HudScene extends Phaser.Scene {
     if (r === 'victory') this.scene.get('Battle').polish?.confetti();
     this.goPanel.setVisible(true).setAlpha(0);
     this.goDim.setSize(this.W, this.H);
-    this.goTitle.setPosition(this.W / 2, this.H / 2 - 60);
     this.goTitle.setText(r === 'victory' ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED');
     this.goTitle.setColor(r === 'victory' ? '#6ee7a0' : '#ff5c5c');
+    // v2.62: title slam-in + breathing halo on result accent (dedupe: panel reused per session)
+    this.tweens.killTweensOf([this.goTitle, this.goHalo, this.goSub]);
+    this.goTitle.setScale(1.6);
+    this.tweens.add({ targets: this.goTitle, scale: 1, duration: 380, ease: 'Back.easeOut' });
+    if (this.goHalo) {
+      this.goHalo.setScale(0.4);
+      this.tweens.add({ targets: this.goHalo, scale: 1, duration: 520, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: this.goHalo, alpha: 0.04, duration: 1400, yoyo: true, repeat: -1, delay: 520 });
+    }
     const b = this.scene.get('Battle');
     const apm = Math.round((b.cmdCount / Math.max(30, b.gameTime)) * 60);
     const kills = (b.record && b.record.kills) || 0;
     const reward = b.lastReward || 0;
     if (this.goStats) {
-      this.goStats.setPosition(this.W / 2, this.H / 2 - 14);
-      this.goStats.setText(`TIME ${((b.gameTime / 60) | 0)}:${String(b.gameTime % 60 | 0).padStart(2, '0')}   APM ${apm}   ARMY ${b.units.filter(u => !u.dead && u.team === 0).length}${reward ? `   +${reward} CR` : ''}`);
+      this.goStats.setText(`TIME ${((b.gameTime / 60) | 0)}:${String(b.gameTime % 60 | 0).padStart(2, '0')}   APM ${apm}   ARMY ${b.units.filter(u => !u.dead && u.team === 0).length}   KILLS ${kills}${reward ? `   +${reward} CR` : ''}`);
     }
+    this._goLayout(r); // v2.62 single layout source
     if (this.goSub) {
-      this.goSub.setPosition(this.W / 2, this.H / 2 + 14);
       const dl = b.debriefLine || '';
       const go = this.goSub;
       const lay = () => { try { if (!go.active) return; go.setPosition(this.W / 2, this.H / 2 + 14); go.setText(dl).setColor(r === 'victory' ? '#9fe0b0' : '#e0a0a0'); } catch (e) { /* texture torn */ } };
       try { go.setFontSize(13); go.setWordWrap({ width: Math.min(560, this.W - 80) }); go.setAlign('center'); } catch (e) { /* noop */ }
       lay();
       this.time.delayedCall(120, lay); // safe re-layout after any texture churn
+      // v2.62: return prompt breathes so the screen never sits dead still
+      this.tweens.add({ targets: this.goSub, alpha: 0.35, duration: 900, yoyo: true, repeat: -1, delay: 700 });
     }
     this.tweens.add({ targets: this.goPanel, alpha: 1, duration: 600 });
     // SC1 mission stamp: mission name slammed onto the debrief
@@ -1440,6 +1495,6 @@ export class HudScene extends Phaser.Scene {
     this.mmFrame.setPosition(this.mmX, this.mmY);
     if (this.mmShroud) this.mmShroud.setPosition(this.mmX, this.mmY);
     if (this._cardPanel) { this._cardPanel.obj.setPosition(4, this.H - 128); this._cardPanel.resize(Math.min(this.W - 210, 78 * Math.max(1, Math.min(4, Math.floor((this.W - 24) / 84))) + 24), 124); }
-    if (this.gameOver) { this.goDim.setSize(this.W, this.H); this.goTitle.setPosition(this.W / 2, this.H / 2 - 20); }
+    if (this.gameOver) { this.goDim.setSize(this.W, this.H); this._goLayout(this.gameOver); }
   }
 }
