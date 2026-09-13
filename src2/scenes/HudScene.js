@@ -791,7 +791,7 @@ export class HudScene extends Phaser.Scene {
     const g = this.portraitG; if (!g) return;
     g.clear();
     // v2.35b gap 27: destroy previous bust sprites before rebuilding
-    if (this._busts) { for (const s of this._busts) (s.sp || s).destroy(); this._busts = []; }
+    if (this._busts) { for (const s of this._busts) { if (s.sp) { if (s.sp._porRing) s.sp._porRing.destroy(); s.sp.destroy(); } if (s.hz) s.hz.destroy(); } this._busts = []; if (this._porName && this._porName.active) this._porName.setAlpha(0); }
     this._busts = [];
     const x0 = 12, y0 = this.H - 142;
     const max = Math.min(6, (units || []).length);
@@ -807,13 +807,35 @@ export class HudScene extends Phaser.Scene {
       // SC1: animated portrait bust — sprite cycle of the unit's walk frames
       const team = u.team > 2 ? 2 : (u.team || 0);
       const baseKey = `u-${u.def?.icon || u.kind}-t${team}`;
+      let hz = null, sp = null;
       if (b.textures.exists(baseKey)) {
-        const sp = this.add.image(x + 18, y + 10, baseKey).setDepth(150).setScale(1.6);
-        this._busts.push({ sp, u, team, fr: 0 });
+        sp = this.add.image(x + 18, y + 10, baseKey).setDepth(150).setScale(1.6);
+        // v2.64 PORTRAIT HOVER POP: invisible hit zone over each bust. Hover ->
+        // Back.easeOut scale pop of the bust + race-accent ring + name plate above.
+        // Tagged _porHz for gate census; destroyed with the bust in the rebuild path.
+        const acc = (RACE_INFO[(this.race || '').toLowerCase()] || {}).accent || 0x4ea1ff;
+        hz = this.add.zone(x, y, 36, 26).setOrigin(0, 0).setInteractive({ useHandCursor: true }).setDepth(153);
+        hz._porHz = { i, kind: u.kind };
+        hz.on('pointerover', () => {
+          if (!sp.active) return;
+          this.tweens.add({ targets: sp, scale: 2.1, duration: 160, ease: 'Back.easeOut', _porPop: 1 });
+          sp.setTint(0xffffff);
+          if (sp._porRing) { sp._porRing.destroy(); sp._porRing = null; }
+          sp._porRing = this.add.circle(x + 18, y + 10, 15, 0, 0).setStrokeStyle(1, acc, 0.9).setDepth(154);
+          sp._porRing._porRing = 1;
+          if (!this._porName || !this._porName.active) this._porName = this.add.text(0, 0, '', { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#dbe7ff', backgroundColor: '#05080fee', padding: { x: 5, y: 3 } }).setOrigin(0.5, 1).setDepth(155).setScrollFactor(0);
+          this._porName.setText(`${u.def?.name || u.kind}${(u.level || 0) > 0 ? ' Lv' + u.level : ''}  HP ${Math.ceil(u.hp)}/${u.maxHp}`).setPosition(x + 18, y - 4).setAlpha(1);
+        });
+        hz.on('pointerout', () => {
+          if (sp.active) { this.tweens.add({ targets: sp, scale: 1.6, duration: 120, ease: 'Quad.easeOut', _porPop: 1 }); sp.clearTint(); if (sp._porRing) { sp._porRing.destroy(); sp._porRing = null; } }
+          if (this._porName && this._porName.active) this._porName.setAlpha(0);
+        });
       } else {
         g.fillStyle(0x4ea1ff, 0.9); g.fillRect(x + 12, y + 4, 12, 12);
       }
+      this._busts.push({ sp, u, team, fr: 0, hz });
     }
+    // v2.64: rebuild teardown (top of this fn) destroys sp AND hz per entry.
     this._selUnits = units || [];
     this._selX0 = x0; this._selY0 = y0; this._selMax = max;
     this.drawPortraitBars();
@@ -858,7 +880,8 @@ export class HudScene extends Phaser.Scene {
     const b = this.scene.get('Battle');
     const fr = ((this._pf || 0) + 1) % 3; this._pf = fr;
     for (const e of this._busts) {
-      if (!e.sp.active || e.u.dead) { if (e.sp.active) e.sp.setAlpha(0.25); continue; }
+      if (!e.sp || !e.sp.active) continue;
+      if (e.u.dead) { e.sp.setAlpha(0.25); continue; }
       const k = `u-${e.u.def?.icon || e.u.kind}-t${e.team}-w${fr}`;
       if (b?.textures?.exists(k)) e.sp.setTexture(k);
     }
