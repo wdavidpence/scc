@@ -1,0 +1,5 @@
+CURRENT FAILURE:
+- BattleScene.destroyRock clears nav.blocked/nav.blockedBy but never calls the existing FlowManager.invalidateNear seam.
+- Waiting A* units receive no topology-change signal and can remain on stale partial routes until timer-driven repath.
+- Shared flow fields may remain stale for the 0.6-second rebuild interval.
+- No deterministic golden replay proves all waiting ground units repath within one fixed simulation tick after a destructible opens a valley.

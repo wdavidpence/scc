@@ -1,0 +1,27 @@
+{
+  "id": "P0.011",
+  "spec": "Invalidate A* and flow-field caches when destructible blockers open a route [P2][P3]",
+  "doneWhen": "In 50 deterministic blocked-valley trials, 100% of 4 waiting A-star units and 4 shared-flow units per trial have complete legal open-valley routes after exactly 1 fixed 50ms simulation tick; stale flow fields=0; blocked route samples=0; invalidation latency<=50ms",
+  "files": [
+    "src2/scenes/BattleScene.js",
+    "src2/engine/flowfield.js",
+    "src2/engine/entity.js",
+    "scripts/verify-blocker-invalidation.cjs"
+  ],
+  "signatures": [
+    "BattleScene.destroyRock",
+    "FlowManager.invalidateNear",
+    "FlowManager.ensure",
+    "Unit.repath",
+    "Unit.stepAlongFlow"
+  ],
+  "failingTest": "fixtures/failing-p0011-blocker-invalidation.txt",
+  "testCommand": "node scripts/verify-blocker-invalidation.cjs",
+  "deps": [
+    "P0.003"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not change terrain generation, unit stats, movement speed, pathfinding route algorithm, clearance, flying behavior, destruction visuals/audio, AI, balance, rendering assets, planning docs except state, config, git, or external systems"
+  ]
+}

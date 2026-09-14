@@ -182,18 +182,20 @@
     },
     {
       "id": "P0.011",
-      "status": "blocked",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
       "dependencies": [
         "P0.003"
       ],
-      "attempts": 0,
-      "context_pack": null,
+      "attempts": 2,
+      "context_pack": "context-packs/P0.011.md",
       "done_when": "golden replay opens a blocked valley and all waiting units repath within one simulation tick",
       "estimate": "5h",
-      "task": "Invalidate A* and flow-field caches when destructible blockers open a route [P2][P3]"
+      "task": "Invalidate A* and flow-field caches when destructible blockers open a route [P2][P3]",
+      "started_at": "2026-09-14T23:22:49Z",
+      "completed_at": "2026-09-14T23:43:35Z"
     },
     {
       "id": "P0.012",

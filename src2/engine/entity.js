@@ -218,6 +218,19 @@ export class Unit {
     return (this.lastPathResult = this.lastRepathResult = { reachable: false, status: 'unreachable', path: this.path });
   }
 
+  wakeForTopologyChange() {
+    if (this.flying || this.flowField || !this.order || !['move', 'attackMove'].includes(this.order.type)) return false;
+    const nav = this.world?.nav;
+    if (!nav) return false;
+    const clearance = this.def.size === 'large' ? 1 : 0;
+    const tx = Math.floor(this.x / TILE), ty = Math.floor(this.y / TILE);
+    const hereBlocked = !nav.walkable(tx, ty, clearance, this.id);
+    const routeBlocked = (this.path || []).slice(this.pathIndex).some(p => !nav.walkable(Math.floor(p.x / TILE), Math.floor(p.y / TILE), clearance, this.id));
+    if (!this.unreachable && !hereBlocked && !routeBlocked) return false;
+    this.needsPath = true;
+    return true;
+  }
+
 
   stepAlongPath(dt) {
     if (this.pathIndex >= this.path.length) return true;

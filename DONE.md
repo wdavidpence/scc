@@ -17,3 +17,4 @@
 - P0.009 — 50-case clearance harness proves small units pass 20/20 narrow gaps, large units reject 20/20, both pass 25/25 legal wide corridors, and flying passes 5/5 in 23.04 ms; source already correct.
 - P0.010 — real spawned Wraith and Marine share endpoints across mountain terrain; Wraith ratio 1.000 crosses solid directly, Marine uses 17 valley samples with zero illegal entries and a longer legal route, both arrive at 0px error; labeled real-game screenshot PASS.
 
+- P0.011 — 50 deterministic blocker-open trials pass in one fixed 50ms tick: A* 200/200, shared-flow 200/200, zero stale fields, zero blocked samples; real-browser terrain/order regressions PASS.

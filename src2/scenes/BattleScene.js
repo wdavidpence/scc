@@ -1784,6 +1784,7 @@ export class BattleScene extends Phaser.Scene {
     const tx = rk.tx, ty = rk.ty;
     const i = this.nav.idx(tx, ty);
     if (this.nav.blockedBy[i] === -2) { this.nav.blocked[i] = 0; this.nav.blockedBy[i] = -1; }
+    this.flows?.invalidateNear(tx * TILE + TILE / 2, ty * TILE + TILE / 2);
     for (const c of [...this.children.list]) {
       if (c.type === 'Image' && c.texture && (/^ai-rock/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
           Math.abs(c.x - (tx * TILE + 8)) < 9 && Math.abs(c.y - (ty * TILE + 8)) < 9) c.destroy();
@@ -1801,6 +1802,18 @@ export class BattleScene extends Phaser.Scene {
       this.audio?.death(false);
     }
     this.events.emit('hud:alert', 'ROCK DESTROYED — PATH OPEN');
+  }
+
+  processTopologyChanges() {
+    const changes = this.flows?.consumeTopologyChanges?.() || [];
+    if (!changes.length) return 0;
+    for (const u of this.units || []) u.wakeForTopologyChange?.();
+    for (const [key, rec] of this.flows.fields) {
+      if (rec.stale || rec.topologyVersion !== this.flows.topologyVersion) {
+        this.flows.ensure(key, rec.goalX, rec.goalY, this.gameTime, 0, rec.clearance || 0);
+      }
+    }
+    return changes.length;
   }
 
   // ---------------- blight ----------------
@@ -3837,6 +3850,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.paused) { this.updateAmbient(0); return; } // F8: world frozen, orders still work via input
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
     this.gameTime += dt;
+    this.processTopologyChanges();
 
     // in-mission radio chatter beats
     if (this.chatter && this._chatterIdx < this.chatter.length && this.gameTime >= this.chatter[this._chatterIdx].t) {

@@ -15,6 +15,7 @@ export class FlowField {
   // rebuild field toward a goal tile (blocked tiles = INF)
   build(goalX, goalY, ignoreId = -1, maxClearance = 0) {
     const { nav, w, h, dist } = this;
+    this.valid = false;
     dist.fill(Infinity);
     const ts = nav.tileSize;
     let gx = Math.floor(goalX / ts), gy = Math.floor(goalY / ts);
@@ -70,6 +71,9 @@ export class FlowField {
             if (!dx && !dy) continue;
             const nx = tx + dx, ny = ty + dy;
             if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            if (dx !== 0 && dy !== 0) {
+              if (!nav.walkable(tx + dx, ty, maxClearance, ignoreId) || !nav.walkable(tx, ty + dy, maxClearance, ignoreId)) continue;
+            }
             const nd = dist[ny * w + nx];
             if (nd < best) { best = nd; bx = dx; by = dy; }
           }
@@ -109,14 +113,17 @@ export class FlowManager {
   constructor(nav, w, h) {
     this.nav = nav; this.w = w; this.h = h;
     this.fields = new Map(); // key -> {field, goal, lastBuild, ignoreId}
+    this.topologyVersion = 0;
+    this.topologyChanges = [];
   }
 
   getField(goalKey, goalX, goalY, clearance = 0) {
     let rec = this.fields.get(goalKey);
     if (!rec) {
-      rec = { field: new FlowField(this.nav, this.w, this.h), goalX, goalY, lastBuild: -99 };
+      rec = { field: new FlowField(this.nav, this.w, this.h), goalX, goalY, clearance, lastBuild: -99, stale: true, topologyVersion: -1 };
       this.fields.set(goalKey, rec);
     }
+    rec.clearance = clearance;
     return rec;
   }
 
@@ -124,16 +131,29 @@ export class FlowManager {
   ensure(goalKey, goalX, goalY, gameTime, interval = 0.6, clearance = 0) {
     const rec = this.getField(goalKey, goalX, goalY, clearance);
     if (rec.goalX !== goalX || rec.goalY !== goalY) { rec.goalX = goalX; rec.goalY = goalY; rec.lastBuild = -99; }
-    if (gameTime - rec.lastBuild >= interval || !rec.field.valid) {
-      rec.field.build(goalX, goalY, -1, clearance);
-      rec.lastBuild = gameTime;
+    if (gameTime - rec.lastBuild >= interval || !rec.field.valid || rec.stale || rec.topologyVersion !== this.topologyVersion) {
+      if (rec.field.build(goalX, goalY, -1, clearance)) {
+        rec.lastBuild = gameTime;
+        rec.stale = false;
+        rec.topologyVersion = this.topologyVersion;
+      } else {
+        rec.stale = true;
+      }
     }
     return rec.field;
   }
 
   invalidateNear(x, y) {
     // cheap: mark all fields stale when buildings change
-    for (const rec of this.fields.values()) rec.lastBuild = -99;
+    const version = ++this.topologyVersion;
+    this.topologyChanges.push({ x, y, version });
+    for (const rec of this.fields.values()) { rec.lastBuild = -99; rec.stale = true; }
+  }
+
+  consumeTopologyChanges() {
+    const changes = this.topologyChanges;
+    this.topologyChanges = [];
+    return changes;
   }
 }
 
