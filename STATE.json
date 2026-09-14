@@ -148,22 +148,24 @@
     },
     {
       "id": "P0.009",
-      "status": "ready",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
       "dependencies": [
         "P0.007"
       ],
-      "attempts": 0,
-      "context_pack": null,
+      "attempts": 1,
+      "context_pack": "context-packs/P0.009.md",
       "done_when": "large units reject one-cell gaps while small units pass, across 50 seeded tests",
       "estimate": "4h",
-      "task": "Enforce clearance for large ground units through valleys and ramps [P2][P3]"
+      "task": "Enforce clearance for large ground units through valleys and ramps [P2][P3]",
+      "started_at": "2026-09-14T22:07:33Z",
+      "finished_at": "2026-09-14T22:11:16Z"
     },
     {
       "id": "P0.010",
-      "status": "blocked",
+      "status": "ready",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],

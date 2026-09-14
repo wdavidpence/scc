@@ -1,0 +1,27 @@
+{
+  "id": "P0.009",
+  "spec": "Enforce clearance for large ground units through valleys and ramps [P2][P3]",
+  "doneWhen": "Across exactly 50 deterministic cases, small one-cell-gap pass count === 20, large one-cell-gap rejection count === 20, wide valley/ramp pass count === 25 for both sizes, flying pass count === 5, and total runtime < 500ms",
+  "files": [
+    "src2/engine/pathfinding.js",
+    "src2/engine/entity.js",
+    "scripts/verify-clearance.cjs"
+  ],
+  "signatures": [
+    "NavGrid.walkable",
+    "NavGrid.findPath",
+    "NavGrid.smooth",
+    "NavGrid.lineClear",
+    "Unit.repath"
+  ],
+  "failingTest": "fixtures/failing-p0009-clearance.txt",
+  "testCommand": "node scripts/verify-clearance.cjs",
+  "deps": [
+    "P0.007"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not modify BattleScene terrain geometry, ramps, valleys, mountains, visuals, gameplay balance, images, planning docs except ticket state, config, git, or external systems",
+    "if current source passes, add only the harness and leave source unchanged"
+  ]
+}

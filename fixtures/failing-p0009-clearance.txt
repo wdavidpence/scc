@@ -1,0 +1,4 @@
+CURRENT FAILURE: scripts/verify-clearance.cjs does not exist.
+Existing pathfinding and ramp gates use clearance=0 only.
+No deterministic evidence proves small units pass one-cell gaps while large units reject them, large units pass legal 3-to-5-cell valleys/ramps, Unit.repath forwards size clearance, or flying units remain unaffected.
+Required 50-case gate: cases 0-19 narrow gaps; 20-34 wide valleys; 35-44 three-cell ramps; 45-49 flying; total runtime <500ms.
