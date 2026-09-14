@@ -1,0 +1,4 @@
+# Reproduce: node node_modules/vite/bin/vite.js build --outDir /tmp/scc-p0001-runN-dist --emptyOutDir && stage under /tmp/scc-p0001-runN-root/scc && serve on localhost port && measure peak RSS with ps -eo pid,ppid,rss | awk -v p=<PID> '$2==p || $1==p {sum+=$3} END {print sum}'
+run_id,commit,bundle,build_exit,build_ms,startup_ms,peak_rss_mb,console_errors,play_seconds,restart_ok
+run1,fef34297535f3b268e57b5258d071e978be4068f,assets/index-BA8Pyue4.js,0,674,267,1258.98,7,302.7,true
+run2,fef34297535f3b268e57b5258d071e978be4068f,assets/index-BA8Pyue4.js,0,548,261,1173.17,7,302.8,true

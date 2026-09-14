@@ -12,23 +12,24 @@
   "tickets": [
     {
       "id": "P0.001",
-      "status": "ready",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
       "dependencies": [
         "JOB-000"
       ],
-      "attempts": 0,
-      "context_pack": null,
+      "attempts": 1,
+      "context_pack": "context-packs/P0.001.md",
       "done_when": "baseline/phase0.csv contains reproducible commands and measurements from two runs",
       "estimate": "2h",
       "task": "Freeze v2.65.0 as a comparison baseline and record build, bundle, startup, memory, and five-minute console results [P3]",
-      "started_at": null
+      "started_at": "2026-09-14T18:42:46Z",
+      "finished_at": "2026-09-14T19:19:45Z"
     },
     {
       "id": "P0.002",
-      "status": "blocked",
+      "status": "ready",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],

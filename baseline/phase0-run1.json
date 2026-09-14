@@ -1,0 +1,71 @@
+{
+  "run_id": "run1",
+  "commit": "fef34297535f3b268e57b5258d071e978be4068f",
+  "bundle": "assets/index-BA8Pyue4.js",
+  "build_exit": 0,
+  "build_ms": 674,
+  "startup_ms": 267,
+  "peak_rss_mb": 1258.98,
+  "console_errors": 7,
+  "console_error_details": [
+    "Texture key already in use: fog",
+    "Texture key already in use: vis",
+    "Texture key already in use: fog_mist",
+    "Texture key already in use: blight-t0",
+    "Texture key already in use: blight-ai-t0",
+    "Texture key already in use: blight-t1",
+    "Texture key already in use: blight-ai-t1"
+  ],
+  "play_seconds": 302.7,
+  "restart_ok": true,
+  "commands": {
+    "build_command": "node node_modules/vite/bin/vite.js build --outDir /tmp/scc-p0001-run1-dist --emptyOutDir",
+    "stage_command": "rm -rf /tmp/scc-p0001-run1-root && mkdir -p /tmp/scc-p0001-run1-root/scc && cp -R /tmp/scc-p0001-run1-dist/* /tmp/scc-p0001-run1-root/scc/",
+    "serve_command": "node -e \"http server serving /tmp/scc-p0001-run1-root at http://127.0.0.1:8101/scc/\"",
+    "measure_rss_command": "ps -eo pid,ppid,rss | awk -v p=65403 '$2==p || $1==p {sum+=$3} END {print sum}'"
+  },
+  "exercise": {
+    "title_start": {
+      "status": "ok",
+      "at_seconds": 2.3
+    },
+    "selection": {
+      "status": "ok",
+      "at_seconds": 6.4,
+      "units_selected": 1
+    },
+    "move_order": {
+      "status": "ok",
+      "at_seconds": 7.7,
+      "orders_issued": 2
+    },
+    "terrain_navigation": {
+      "status": "ok",
+      "at_seconds": 10.4,
+      "nav_actions": 6
+    },
+    "economy": {
+      "status": "ok",
+      "at_seconds": 10.5,
+      "minerals": 1200,
+      "gas": 350,
+      "supplyUsed": 1,
+      "supplyCap": 0
+    },
+    "combat": {
+      "status": "ok",
+      "at_seconds": 10.6,
+      "attack_issued": true
+    },
+    "end_state": {
+      "status": "ok",
+      "result": "victory",
+      "at_seconds": 282.9
+    },
+    "return_restart": {
+      "status": "ok",
+      "restart_ok": true,
+      "at_seconds": 286.1
+    }
+  }
+}

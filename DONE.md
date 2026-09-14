@@ -6,4 +6,4 @@
 - JOB-002 — context-pack generator accepted; verification 7/7.
 
 ## PLAN bullets
-None yet. Before starting any ticket, search this file for its exact ID.
+- P0.001 — baseline frozen at commit `fef34297535f3b268e57b5258d071e978be4068f`; two independent 302+ second browser runs; verifier PASS. Evidence: `baseline/phase0.csv`.

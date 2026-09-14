@@ -1,0 +1,4 @@
+CURRENT FAILURE: /Users/davidpence/scc-work/baseline/phase0.csv does not exist.
+No two-run baseline records are available.
+Expected command: node scripts/verify-p0001-baseline.cjs
+Expected current result: nonzero exit because baseline artifact and verifier are absent.

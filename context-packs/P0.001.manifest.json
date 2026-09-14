@@ -1,0 +1,35 @@
+{
+  "id": "P0.001",
+  "spec": "Freeze v2.65.0 as a comparison baseline and record build, bundle, startup, memory, and five-minute console results [P3]",
+  "doneWhen": "baseline/phase0.csv contains reproducible commands and measurements from two runs",
+  "files": [
+    "baseline/phase0.csv",
+    "baseline/phase0-run1.json",
+    "baseline/phase0-run2.json",
+    "scripts/verify-p0001-baseline.cjs"
+  ],
+  "signatures": [
+    "phase0.csv columns: run_id",
+    "commit",
+    "bundle",
+    "build_exit",
+    "build_ms",
+    "startup_ms",
+    "peak_rss_mb",
+    "console_errors",
+    "play_seconds",
+    "restart_ok; phase0-runN.json evidence object"
+  ],
+  "failingTest": "fixtures/failing-p0001-baseline.txt",
+  "testCommand": "node scripts/verify-p0001-baseline.cjs",
+  "deps": [
+    "JOB-000",
+    "JOB-001",
+    "JOB-002"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not modify game source, existing gameplay tests, images, planning docs, config, git, or external systems",
+    "create only exact owned files"
+  ]
+}
