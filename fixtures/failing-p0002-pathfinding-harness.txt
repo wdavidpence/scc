@@ -1,0 +1,3 @@
+CURRENT FAILURE: scripts/verify-pathfinding.cjs does not exist.
+Confirmed source defect: src2/engine/pathfinding.js line 94 destructures open.splice(bi, 1) incorrectly, causing NavGrid.findPath to return null.
+Required red harness outcome: open-route reconstruction fails specifically; blocked-goal, corner-cutting, and corridor-detour cases are also defined.

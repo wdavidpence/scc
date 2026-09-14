@@ -1,0 +1,23 @@
+{
+  "id": "P0.002",
+  "spec": "Add a failing pure-Node A* harness covering open route, blocked goal, no corner cutting, and corridor detour [P2][P3]",
+  "doneWhen": "node scripts/verify-pathfinding.cjs fails specifically at open-route reconstruction on current HEAD",
+  "files": [
+    "scripts/verify-pathfinding.cjs"
+  ],
+  "signatures": [
+    "NavGrid.findPath",
+    "NavGrid.walkable",
+    "NavGrid.lineClear"
+  ],
+  "failingTest": "fixtures/failing-p0002-pathfinding-harness.txt",
+  "testCommand": "node scripts/verify-pathfinding.cjs",
+  "deps": [
+    "P0.001"
+  ],
+  "diffCap": 250,
+  "forbiddenScope": [
+    "Do not modify pathfinding source, game source, existing tests, images, planning docs except ticket state, config, git, or external systems",
+    "create only scripts/verify-pathfinding.cjs"
+  ]
+}
