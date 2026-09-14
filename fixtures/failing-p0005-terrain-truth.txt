@@ -1,0 +1,4 @@
+CURRENT FAILURE: /Users/davidpence/scc-work/terrain_truth.json does not exist.
+No deterministic export enumerates all 120x80 terrain cells.
+No artifact currently compares terrain class/elevation against NavGrid solid, blocked, and walkable state with mismatch world coordinates.
+Expected current command result: node scripts/verify-terrain-truth.cjs exits nonzero because verifier/export seam and artifact are absent.

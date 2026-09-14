@@ -1257,12 +1257,16 @@ export class BattleScene extends Phaser.Scene {
     const solid = this.nav.solid;
     const rnd = this.rng();
     const ridges = [];
+    this.valleys = [];
     // 1) mid-map diagonal wall from top edge toward bottom, broken in the middle
     const wall = [];
     for (let ty = 6; ty < MAP_H - 6; ty++) {
       const cx = Math.round(MAP_W * 0.5 + Math.sin(ty * 0.09 + 1.7) * 11);
       for (let w = -2; w <= 2; w++) if (rnd() < 0.88) wall.push([cx + w, ty]);
-      if (ty > MAP_H * 0.42 && ty < MAP_H * 0.58) continue; // central valley gap
+      if (ty > MAP_H * 0.42 && ty < MAP_H * 0.58) {
+        for (let w = -2; w <= 2; w++) this.valleys.push([cx + w, ty]);
+        continue; // central valley gap
+      }
       const c2 = cx + 12 + Math.round(Math.sin(ty * 0.13) * 4);
       for (let w = -1; w <= 1; w++) if (rnd() < 0.85) wall.push([c2 + w, ty]); // broken eastern spur
     }
@@ -1604,6 +1608,90 @@ export class BattleScene extends Phaser.Scene {
     if (onCliff && !fromCliff) return !this.ramp[i];   // entering cliff wall unless ramp
     if (!onCliff && fromCliff) return !this.ramp[i];     // leaving cliff anywhere except ramp
     return false;
+  }
+
+  // P0.005: read-only terrain truth export over actual runtime fields/masks.
+  exportTerrainTruth() {
+    const nav = this.nav;
+    const canvas = this.terrainCanvas;
+    if (!nav || !canvas) throw new Error('Terrain truth requires live NavGrid and terrain canvas');
+    const { w, h, tileSize } = nav;
+    const pxw = canvas.width, pxh = canvas.height;
+    const cellCount = w * h;
+    const mountainSet = new Set((this.mountains || []).map(([tx, ty]) => `${tx},${ty}`));
+    const rockSet = new Set((this.rockTiles || []).map(({ tx, ty }) => `${tx},${ty}`));
+    const valleySet = new Set((this.valleys || []).map(([tx, ty]) => `${tx},${ty}`));
+    const classCounts = { mountain: 0, plateau: 0, cliff_edge: 0, ramp: 0, rock: 0, valley: 0, plain: 0 };
+    const navCounts = { solid: 0, blocked: 0, walkable: 0 };
+    const cells = [];
+    let mismatchCount = 0;
+
+    const elevAtTile = (tx, ty) => {
+      if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
+      return Number(this.elevAt((tx + 0.5) * tileSize, (ty + 0.5) * tileSize));
+    };
+    const isCliffEdge = (tx, ty, elevation, ramp) => {
+      if (!elevation || ramp) return false;
+      return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => elevAtTile(tx + dx, ty + dy) !== elevation);
+    };
+
+    for (let ty = 0; ty < h; ty++) {
+      for (let tx = 0; tx < w; tx++) {
+        const i = nav.idx(tx, ty);
+        const key = `${tx},${ty}`;
+        const world_x = (tx + 0.5) * tileSize;
+        const world_y = (ty + 0.5) * tileSize;
+        const elevation = Number(this.elevAt(world_x, world_y));
+        const isRamp = Boolean(this.ramp && this.ramp[i]);
+        const isMountain = mountainSet.has(key);
+        const isValley = valleySet.has(key);
+        const isRock = rockSet.has(key) || tx === 0 || ty === 0 || tx === w - 1 || ty === h - 1;
+        const cliffEdge = isCliffEdge(tx, ty, elevation, isRamp);
+        const terrain_class = isRamp ? 'ramp'
+          : isValley ? 'valley'
+            : cliffEdge ? 'cliff_edge'
+              : isMountain ? 'mountain'
+                : isRock ? 'rock'
+                  : elevation ? 'plateau' : 'plain';
+        const nav_solid = Boolean(nav.solid[i]);
+        const nav_blocked = Boolean(nav.blocked[i]);
+        const nav_blocked_by = Number(nav.blockedBy[i]);
+        const walkable = Boolean(nav.walkable(tx, ty));
+        const reasons = [];
+
+        classCounts[terrain_class]++;
+        if (nav_solid) navCounts.solid++;
+        if (nav_blocked) navCounts.blocked++;
+        if (walkable) navCounts.walkable++;
+
+        if (cliffEdge && !nav_solid) reasons.push('non-ramp cliff/elevation transition lacks terrain-solid blocking');
+        if (isRock && !nav_solid && nav_blocked) {
+          reasons.push(`rock cell represented only by blockedBy/dynamic blocking (blockedBy=${nav_blocked_by}) rather than terrain solid`);
+        }
+        if (isMountain && !nav_solid) reasons.push('mountain cell not solid in NavGrid');
+        if (isMountain && elevation !== 0) reasons.push('mountain cell overlaps elevation mask');
+        if (isValley && nav_solid) reasons.push('valley cell obstructed by solid NavGrid mask');
+        if (isValley && elevation !== 0) reasons.push('valley cell has high-ground elevation');
+        if (terrain_class === 'ramp' && nav_solid) reasons.push('ramp cell marked solid in NavGrid');
+        if (terrain_class === 'plain' && nav_solid) reasons.push('plain cell marked solid in NavGrid');
+        if (terrain_class === 'plateau' && nav_solid) reasons.push('plateau interior marked solid in NavGrid');
+        if (walkable !== (!nav_solid && !nav_blocked)) reasons.push('NavGrid.walkable disagrees with solid and blocked masks');
+
+        const mismatch = reasons.length > 0;
+        if (mismatch) mismatchCount++;
+        cells.push({ tx, ty, world_x, world_y, terrain_class, elevation, nav_solid, nav_blocked, nav_blocked_by, walkable, mismatch, mismatch_reason: reasons.join('; ') });
+      }
+    }
+
+    return {
+      summary: {
+        total_cells: cellCount,
+        mismatch_count: mismatchCount,
+        dimensions: { w, h, tileSize, pxw, pxh },
+        counts: { by_terrain_class: classCounts, by_nav_truth: navCounts },
+      },
+      cells,
+    };
   }
 
   // SC1: destructible rocks crack and shatter under fire, opening new paths

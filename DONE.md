@@ -10,3 +10,4 @@
 - P0.002 — pure-Node four-case pathfinding harness committed in expected-red state; open-route reconstruction returns null and gate exits 1 as specified.
 - P0.003 — corrected A* entry extraction with a one-line source replacement; pathfinding harness 4/4 PASS and production build PASS.
 - P0.004 — failed ground A* now returns a legal nearest-reachable partial route; 100/100 trials avoid solid cells and emit explicit unreachable feedback within 3.873 ms maximum.
+- P0.005 — deterministic runtime terrain-truth export covers all 25,600 cells; reports 286 coordinate-specific mismatches including cliff, rock, valley, mountain/elevation, and ramp defects.

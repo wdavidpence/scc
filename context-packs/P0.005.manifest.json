@@ -1,0 +1,32 @@
+{
+  "id": "P0.005",
+  "spec": "Build a terrain-truth exporter comparing rendered mountain/ramp/valley cells with NavGrid solid and elevation masks [P2][P3]",
+  "doneWhen": "terrain_truth.json contains exactly 25600 cells for the live 160x160 map and every mismatch contains numeric world_x and world_y coordinates",
+  "files": [
+    "src2/scenes/BattleScene.js",
+    "src2/engine/pathfinding.js",
+    "scripts/verify-terrain-truth.cjs",
+    "terrain_truth.json"
+  ],
+  "signatures": [
+    "BattleScene.buildTerrain",
+    "BattleScene.buildMountains",
+    "BattleScene.elevAt",
+    "NavGrid.solid",
+    "NavGrid.blocked",
+    "NavGrid.walkable"
+  ],
+  "failingTest": "fixtures/failing-p0005-terrain-truth.txt",
+  "testCommand": "node scripts/verify-terrain-truth.cjs",
+  "deps": [
+    "P0.003"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Instrumentation only: restore original RNG semantics",
+    "remove unused NavGrid additions",
+    "do not fix or hide terrain mismatches",
+    "do not modify other source, existing tests, images, planning docs except ticket state, config, git, or external systems",
+    "keep artifact deterministic and compact"
+  ]
+}
