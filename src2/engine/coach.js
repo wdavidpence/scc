@@ -92,6 +92,8 @@ export class Coach {
       b.scale.off('resize', this._onResize);
     });
 
+    // No upkeep in the sim: objectives are the coach steps themselves.
+    b.objectives = [{ id: 'training', text: 'TRAINING SIM — follow the pulsing rings (step 1/12)', done: false }];
     b.events.emit('hud:alert', 'TRAINING MODE — WEAKENED ENEMY · FOLLOW THE PULSING RINGS');
     this.showStep(0);
   }
@@ -261,6 +263,7 @@ export class Coach {
     if (!s) { this.finish(true); return; }
     this.bar.setText(`TRAINING ${i + 1}/${this.steps.length} — ${s.tip}`);
     this.sub.setText(s.sub || '');
+    if (b.objectives && b.objectives[0]) b.objectives[0].text = `TRAINING SIM — ${s.tip} (${i + 1}/${this.steps.length})`;
     b.audio?.objective?.();
     if (s.pre) s.pre();
     if (s.mode === 'world' || s.mode === 'rightworld') {
