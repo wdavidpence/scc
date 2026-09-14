@@ -1,0 +1,3 @@
+CURRENT FAILURE: no real-browser paired-order evidence exists.
+Production code distinguishes flying and ground in Unit.repath, but no gate proves a real Wraith crosses solid mountain terrain on a straight trajectory while a Marine issued the same order takes a legal flat-valley route and both arrive.
+Required evidence: actual BattleScene.spawnUnit instances, identical start/goal, direct air path crossing >=1 solid cell, ground path entering 0 solid cells and using a registered valley, both arrival error <=16px, labeled real-game screenshot.

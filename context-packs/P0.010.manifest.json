@@ -1,0 +1,26 @@
+{
+  "id": "P0.010",
+  "spec": "Preserve direct terrain crossing exclusively for flying units [P1][P2]",
+  "doneWhen": "One real Wraith and one real Marine receive identical endpoints; air trajectory directness ratio <= 1.05 and crosses >=1 solid cell; ground trajectory enters 0 solid cells, uses >=1 registered valley cell, and has path distance > air distance; both arrival errors <=16px; labeled screenshot exists at >=1280x720",
+  "files": [
+    "src2/engine/entity.js",
+    "src2/scenes/BattleScene.js",
+    "scripts/verify-air-ground-routing.cjs",
+    "verify/p0010-air-ground-routing.png"
+  ],
+  "signatures": [
+    "Unit.repath",
+    "Unit.stepAlongPath",
+    "BattleScene.spawnUnit"
+  ],
+  "failingTest": "fixtures/failing-p0010-air-ground-routing.txt",
+  "testCommand": "node scripts/verify-air-ground-routing.cjs",
+  "deps": [
+    "P0.008"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "If current behavior passes, modify only harness/screenshot and leave production source unchanged",
+    "do not alter unit stats, terrain, pathfinding algorithms, orders, AI, balance, images other than owned screenshot, planning docs except ticket state, config, git, or external systems"
+  ]
+}

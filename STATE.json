@@ -165,18 +165,20 @@
     },
     {
       "id": "P0.010",
-      "status": "ready",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
       "dependencies": [
         "P0.008"
       ],
-      "attempts": 0,
-      "context_pack": null,
+      "attempts": 3,
+      "context_pack": "context-packs/P0.010.md",
       "done_when": "paired air/ground orders show air straight-line travel and ground legal-valley routing",
       "estimate": "3h",
-      "task": "Preserve direct terrain crossing exclusively for flying units [P1][P2]"
+      "task": "Preserve direct terrain crossing exclusively for flying units [P1][P2]",
+      "started_at": "2026-09-14T22:25:40Z",
+      "completed_at": "2026-09-14T23:16:53Z"
     },
     {
       "id": "P0.011",
