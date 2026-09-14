@@ -14,6 +14,7 @@ import { CH } from '../engine/chrome.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
 import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
+import { Coach } from '../engine/coach.js';
 import { PolishFX } from '../engine/polish.js';
 
 const FOGRES = 4;   // v2.44: fog/intel canvas pixels per tile — smooth vision edges
@@ -42,7 +43,7 @@ export class BattleScene extends Phaser.Scene {
     this.hotseat = !!data.hotseat;
     this.mission = data.mission || null;
     this.campaign = data.campaign || null;
-    this.tutorialMode = !!data.tutorial;
+    this.tutorialMode = !!data.tutorial || !!(data.mission && data.mission.tutorial);
     this.mods = data.mods || (this.mission ? this.mission.mods : null) || {};
     // F5: difficulty profiles — build orders/aggression, not just stat multipliers
     this.aiProfile = data.difficulty === 'hard'
@@ -50,9 +51,13 @@ export class BattleScene extends Phaser.Scene {
       : data.difficulty === 'easy'
         ? { income: 0.4, armyCap: 8, threshold: 1.5, attackGap: 60, harassAt: 110, rushBuilds: [], rushAt: 1e9, workers: 8, flankSplit: 0.8 }
         : { income: 1.1, armyCap: 18, threshold: 1.15, attackGap: 45, harassAt: 65, rushBuilds: [], rushAt: 1e9, workers: 12, flankSplit: 0.7 };
+    // TRAINING SIM: crippled enemy AI — first mission / tutorial flag
+    if (this.tutorialMode) {
+      this.aiProfile = { income: 0.05, armyCap: 2, threshold: 99, attackGap: 1e9, harassAt: 1e9, rushBuilds: [], rushAt: 1e9, workers: 3, flankSplit: 1, doctrine: 'sim' };
+    }
     // AAA: AI personality tiers — each difficulty rolls a NAMED commander doctrine
     this.aiCommander = pickCommander(this.enemyRace || 'skarn', data.difficulty);
-    if (this.aiCommander) {
+    if (this.aiCommander && !this.tutorialMode) {
       Object.assign(this.aiProfile, this.aiCommander.mods);
       this.aiProfile.doctrine = this.aiCommander.id;
     }
@@ -110,17 +115,20 @@ export class BattleScene extends Phaser.Scene {
     this.tut = null;             // F10 tutorial state
     // AAA: AI personality — named commander doctrine rolled per race+difficulty
     try {
-      this.aiCommander = pickCommander(this.enemyRace || 'skarn', this.difficulty);
-      if (this.aiCommander) {
-        Object.assign(this.aiProfile, this.aiCommander.mods);
-        this.aiProfile.doctrine = this.aiCommander.id;
+      if (!this.tutorialMode) {
+        this.aiCommander = pickCommander(this.enemyRace || 'skarn', this.difficulty);
+        if (this.aiCommander) {
+          Object.assign(this.aiProfile, this.aiCommander.mods);
+          this.aiProfile.doctrine = this.aiCommander.id;
+        }
       }
     } catch (e) { /* noop */ }
     // ---- mission objectives (F10) ----
     this.objectives = this.buildObjectives();
     this.mods = this.applyMissionMods();
     // AAA: data-driven mission triggers (time-based reinforcement drops, zone alerts)
-    this.triggers = new Triggers([
+    // v2.65: TRAINING SIM suppresses hostile reinforcement waves
+    this.triggers = new Triggers(this.tutorialMode ? [] : [
       { id: 'mid-reinforce', when: 'time', t: 150, msg: 'Sensors detect warp-in signatures — enemy reinforcements dropping.', bark: true, barkPitch: 0.7, spawn: [{ kind: this.enemyRace === 'skarn' ? 'skarnling' : this.enemyRace === 'auraxis' ? 'bladeguard' : 'marine', team: 1, fx: 0.82, fy: 0.14 }, { kind: this.enemyRace === 'skarn' ? 'skarnling' : this.enemyRace === 'auraxis' ? 'bladeguard' : 'marine', team: 1, fx: 0.86, fy: 0.18 }, { kind: this.enemyRace === 'skarn' ? 'razorspine' : this.enemyRace === 'auraxis' ? 'sentinel' : 'incinerator', team: 1, fx: 0.84, fy: 0.22 }] },
       { id: 'late-reinforce', when: 'time', t: 300, msg: 'Massive bio/contact signature inbound. Hold the line.', bark: true, barkPitch: 0.6, spawn: [{ kind: this.enemyRace === 'skarn' ? 'razorspine' : this.enemyRace === 'auraxis' ? 'nightblade' : 'tank', team: 1, fx: 0.8, fy: 0.12 }, { kind: this.enemyRace === 'skarn' ? 'vexwing' : this.enemyRace === 'auraxis' ? 'ark' : 'wraith', team: 1, fx: 0.88, fy: 0.1 }] },
       { id: 'near-base-alert', when: 'near:0.30,0.30,140', msg: 'Hostiles inside our perimeter!', bark: true, barkPitch: 1.05 },
@@ -281,8 +289,8 @@ export class BattleScene extends Phaser.Scene {
       this.perks = { flag: !!this.campaign.owned.pk_flag, chrome: !!this.campaign.owned.pk_chrome, skins: !!this.campaign.owned.pk_skins };
       for (const u of this.units) if (u.team === 0) this.veteranFlag(u);
     }
-    // F10: tutorial mode
-    if (this.tutorialMode) { this.players[0].minerals += 1200; this.players[0].gas += 800; this.startTutorial(); }
+    // F10: tutorial mode — v2.65 forced-click coach (also mission.tutorial training sims)
+    if (this.tutorialMode) { this.players[0].minerals += 400; this.players[0].gas += 200; this.coach = new Coach(this); }
     // SC-style in-mission radio chatter
     if (!this.tutorialMode && this.mission) {
       this.chatter = missionChatter(this.mission.n, this.enemyRace);
@@ -1759,7 +1767,7 @@ export class BattleScene extends Phaser.Scene {
       this.events.emit('hud:alert', '⚠ ENEMY COMMAND CENTER DEPLOYING', 0xff5c5c);
       this.audio?.underAttackBark?.();
     }
-    if (u.team === 0) { this.selectedBuilding = b; this.events.emit('hud:selection', this.selectionInfo()); }
+    if (u.team === 0) { this.selectedBuilding = b; this.events.emit('hud:selection', { building: { buildId: b.buildId, name: b.def.name, hp: Math.ceil(b.hp), maxHp: b.maxHp, queue: b.queue.map(q => ({ kind: q.kind || q.research, remaining: Math.ceil(q.remaining), label: UNITS[q.kind]?.name || TECHS[q.research]?.name })), canProduce: Object.keys(UNITS).filter(k => UNITS[k].build === b.buildId && b.canProduce(k)) } }); }
     return true;
   }
 
@@ -2503,6 +2511,8 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerdown', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['down', p.button, Math.round(p.x), Math.round(p.y)]);
       const wp = this.worldFor(p);
+      // v2.65 forced-click coach gate: swallow off-target gestures before any selection bookkeeping
+      if (this.coach && this.coach.active && this.coach.onDown(p)) return;
       if (this.ultMode) { this.castUltimate(wp.x, wp.y); return; }
       if (this.scanMode) { this.scannerSweep(wp.x, wp.y); this.cancelScan(); return; }
       if (this.castMode) {
@@ -2685,6 +2695,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
     // v2.45: D = deploy MCV-class starter into Command Center
     this.input.keyboard.on('keydown-D', () => {
+      if (this.coach && this.coach.active) return; // v2.65: forced-click coach owns the deploy lesson
       const u = [...this.selection].find(x => x.def.mcv && !x.dead && x.team === (this.activeTeam ?? 0));
       if (u) this.deployMCV(u);
     });
@@ -2841,7 +2852,7 @@ export class BattleScene extends Phaser.Scene {
   selectionInfo() {
     return {
       count: this.selection.size,
-      units: [...this.selection].map(u => ({ kind: u.kind, name: u.def.name, hp: Math.ceil(u.hp), maxHp: u.maxHp, shield: Math.ceil(u.shield), maxShield: u.maxShield, energy: u.maxEnergy ? Math.ceil(u.energy) : null, maxEnergy: u.maxEnergy || null, level: u.level || 0, cargo: u.cargo, sieged: !!u.sieged, burrowed: !!u.burrowed }))
+      units: [...this.selection].map(u => ({ kind: u.kind, name: u.def.name, hp: Math.ceil(u.hp), maxHp: u.maxHp, shield: Math.ceil(u.shield), maxShield: u.maxShield, energy: u.maxEnergy ? Math.ceil(u.energy) : null, maxEnergy: u.maxEnergy || null, level: u.level || 0, cargo: u.cargo, sieged: !!u.sieged, burrowed: !!u.burrowed, mcv: !!u.def.mcv, worker: !!u.def.worker }))
     };
   }
 
@@ -2852,6 +2863,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   rightClickOrder(wp, shift, alt) {
+    if (this.coach && this.coach.active && this.coach.gateRight(wp)) return; // v2.65 forced-click gate
     this.cmdCount++;
     this.showOrderMarker(wp.x, wp.y);
     // AAA/SC1: Alt+right-click movement subgroups — each alt-click selects the NEXT batch of units
@@ -3914,6 +3926,7 @@ export class BattleScene extends Phaser.Scene {
     this.updateAmbient(dt);
     this.updateLighting(dt);
     this.updateTutorial();
+    if (this.coach && this.coach.active) this.coach.tick(dt);
 
     // income trickle from assigned gas (simplification: gas income via worker returns only)
     // supply check
@@ -3955,6 +3968,19 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- AI ----------------
   updateAI(dt) {
+    // v2.65 TRAINING SIM: crippled enemy — farms its own minerals, deploys its base, never attacks
+    if (this.tutorialMode) {
+      const p1 = this.players[1];
+      p1.minerals += dt * 0.12;
+      const aiMCV = this.units.find(u => !u.dead && u.team === 1 && u.def.mcv);
+      if (aiMCV && this.gameTime > 14 && (!aiMCV.order || aiMCV.order.type !== 'move')) {
+        let best = null, bd = 1e9;
+        for (const m of this.minerals) { if (m.amount <= 0) continue; const d = Math.hypot(m.x - aiMCV.x, m.y - aiMCV.y); if (d < bd) { bd = d; best = m; } }
+        if (this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, 1)) this.deployMCV(aiMCV, true);
+        else if (best) { const ang = Math.random() * Math.PI * 2; aiMCV.issueMove(best.x + Math.cos(ang) * TILE * 3, best.y + Math.sin(ang) * TILE * 3, false); }
+      }
+      return;
+    }
     // hot-seat: the active team is human-controlled — that side's commander stands down
     if (this.hotseat) {
       const p = this.players[1];

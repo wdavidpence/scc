@@ -3,7 +3,7 @@
 const KEY = 'starfr…n.v1';
 
 export const MISSIONS = [
-  { n: 1, name: 'CLEANUP OP', enemy: 'skarn', difficulty: 'easy', bonusMinerals: 200, brief: 'Scattered Skarn remains. Establish a base and purge the area.' },
+  { n: 1, name: 'TRAINING SIM', enemy: 'skarn', difficulty: 'easy', bonusMinerals: 500, tutorial: true, brief: 'Simulated combat conditions. The enemy sim is crippled. Learn the chain: deploy your base, mine, build, train, attack.' },
   { n: 2, name: 'FIRST CONTACT', enemy: 'skarn', difficulty: 'normal', bonusMinerals: 100, brief: 'A coordinated Skarn force has landed. Hold the line.' },
   { n: 3, name: 'FIRE AND FURY', enemy: 'terran', difficulty: 'normal', bonusMinerals: 50, brief: 'Renegade Terran warlord contests the sector.' },
   { n: 4, name: 'PSI STORM', enemy: 'auraxis', difficulty: 'normal', bonusMinerals: 0, brief: 'The Adept have arrived. Their shields are strong; overwhelm them.' },

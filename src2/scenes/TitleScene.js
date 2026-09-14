@@ -496,6 +496,30 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
+  launchTutorial() {
+    // v2.65: standalone training sim — coach-driven, crippled enemy, no upkeep
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
+    this.endAttract();
+    try { localStorage.setItem('starfront.cutseen.v1', '1'); } catch (e) { /* private mode */ }
+    cin.whoosh(0.6);
+    this.scene.start('Battle', {
+      race: this.pick.race, enemyRace: this.pick.enemy,
+      difficulty: 'easy', tutorial: true, campaign: this.camp,
+    });
+  }
+
+  launchHotseat() {
+    // v2.65 fix: button existed but method never did — click threw TypeError
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
+    this.endAttract();
+    try { localStorage.setItem('starfront.cutseen.v1', '1'); } catch (e) { /* private mode */ }
+    cin.whoosh(0.6);
+    this.scene.start('Battle', {
+      race: this.pick.race, enemyRace: this.pick.race,
+      difficulty: 'normal', hotseat: true,
+    });
+  }
+
   playIntro() {
     try { localStorage.setItem(TITLE_INTRO_SEEN_KEY, '1'); } catch (e) { /* private mode */ }
     this.endAttract();

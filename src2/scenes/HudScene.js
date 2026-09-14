@@ -496,6 +496,8 @@ export class HudScene extends Phaser.Scene {
       },
       setPosition(nx, ny) { this.x = nx; this.y = ny; bg.setPosition(nx, ny); brd.setPosition(nx, ny); txt.setPosition(nx + w / 2, chipKey ? ny + h / 2 + 5 : ny + h / 2); hit.setPosition(nx, ny); if (chip) chip.setPosition(nx + 11, ny + 11); if (chip && chip._hk) chip._hk.setPosition(nx + w - 4, ny + 4); if (this.disabled) self.redrawDisabled(); } };
     hit.on('pointerdown', () => {
+      // v2.65 forced-click coach gate: during a forced BUTTON step, only the highlighted button acts
+      { const bT = self.scene.get('Battle'); if (bT && bT.coach && bT.coach.active && !bT.coach.allowHudBtn(btn)) { bT.coach.nudge('CLICK THE HIGHLIGHTED BUTTON'); return; } }
       if (btn.disabled) { const ctx = self.disCtx(btn._disReason); self.scene.get('Battle').audio?.announcer?.(ctx); self.flashNotEnough(self.disMsg(btn._disReason)); return; }
       self.flash(bg); self.scene.get('Battle').audio?.uiClick?.(); cb();
     });
@@ -729,7 +731,7 @@ export class HudScene extends Phaser.Scene {
         if (b.hasBuilding('scienceFacility', 0)) rows.push('__scan');
       }
       // v2.46: DEPLOY button when an MCV-class vehicle is selected
-      if ((info.units || []).some(u => u.def && u.def.mcv)) rows.unshift('__deploy');
+      if ((info.units || []).some(u => u.mcv || (u.def && u.def.mcv))) rows.unshift('__deploy');
       let i = 0;
       const cols = Math.max(1, Math.min(5, Math.floor((this.W - 24) / 74)));
       const abil = {
