@@ -1,0 +1,22 @@
+{
+  "id": "JOB-002-SAMPLE",
+  "spec": "Fix confirmed pathfinding.js:94 array-destructuring failure",
+  "doneWhen": "node scripts/verify-pathfinding.cjs exits 0",
+  "files": [
+    "src2/engine/pathfinding.js",
+    "scripts/verify-pathfinding.cjs"
+  ],
+  "signatures": [
+    "NavGrid.findPath",
+    "NavGrid.walkable"
+  ],
+  "failingTest": "fixtures/failing-pathfinding-test.txt",
+  "testCommand": "node scripts/verify-pathfinding.cjs",
+  "deps": [
+    "JOB-000"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not modify source outside owned files, existing tests, images, config, git, DIGEST.md, or STARCRAFT_TEARDOWN.md"
+  ]
+}

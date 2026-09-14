@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextPackManifest",
+  "type": "object",
+  "required": ["id", "spec", "doneWhen", "files", "signatures", "failingTest", "testCommand", "deps", "diffCap", "forbiddenScope"],
+  "properties": {
+    "id": { "type": "string" },
+    "spec": { "type": "string" },
+    "doneWhen": { "type": "string" },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "signatures": { "type": "array", "items": { "type": "string" } },
+    "failingTest": { "type": "string" },
+    "testCommand": { "type": "string" },
+    "deps": { "type": "array", "items": { "type": "string" } },
+    "diffCap": { "type": "integer" },
+    "forbiddenScope": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

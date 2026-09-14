@@ -1,0 +1,3 @@
+TypeError: Cannot read properties of undefined (reading 'get')
+    at NavGrid.findPath (src2/engine/pathfinding.js:110:20)
+FAIL: pathfinding A* search aborted at node 0
