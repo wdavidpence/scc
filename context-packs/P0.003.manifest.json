@@ -1,0 +1,23 @@
+{
+  "id": "P0.003",
+  "spec": "Correct the A* heap-entry extraction defect without changing public NavGrid signatures [P2][P3]",
+  "doneWhen": "verify-pathfinding passes 4/4 and changed source is ≤20 lines",
+  "files": [
+    "src2/engine/pathfinding.js"
+  ],
+  "signatures": [
+    "NavGrid.findPath",
+    "NavGrid.walkable",
+    "NavGrid.lineClear"
+  ],
+  "failingTest": "fixtures/failing-p0003-pathfinding.txt",
+  "testCommand": "node scripts/verify-pathfinding.cjs",
+  "deps": [
+    "P0.002"
+  ],
+  "diffCap": 20,
+  "forbiddenScope": [
+    "Do not modify the harness, other source, existing tests, images, planning docs except ticket state, config, git, or external systems",
+    "change only src2/engine/pathfinding.js and preserve public signatures"
+  ]
+}

@@ -1,0 +1,6 @@
+FAIL OPEN_ROUTE_RECONSTRUCTION: findPath(5, 5, 75, 75) returned null; expected non-null route (open.splice destructure defect in pathfinding.js:94)
+FAIL BLOCKED_GOAL_SNAP: findPath returned null; expected route to snap to legal endpoint near blocked goal (7, 7)
+FAIL NO_CORNER_CUTTING: findPath returned null; expected route navigating around solid corner (2,1)/(1,2)
+FAIL VALLEY_GAP_DETOUR: findPath returned null; expected detour route navigating through valley gap at (4, 3)
+GATE-P0.002 EXPECTED-RED
+Exit: 1

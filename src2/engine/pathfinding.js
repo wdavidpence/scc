@@ -91,7 +91,7 @@ export class NavGrid {
       // pop lowest f (small maps: linear scan ok at our scale with throttling)
       let bi = 0, bf = Infinity;
       for (let i = 0; i < open.length; i++) { if (open[i][1] < bf) { bf = open[i][1]; bi = i; } }
-      const [cur, f] = open.splice(bi, 1);
+      const [[cur, f]] = open.splice(bi, 1);
       const cx = cur % w, cy = (cur / w) | 0;
       if (cur === goal) {
         const path = [];
