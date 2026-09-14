@@ -1,0 +1,29 @@
+{
+  "id": "P0.007",
+  "spec": "Author explicit two-tile-or-wider ramps connecting each plateau to flat ground [P2]",
+  "doneWhen": "Exactly 3 live elevation plateau components each have >=1 contiguous walkable ramp group width >=2, ramp solid count === 0, illegal non-ramp cliff crossing count === 0, and terrain-truth verifier exits 0 with cliff-edge class count > 0 and unblocked cliff mismatch count === 0",
+  "files": [
+    "src2/scenes/BattleScene.js",
+    "scripts/verify-plateau-ramps.cjs",
+    "scripts/verify-terrain-truth.cjs",
+    "terrain_truth.json"
+  ],
+  "signatures": [
+    "BattleScene.blockTerrain",
+    "BattleScene.buildTerrain",
+    "BattleScene.buildMountains",
+    "BattleScene.exportTerrainTruth",
+    "validateSchema"
+  ],
+  "failingTest": "fixtures/failing-p0007-plateau-ramps.txt",
+  "testCommand": "node scripts/verify-plateau-ramps.cjs && node scripts/verify-terrain-truth.cjs",
+  "deps": [
+    "P0.006"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not change NavGrid or Unit source",
+    "do not alter plateau shapes, elevation generation, mountain continuity, valley geometry, HQ zones, flying behavior, economy, combat, images, planning docs except ticket state, config, git, or external systems",
+    "preserve open rock mismatch assertion for P0.008"
+  ]
+}

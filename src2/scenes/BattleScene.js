@@ -1346,6 +1346,20 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // clear mountain overlap with authored ramp cells generically
+    if (this.ramp) {
+      const rampCarved = [];
+      this.mountains = this.mountains.filter(([mx, my]) => {
+        if (this.ramp[my * MAP_W + mx]) {
+          solid[this.nav.idx(mx, my)] = 0;
+          rampCarved.push([mx, my]);
+          return false;
+        }
+        return true;
+      });
+      this.connectivityCorridors.push(...rampCarved);
+    }
+
     // clear rock blockers from valley cells to ensure valleys are fully walkable
     if (this.rockTiles && this.valleys.length) {
       const vset = new Set(this.valleys.map(([vx, vy]) => `${vx},${vy}`));
@@ -1397,6 +1411,26 @@ export class BattleScene extends Phaser.Scene {
     for (let ty = 0; ty < MAP_H; ty++) { this.nav.solid[this.nav.idx(0, ty)] = 1; this.nav.solid[this.nav.idx(MAP_W - 1, ty)] = 1; }
     for (const m of this.minerals) { this.nav.blockRect(-3, Math.floor(m.x / TILE), Math.floor(m.y / TILE), Math.floor(m.x / TILE), Math.floor(m.y / TILE)); }
     for (const g of this.geysers) { this.nav.blockRect(-4, Math.floor(g.x / TILE) - 1, Math.floor(g.y / TILE) - 1, Math.floor(g.x / TILE) + 1, Math.floor(g.y / TILE) + 1); }
+
+    // P0.007: mark non-ramp cliff/elevation edges solid, explicitly keep authored ramp cells non-solid
+    if (this.elev && this.ramp) {
+      for (let ty = 0; ty < MAP_H; ty++) {
+        for (let tx = 0; tx < MAP_W; tx++) {
+          const i = ty * MAP_W + tx;
+          if (this.elev[i] && !this.ramp[i]) {
+            const isEdge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+              const nx = tx + dx, ny = ty + dy;
+              if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) return false;
+              return this.elev[ny * MAP_W + nx] !== this.elev[i];
+            });
+            if (isEdge) this.nav.solid[i] = 1;
+          }
+        }
+      }
+      for (let i = 0; i < this.ramp.length; i++) {
+        if (this.ramp[i]) this.nav.solid[i] = 0;
+      }
+    }
   }
   // ---------------- fog of war ----------------
   createFog() {

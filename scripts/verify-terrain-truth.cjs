@@ -210,7 +210,8 @@ function validateSchema(data) {
   if (summary.mismatch_count !== mismatchesFound) {
     throw new Error(`summary.mismatch_count (${summary.mismatch_count}) does not match actual mismatch count (${mismatchesFound})`);
   }
-  if (!cliffCandidates) throw new Error('No observed non-ramp cliff-edge solidity mismatch was covered');
+  if (classCounts.cliff_edge <= 0) throw new Error('No observed cliff-edge coverage in terrain export');
+  if (cliffCandidates !== 0) throw new Error(`Expected 0 unblocked cliff-edge solidity mismatches, got ${cliffCandidates}`);
   if (!rockCandidates) throw new Error('No observed rock dynamic-blocking solidity mismatch was covered');
 }
 

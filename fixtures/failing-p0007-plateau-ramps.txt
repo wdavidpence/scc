@@ -1,0 +1,6 @@
+CURRENT FAILURE from terrain_truth.json:
+- 76 non-ramp cliff/elevation edge cells lack NavGrid solid blocking.
+- 1 authored ramp cell at tx=76,ty=35 is solid due to mountain overlap.
+- Ground paths can cross elevation transitions outside ramps.
+Existing model: 3 four-connected elevation plateaus and 9 ramp cells arranged as three 3-cell ramp groups.
+Required gate: each plateau has >=1 contiguous ramp group width >=2; all ramps solid===0 and walkable; no ground path segment or lineClear crosses a non-ramp elevation edge; mountain/valley/HQ/flying regressions pass.

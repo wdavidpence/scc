@@ -12,3 +12,4 @@
 - P0.004 — failed ground A* now returns a legal nearest-reachable partial route; 100/100 trials avoid solid cells and emit explicit unreachable feedback within 3.873 ms maximum.
 - P0.005 — deterministic runtime terrain-truth export covers all 25,600 cells; reports 286 coordinate-specific mismatches including cliff, rock, valley, mountain/elevation, and ramp defects.
 - P0.006 — continuous solid mountain bodies verified across three RNG cases; 125/125 flat valley cells stay walkable per case, HQ connectivity passes 3/3, and valley obstruction mismatches fall from 109 to 0.
+- P0.007 — three plateau components each have a 3-cell walkable ramp; 91 non-ramp cliff edges are solid with zero line-clear/path crossing leaks; cliff and ramp mismatches fall to 0.
