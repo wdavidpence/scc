@@ -1262,13 +1262,13 @@ export class BattleScene extends Phaser.Scene {
     const wall = [];
     for (let ty = 6; ty < MAP_H - 6; ty++) {
       const cx = Math.round(MAP_W * 0.5 + Math.sin(ty * 0.09 + 1.7) * 11);
-      for (let w = -2; w <= 2; w++) if (rnd() < 0.88) wall.push([cx + w, ty]);
       if (ty > MAP_H * 0.42 && ty < MAP_H * 0.58) {
         for (let w = -2; w <= 2; w++) this.valleys.push([cx + w, ty]);
         continue; // central valley gap
       }
+      for (let w = -2; w <= 2; w++) wall.push([cx + w, ty]);
       const c2 = cx + 12 + Math.round(Math.sin(ty * 0.13) * 4);
-      for (let w = -1; w <= 1; w++) if (rnd() < 0.85) wall.push([c2 + w, ty]); // broken eastern spur
+      for (let w = -1; w <= 1; w++) wall.push([c2 + w, ty]); // broken eastern spur
     }
     ridges.push(wall);
     // 2) two horizontal ridge fingers from west and east edges, leaving two lanes each
@@ -1279,7 +1279,7 @@ export class BattleScene extends Phaser.Scene {
         for (let tx = side ? MAP_W * 0.58 : MAP_W * 0.08; tx < (side ? MAP_W - 6 : MAP_W * 0.46); tx++) {
           const ty = Math.round(MAP_H * fy + Math.sin(tx * 0.11 + fy * 9) * 5);
           if (lanes.some(L => tx > MAP_W * L - 4 && tx < MAP_W * L + 4)) continue; // carved lane
-          for (let h = -1; h <= 1; h++) if (rnd() < 0.9) finger.push([tx, ty + h]);
+          for (let h = -1; h <= 1; h++) finger.push([tx, ty + h]);
         }
         ridges.push(finger);
       }
@@ -1291,7 +1291,7 @@ export class BattleScene extends Phaser.Scene {
       const kr = 2 + ((rnd() * 3) | 0);
       for (let dy = -kr; dy <= kr; dy++) for (let dx = -kr; dx <= kr; dx++) {
         if (dx * dx + dy * dy > kr * kr) continue;
-        if (rnd() < 0.82) knolls.push([kx + dx, ky + dy]);
+        knolls.push([kx + dx, ky + dy]);
       }
     }
     ridges.push(knolls);
@@ -1332,6 +1332,7 @@ export class BattleScene extends Phaser.Scene {
       }
       return touchedB;
     };
+    this.connectivityCorridors = [];
     let carveGuard = 0;
     while (!pass() && carveGuard++ < 40) {
       // carve a 2-wide jagged corridor at a random diagonal crossing point of the mid band
@@ -1340,7 +1341,25 @@ export class BattleScene extends Phaser.Scene {
         const ty = midY + Math.round(Math.sin(tx * 0.35 + carveGuard) * 2);
         solid[this.nav.idx(tx, ty)] = 0;
         solid[this.nav.idx(tx, ty + 1)] = 0;
+        this.connectivityCorridors.push([tx, ty], [tx, ty + 1]);
         this.mountains = this.mountains.filter(([mx, my]) => !(mx === tx && (my === ty || my === ty + 1)));
+      }
+    }
+
+    // clear rock blockers from valley cells to ensure valleys are fully walkable
+    if (this.rockTiles && this.valleys.length) {
+      const vset = new Set(this.valleys.map(([vx, vy]) => `${vx},${vy}`));
+      const toRemove = this.rockTiles.filter(r => vset.has(`${r.tx},${r.ty}`));
+      if (toRemove.length) {
+        this.rockTiles = this.rockTiles.filter(r => !vset.has(`${r.tx},${r.ty}`));
+        if (this.children && this.children.list) {
+          for (const r of toRemove) {
+            for (const c of [...this.children.list]) {
+              if (c.type === 'Image' && c.texture && (/^ai-rock/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
+                  Math.abs(c.x - (r.tx * TILE + 8)) < 9 && Math.abs(c.y - (r.ty * TILE + 8)) < 9) c.destroy();
+            }
+          }
+        }
       }
     }
 

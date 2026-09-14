@@ -1,0 +1,5 @@
+CURRENT FAILURE from deterministic live terrain truth:
+- 109 valley cells are obstructed by NavGrid solid mask.
+- Mountain ridge construction uses probabilistic 0.88/0.85/0.90/0.82 inclusion, producing sparse bodies rather than continuous authored regions.
+- P0.005 elevation+ramp fingerprint that P0.006 must preserve: sha256 a731b52ecfed451f8d965f21e791d19a254b3ae30e790d55e143b5fa281d779f.
+Required gate across default seed 1234567 plus isolated RNG seeds 1 and 42: mountain interior non-solid count === 0; flat valley solid count === 0; HQ connectivity passes 3/3; production elevation/ramp fingerprint unchanged.
