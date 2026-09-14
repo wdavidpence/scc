@@ -54,8 +54,9 @@ export class NavGrid {
   findPath(startX, startY, goalX, goalY, clearance = 0, ignoreId = -1, maxNodes = 9000) {
     const ts = this.tileSize;
     const sx = Math.floor(startX / ts), sy = Math.floor(startY / ts);
-    let gx = Math.floor(goalX / ts), gy = Math.floor(goalY / ts);
-    if (!this.inBounds(gx, gy)) return null;
+    const origGx = Math.floor(goalX / ts), origGy = Math.floor(goalY / ts);
+    let gx = origGx, gy = origGy;
+    if (!this.inBounds(gx, gy) || !this.inBounds(sx, sy)) return null;
 
     // If goal blocked, snap to nearest free tile near goal (so units "attack move approach").
     if (!this.walkable(gx, gy, clearance, ignoreId)) {
@@ -70,7 +71,6 @@ export class NavGrid {
           }
         }
       }
-      if (!found) return null;
     }
     // allow escape from a blocked start tile (unit standing on harvest block)
     if (this.solid[this.hIdx(sx, sy)]) return null;
@@ -78,11 +78,30 @@ export class NavGrid {
     const w = this.w;
     const gScore = new Map();
     const cameFrom = new Map();
-    const open = [[this.hIdx(sx, sy), 0]];
+    const startIdx = this.hIdx(sx, sy);
+    const open = [[startIdx, 0]];
     const closed = new Set();
     const goal = this.hIdx(gx, gy);
     const h = (x, y) => { const dx = Math.abs(x - gx), dy = Math.abs(y - gy); return (dx + dy) + (Math.SQRT2 - 2) * Math.min(dx, dy); };
-    gScore.set(this.hIdx(sx, sy), 0);
+    gScore.set(startIdx, 0);
+
+    let bestNode = startIdx;
+    let bestDist = (sx - origGx) ** 2 + (sy - origGy) ** 2;
+
+    const reconstruct = (endNode, isPartial) => {
+      const path = [];
+      let c = endNode;
+      while (c !== undefined) {
+        const px = (c % w), py = (c / w) | 0;
+        path.push({ x: (px + 0.5) * ts, y: (py + 0.5) * ts });
+        c = cameFrom.get(c);
+        if (c === endNode) break;
+      }
+      path.reverse();
+      const out = this.smooth(path, clearance, ignoreId);
+      out.partial = isPartial;
+      return out;
+    };
 
     const DIRS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
     let nodes = 0;
@@ -93,17 +112,15 @@ export class NavGrid {
       for (let i = 0; i < open.length; i++) { if (open[i][1] < bf) { bf = open[i][1]; bi = i; } }
       const [[cur, f]] = open.splice(bi, 1);
       const cx = cur % w, cy = (cur / w) | 0;
-      if (cur === goal) {
-        const path = [];
-        let c = cur;
-        while (c !== undefined) {
-          const px = (c % w), py = (c / w) | 0;
-          path.push({ x: (px + 0.5) * ts, y: (py + 0.5) * ts });
-          c = cameFrom.get(c);
-          if (c === cur) break;
-        }
-        path.reverse();
-        return this.smooth(path, clearance, ignoreId);
+
+      const cd = (cx - origGx) ** 2 + (cy - origGy) ** 2;
+      if (cd < bestDist) {
+        bestDist = cd;
+        bestNode = cur;
+      }
+
+      if (cur === goal && this.walkable(gx, gy, clearance, ignoreId)) {
+        return reconstruct(cur, false);
       }
       if (closed.has(cur)) continue;
       closed.add(cur);
@@ -125,7 +142,7 @@ export class NavGrid {
         }
       }
     }
-    return null;
+    return reconstruct(bestNode, true);
   }
 
   hIdx(x, y) { return y * this.w + x; }

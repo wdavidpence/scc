@@ -1,0 +1,4 @@
+CURRENT FAILURE: Unit.repath in src2/engine/entity.js assigns this.path=[{x:toX,y:toY}] when NavGrid.findPath returns null.
+This direct fallback sends ground units toward an unreachable solid destination.
+Required red harness: 100 deterministic blocked-goal trials; zero paths may enter solid cells; explicit unreachable feedback must emit within 100ms.
+Expected current result: nonzero exit with DIRECT_SOLID_FALLBACK failure.

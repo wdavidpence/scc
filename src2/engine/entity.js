@@ -191,13 +191,33 @@ export class Unit {
 
   repath(toX, toY) {
     if (this.flying) { // air units fly straight lines — terrain is irrelevant
-      this.path = [{ x: toX, y: toY }]; this.pathIndex = 0; return;
+      this.path = [{ x: toX, y: toY }];
+      this.pathIndex = 0;
+      this.unreachable = false;
+      return (this.lastPathResult = this.lastRepathResult = { reachable: true, status: 'flying', path: this.path });
     }
     const clearance = this.def.size === 'large' ? 1 : 0;
-    const p = this.world.nav.findPath(this.x, this.y, toX, toY, clearance, this.id);
-    if (p && p.length > 1) { this.path = p; this.pathIndex = 1; }
-    else { this.path = [{ x: toX, y: toY }]; this.pathIndex = 0; }
+    const p = this.world?.nav ? this.world.nav.findPath(this.x, this.y, toX, toY, clearance, this.id) : null;
+    if (p && p.length > 0) {
+      this.path = p;
+      this.pathIndex = p.length > 1 ? 1 : 0;
+      if (p.partial) {
+        this.unreachable = true;
+        this.world?.events?.emit?.('hud:alert', 'DESTINATION UNREACHABLE');
+        return (this.lastPathResult = this.lastRepathResult = { reachable: false, status: 'unreachable', path: this.path, partial: true });
+      }
+      this.unreachable = false;
+      return (this.lastPathResult = this.lastRepathResult = { reachable: true, status: 'ok', path: this.path });
+    }
+    // Failed ground A*: halt safely, never assign unreachable goal directly
+    this.path = [];
+    this.pathIndex = 0;
+    this.moving = false;
+    this.unreachable = true;
+    this.world?.events?.emit?.('hud:alert', 'DESTINATION UNREACHABLE');
+    return (this.lastPathResult = this.lastRepathResult = { reachable: false, status: 'unreachable', path: this.path });
   }
+
 
   stepAlongPath(dt) {
     if (this.pathIndex >= this.path.length) return true;

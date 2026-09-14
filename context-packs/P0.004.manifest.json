@@ -1,0 +1,25 @@
+{
+  "id": "P0.004",
+  "spec": "Replace direct-to-goal fallback after failed ground A* with nearest-reachable stop and explicit unreachable result [P1][P2]",
+  "doneWhen": "Across 100 deterministic blocked-goal trials, solid-cell path entries === 0 and explicit unreachable feedback latency <= 100ms",
+  "files": [
+    "src2/engine/entity.js",
+    "src2/engine/pathfinding.js",
+    "scripts/verify-unreachable-fallback.cjs"
+  ],
+  "signatures": [
+    "Unit.repath",
+    "NavGrid.findPath",
+    "NavGrid.walkable"
+  ],
+  "failingTest": "fixtures/failing-p0004-unreachable-fallback.txt",
+  "testCommand": "node scripts/verify-unreachable-fallback.cjs",
+  "deps": [
+    "P0.003"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not modify other game source, existing tests, images, planning docs except ticket state, config, git, or external systems",
+    "preserve public signatures and do not change flying-unit behavior"
+  ]
+}
