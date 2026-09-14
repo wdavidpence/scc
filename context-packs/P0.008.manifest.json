@@ -1,0 +1,28 @@
+{
+  "id": "P0.008",
+  "spec": "Author three readable flat-ground valley routes between starting regions [P1][P2]",
+  "doneWhen": "verify-valley-routes exits 0 with exactly 3 legal infantry routes and honest 344-cell valley registry, screenshot labels all routes/HQs, and verify-plateau-ramps exits 0 with valleysBad === 0",
+  "files": [
+    "src2/scenes/BattleScene.js",
+    "scripts/verify-valley-routes.cjs",
+    "scripts/verify-plateau-ramps.cjs",
+    "verify/p0008-valley-routes.png",
+    "terrain_truth.json"
+  ],
+  "signatures": [
+    "BattleScene.buildMountains",
+    "BattleScene.exportTerrainTruth",
+    "BattleScene.valleys",
+    "verifyPlateauRamps"
+  ],
+  "failingTest": "fixtures/failing-p0008-valley-routes.txt",
+  "testCommand": "node scripts/verify-valley-routes.cjs && node scripts/verify-plateau-ramps.cjs",
+  "deps": [
+    "P0.006"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not alter pathfinding, plateau/ramp/elevation shapes, cliff blocking, mountain body continuity outside three pass corridors, HQ zones, Unit/flying behavior, images other than owned screenshot, planning docs except ticket state, config, git, or external systems",
+    "legacy verifier may replace exact valley count 125 with honest minimum/defect semantics only"
+  ]
+}

@@ -227,7 +227,7 @@ async function main() {
     if (res.unblockedCliffEdges > 0) failures.push(`${res.unblockedCliffEdges} cliff edges unblocked`);
     if (res.lineClearLeaks > 0) failures.push(`${res.lineClearLeaks} cliff edges leak lineClear`);
     if (res.pathElevViolations > 0) failures.push(`${res.pathElevViolations} path elevation crossing violations`);
-    if (res.valleysTotal !== 125 || res.valleysBad > 0) failures.push(`Valley regression: bad=${res.valleysBad}`);
+    if (res.valleysTotal < 125 || res.valleysBad !== 0) failures.push(`Valley regression: bad=${res.valleysBad}`);
     if (!res.hqConnected) failures.push('HQ connectivity broken');
     if (!res.flyingPreserved) failures.push('Flying behavior regression');
 

@@ -1,0 +1,3 @@
+CURRENT FAILURE: only 1 of 3 required legal flat-ground valley routes exists between HQ A tile (19,19) and HQ B tile (140,140).
+Only the central vertical-ridge gap at ty=68..92 is authored; north and south pass corridors are absent.
+Required gate: three legal infantry routes with zero solid/unwalkable waypoints; blocked-corridor recomputation finds all 3; crossing spine delta-Y >=30 tiles at tx≈80; all route/pass cells elevation 0; screenshot overlay labels North, Center, South and both HQs.

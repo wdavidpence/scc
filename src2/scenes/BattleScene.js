@@ -1257,20 +1257,40 @@ export class BattleScene extends Phaser.Scene {
     const solid = this.nav.solid;
     const rnd = this.rng();
     const ridges = [];
-    this.valleys = [];
-    // 1) mid-map diagonal wall from top edge toward bottom, broken in the middle
+    const allValleys = [];
+    // 1) mid-map diagonal wall from top edge toward bottom, broken into three passes
     const wall = [];
     for (let ty = 6; ty < MAP_H - 6; ty++) {
       const cx = Math.round(MAP_W * 0.5 + Math.sin(ty * 0.09 + 1.7) * 11);
+      const c2 = cx + 12 + Math.round(Math.sin(ty * 0.13) * 4);
       if (ty > MAP_H * 0.42 && ty < MAP_H * 0.58) {
-        for (let w = -2; w <= 2; w++) this.valleys.push([cx + w, ty]);
+        for (let w = -2; w <= 2; w++) allValleys.push([cx + w, ty]);
+        for (let w = -1; w <= 1; w++) allValleys.push([c2 + w, ty]);
         continue; // central valley gap
       }
+      if (ty >= 44 && ty <= 52) {
+        for (let w = -2; w <= 2; w++) allValleys.push([cx + w, ty]);
+        for (let w = -1; w <= 1; w++) allValleys.push([c2 + w, ty]);
+        continue; // north pass corridor (>= 5 cells wide through ridge & spur)
+      }
+      if (ty >= 110 && ty <= 118) {
+        for (let w = -2; w <= 2; w++) allValleys.push([cx + w, ty]);
+        for (let w = -1; w <= 1; w++) allValleys.push([c2 + w, ty]);
+        continue; // south pass corridor (>= 5 cells wide through ridge & spur)
+      }
       for (let w = -2; w <= 2; w++) wall.push([cx + w, ty]);
-      const c2 = cx + 12 + Math.round(Math.sin(ty * 0.13) * 4);
       for (let w = -1; w <= 1; w++) wall.push([c2 + w, ty]); // broken eastern spur
     }
     ridges.push(wall);
+    const valleyKeySet = new Set();
+    this.valleys = [];
+    for (const [vx, vy] of allValleys) {
+      const k = `${vx},${vy}`;
+      if (!valleyKeySet.has(k)) {
+        valleyKeySet.add(k);
+        this.valleys.push([vx, vy]);
+      }
+    }
     // 2) two horizontal ridge fingers from west and east edges, leaving two lanes each
     for (const side of [0, 1]) {
       for (const fy of side ? [0.30, 0.72] : [0.22, 0.64]) {
@@ -1302,11 +1322,12 @@ export class BattleScene extends Phaser.Scene {
       { x: Math.floor(MAP_W * 0.88), y: Math.floor(MAP_H * 0.88), r: 12 },
     ];
     const inHqClear = (tx, ty) => hqClear.some(h => Math.abs(tx - h.x) <= h.r && Math.abs(ty - h.y) <= h.r);
+    const valleySet = new Set(this.valleys.map(([vx, vy]) => `${vx},${vy}`));
     this.mountains = [];
     for (const ridge of ridges) {
       for (const [tx, ty] of ridge) {
         if (tx < 3 || ty < 3 || tx >= MAP_W - 3 || ty >= MAP_H - 3) continue;
-        if (inHqClear(tx, ty)) continue;
+        if (inHqClear(tx, ty) || valleySet.has(`${tx},${ty}`)) continue;
         solid[this.nav.idx(tx, ty)] = 1;
         this.mountains.push([tx, ty]);
       }
