@@ -1,0 +1,5 @@
+CURRENT FAILURE:
+- Phaser's texture manager persists across BattleScene restarts.
+- BattleScene creates fixed dynamic keys fog, vis, fog_mist, blight-t0, blight-t1, blight-ai-t0, and blight-ai-t1 without lifecycle cleanup.
+- Existing shutdown removes only window key listeners.
+- No real-browser gate proves five restart cycles have zero duplicate-key errors and <=25MB heap growth.

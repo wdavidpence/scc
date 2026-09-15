@@ -971,9 +971,9 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- terrain ----------------
   buildTerrain() {
     // batch ground into one big texture
-    const gc = document.createElement('canvas');
-    gc.width = PXW; gc.height = PXH;
-    const gx = gc.getContext('2d');
+    const terrain = this.getReusableCanvasTexture('terrain', PXW, PXH);
+    const gc = terrain.canvas;
+    const gx = terrain.ctx;
     const rnd = this.rng();
     // v2.38 AI-painted ground atlas: seamless Flux tiles blended into biome patches
     const aiOk = (k) => this.textures.exists('ai-' + k);
@@ -1022,9 +1022,8 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    if (this.textures.exists('terrain')) this.textures.remove('terrain');
-    this.textures.addCanvas('terrain', gc);
-    this.add.image(PXW / 2, PXH / 2, 'terrain').setOrigin(0.5).setDepth(0);
+    const terrainTex = terrain.texture || this.textures.addCanvas('terrain', gc);
+    this.terrainImg = this.add.image(PXW / 2, PXH / 2, 'terrain').setOrigin(0.5).setDepth(0);
     // v2.60 GROUND SPATTER: baked pebble/moss/scorch micro-tiles scattered across the whole
     // map (depth 1, under everything) so no region reads flat — especially under fog/shroud.
     if (!this.textures.exists('spatter1')) {
@@ -1159,7 +1158,7 @@ export class BattleScene extends Phaser.Scene {
       }
       // rock clusters: block pathing for ground (rockTiles already blocked); some destructible stay until destroyed
       this.terrainCtx = gx; this.terrainCanvas = gc;
-      this.textures.get('terrain').refresh();
+      terrainTex.refresh();
     }
 
     // mineral fields: v2.45 scattered across the whole map, hidden under fog until scouted
@@ -1454,37 +1453,46 @@ export class BattleScene extends Phaser.Scene {
     }
   }
   // ---------------- fog of war ----------------
+  getReusableCanvasTexture(key, width, height) {
+    const texture = this.textures.exists(key) ? this.textures.get(key) : null;
+    const canvas = texture ? texture.getSourceImage() : document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return { canvas, ctx: canvas.getContext('2d'), texture };
+  }
+
   createFog() {
-    this.fogCanvas = document.createElement('canvas');
-    this.fogCanvas.width = MAP_W * FOGRES; this.fogCanvas.height = MAP_H * FOGRES; // v2.44: 4px/tile — soft edges, no tile staircase
-    this.fogCtx = this.fogCanvas.getContext('2d');
+    const fog = this.getReusableCanvasTexture('fog', MAP_W * FOGRES, MAP_H * FOGRES);
+    this.fogCanvas = fog.canvas;
+    this.fogCtx = fog.ctx; // v2.44: 4px/tile — soft edges, no tile staircase
     this.fogCtx.fillStyle = '#000'; this.fogCtx.fillRect(0, 0, MAP_W * FOGRES, MAP_H * FOGRES);
-    this.fogTex = this.textures.addCanvas('fog', this.fogCanvas);
+    this.fogTex = fog.texture || this.textures.addCanvas('fog', this.fogCanvas);
     this.fogImg = this.add.image(PXW / 2, PXH / 2, 'fog');
     this.fogImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(500).setAlpha(0.38); // v2.59: 0.48->0.38 — fog lifted so explored ground reads terrain, not black
     this.seen = new Uint8Array(MAP_W * MAP_H);
     this.lastSeen = new Float32Array(MAP_W * MAP_H); // SC1: staleness of intel per tile
     this._eventPings = []; // minimap event pings {x,y,t,color,big}
     this.autoMine = true; // GAP 65 mining automation toggle (J)
-    this.visCanvas = document.createElement('canvas');
-    this.visCanvas.width = MAP_W * FOGRES; this.visCanvas.height = MAP_H * FOGRES; // v2.44: FOGRES px/tile
-    this.visCtx = this.visCanvas.getContext('2d');
-    this.visTex = this.textures.addCanvas('vis', this.visCanvas);
+    const vis = this.getReusableCanvasTexture('vis', MAP_W * FOGRES, MAP_H * FOGRES);
+    this.visCanvas = vis.canvas;
+    this.visCtx = vis.ctx; // v2.44: FOGRES px/tile
+    this.visTex = vis.texture || this.textures.addCanvas('vis', this.visCanvas);
     this.visImg = this.add.image(PXW / 2, PXH / 2, 'vis');
     this.visImg.setOrigin(0.5).setScale(TILE / FOGRES).setDepth(499).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(1);
     this.fogDirty = true;
     this.fogTimer = 0;
     // v2.40: AI mist overlay baked through the fog mask (soft edge from softCut upscale)
     if (this.textures.exists('ai-fog_mist')) {
-      const mc = document.createElement('canvas'); mc.width = 768; mc.height = 768;
-      const mx = mc.getContext('2d');
+      const mist = this.getReusableCanvasTexture('fog_mist', 768, 768);
+      const mc = mist.canvas;
+      const mx = mist.ctx;
       const src = this.textures.get('ai-fog_mist').getSourceImage();
       // v2.44: pre-blur the mist tile so its own texture isn't a crisp repeat grid
       const bl = document.createElement('canvas'); bl.width = src.width; bl.height = src.height;
       const bx2 = bl.getContext('2d'); bx2.filter = 'blur(2px)'; bx2.drawImage(src, 0, 0);
       this._fogPat = mx.createPattern(bl, 'repeat');
       this.mistCanvas = mc; this.mistCtx = mx;
-      this.textures.addCanvas('fog_mist', mc);
+      if (!mist.texture) this.textures.addCanvas('fog_mist', mc);
       this.fogMistImg = this.add.image(PXW / 2, PXH / 2, 'fog_mist');
       this.fogMistImg.setOrigin(0.5).setScale(PXW / 768).setDepth(501).setAlpha(0.38).setBlendMode(Phaser.BlendModes.SCREEN);
     }
@@ -1823,23 +1831,25 @@ export class BattleScene extends Phaser.Scene {
     this.blightAiCanvases = {};
     const BS = 1024; // AI blight overlay resolution
     for (const t of [0, 1]) {
-      const c = document.createElement('canvas'); c.width = MAP_W; c.height = MAP_H;
-      const ctx = c.getContext('2d');
+      const blight = this.getReusableCanvasTexture(`blight-t${t}`, MAP_W, MAP_H);
+      const c = blight.canvas;
+      const ctx = blight.ctx;
       this.blightCanvases[t] = { c, ctx, cells: new Uint8Array(MAP_W * MAP_H) };
-      const tex = this.textures.addCanvas(`blight-t${t}`, c);
+      const tex = blight.texture || this.textures.addCanvas(`blight-t${t}`, c);
       this.blightTextures[t] = tex;
       const img = this.add.image(PXW / 2, PXH / 2, `blight-t${t}`);
       img.setOrigin(0.5).setScale(TILE).setDepth(5).setAlpha(t === 0 ? 0.75 : 0.8);
       // v2.40 AI-painted blight texture layered on top of the flat fill
       const aiKey = t === 0 ? 'ai-blight_player' : 'ai-blight_enemy';
       if (this.textures.exists(aiKey)) {
-        const ac = document.createElement('canvas'); ac.width = BS; ac.height = BS;
-        const ax = ac.getContext('2d');
+        const aiBlight = this.getReusableCanvasTexture(`blight-ai-t${t}`, BS, BS);
+        const ac = aiBlight.canvas;
+        const ax = aiBlight.ctx;
         const src = this.textures.get(aiKey).getSourceImage();
         this.blightCanvases[t].pat = ax.createPattern(src, 'repeat');
         this.blightCanvases[t].sc = BS / (MAP_W * TILE); // world px -> overlay px
         this.blightCanvases[t].ac = ac; this.blightCanvases[t].ax = ax;
-        this.textures.addCanvas(`blight-ai-t${t}`, ac);
+        if (!aiBlight.texture) this.textures.addCanvas(`blight-ai-t${t}`, ac);
         const aim = this.add.image(PXW / 2, PXH / 2, `blight-ai-t${t}`);
         aim.setOrigin(0.5).setScale(TILE).setDepth(6).setAlpha(t === 0 ? 0.92 : 0.95); // v2.41: richer, crisper
       }

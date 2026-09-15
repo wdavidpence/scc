@@ -1,0 +1,23 @@
+{
+  "id": "P0.012",
+  "spec": "Fix duplicate dynamic texture lifecycle on five battle restarts [P1][P3]",
+  "doneWhen": "A real Chromium run completes 5 BattleScene restart cycles; duplicate texture-key errors=0; uncaught page errors=0; each of 7 fixed dynamic keys exists exactly once after every cycle; usedJSHeapSize growth from post-cycle-1 GC to post-cycle-5 GC<=25MB",
+  "files": [
+    "src2/scenes/BattleScene.js",
+    "scripts/verify-restart-textures.cjs"
+  ],
+  "signatures": [
+    "BattleScene.create",
+    "BattleScene.createFog",
+    "BattleScene.createBlightLayers"
+  ],
+  "failingTest": "fixtures/failing-p0012-texture-restarts.txt",
+  "testCommand": "node scripts/verify-restart-textures.cjs",
+  "deps": [
+    "P0.001"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not alter visual output, texture dimensions/content/filtering, game state, terrain, pathfinding, unit behavior, AI, balance, static asset loading, other scenes, config, git, or external systems"
+  ]
+}
