@@ -19,3 +19,4 @@
 
 - P0.011 — 50 deterministic blocker-open trials pass in one fixed 50ms tick: A* 200/200, shared-flow 200/200, zero stale fields, zero blocked samples; real-browser terrain/order regressions PASS.
 - P0.012 — five real BattleScene restarts pass with 8/8 dynamic texture keys singleton-bound every cycle, zero console/page/duplicate errors, and 15.60 MB forced-GC heap growth (≤25 MB).
+- P0.013 — dual-base font gate passes for `/` and `/scc/`: zero unresolved build warnings, all 3 TTFs HTTP 200, zero 404/request/page errors, and all Orbitron/Rajdhani font checks true.

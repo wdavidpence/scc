@@ -1,0 +1,5 @@
+CURRENT FAILURE:
+- Every Vite build emits unresolved warnings for Orbitron-Variable.ttf, Rajdhani-Bold.ttf, and Rajdhani-SemiBold.ttf from inline index.html CSS.
+- Font binaries exist at public/fonts/.
+- Production base is /scc/ while development/root base is /; hard-coding either base would break the other.
+- No dual-base browser network gate proves all three fonts return 200 and load successfully.

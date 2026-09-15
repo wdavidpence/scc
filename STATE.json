@@ -216,18 +216,20 @@
     },
     {
       "id": "P0.013",
-      "status": "blocked",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
       "dependencies": [
         "P0.001"
       ],
-      "attempts": 0,
-      "context_pack": null,
+      "attempts": 2,
+      "context_pack": "context-packs/P0.013.md",
       "done_when": "Vite build emits zero unresolved-font warnings and browser network log contains zero font 404s",
       "estimate": "2h",
-      "task": "Correct production font URLs under both root and `/scc/` bases [P1]"
+      "task": "Correct production font URLs under both root and `/scc/` bases [P1]",
+      "started_at": "2026-09-15T17:16:54Z",
+      "completed_at": "2026-09-15T17:46:09Z"
     },
     {
       "id": "P0.014",

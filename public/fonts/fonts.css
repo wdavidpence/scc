@@ -1,0 +1,18 @@
+@font-face {
+  font-family: 'Orbitron';
+  src: url('./Orbitron-Variable.ttf') format('truetype');
+  font-weight: 400 900;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('./Rajdhani-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('./Rajdhani-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: block;
+}

@@ -1,0 +1,24 @@
+{
+  "id": "P0.013",
+  "spec": "Correct production font URLs under both root and `/scc/` bases [P1]",
+  "doneWhen": "Two Vite builds, base / and base /scc/, emit 0 unresolved-font warnings; real Chromium requests all 3 TTF files under each base with HTTP 200; font 404 count=0; document.fonts.check passes Orbitron 16px, Rajdhani 700 16px, and Rajdhani 600 16px under both bases",
+  "files": [
+    "index.html",
+    "public/fonts/fonts.css",
+    "scripts/verify-font-paths.cjs"
+  ],
+  "signatures": [
+    "index-font-link",
+    "font-face-Orbitron",
+    "font-face-Rajdhani"
+  ],
+  "failingTest": "fixtures/failing-p0013-font-paths.txt",
+  "testCommand": "node scripts/verify-font-paths.cjs",
+  "deps": [
+    "P0.001"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "Do not change font binaries, font families, weights, display behavior, non-font HTML/CSS, Vite base policy, JavaScript, gameplay, assets outside public/fonts/fonts.css, config, git, or external systems"
+  ]
+}

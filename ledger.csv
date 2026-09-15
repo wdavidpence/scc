@@ -14,3 +14,4 @@ P0.009,gemini-3.8-flash-high,1,,,223,pass,199
 P0.010,gpt-5.6-luna,3,,,76841,pass,328
 P0.011,gpt-5.6-luna,2,,,131549,pass,304
 P0.012,gemini+gpt-5.6-luna,9,,,,pass,382
+P0.013,gemini-3.8-flash-high,2,,,,pass,296
