@@ -14,6 +14,7 @@ import { CH } from '../engine/chrome.js';
 import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes.js';
 import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
+import { SimSchema } from '../engine/simSchema.js';
 import { Coach } from '../engine/coach.js';
 import { PolishFX } from '../engine/polish.js';
 
@@ -1690,6 +1691,20 @@ export class BattleScene extends Phaser.Scene {
     if (onCliff && !fromCliff) return !this.ramp[i];   // entering cliff wall unless ramp
     if (!onCliff && fromCliff) return !this.ramp[i];     // leaving cliff anywhere except ramp
     return false;
+  }
+
+  // P1.021: canonical sim-state export (read-only; render objects never enter here)
+  exportSimState() {
+    return SimSchema.serialize({
+      tickIndex: this.simTickIndex || 0,
+      rngState: this.simRngState || 0,
+      terrain: { w: this.nav.w, h: this.nav.h, tileSize: this.nav.tileSize, solid: Array.from(this.nav.solid), ramp: Array.from(this.ramp || []) },
+      players: this.players.map(p => ({ team: p.team, race: p.race, minerals: p.minerals, gas: p.gas, supplyUsed: p.supplyUsed, supplyCap: p.supplyCap, techs: p.techs, upgrades: p.upgrades })),
+      units: this.units.map(u => ({ id: u.id, team: u.team, kind: u.kind, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, shield: u.shield, maxShield: u.maxShield, state: u.state, order: u.order, cargo: u.cargo, facing: u.facing ?? 0, attackTimer: u.attackTimer ?? 0, dead: !!u.dead })),
+      buildings: this.buildings.map(b => ({ id: b.id, team: b.team, buildId: b.buildId, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, built: !!b.built, queue: (b.queue || []).map(q => ({ kind: q.kind, remaining: q.remaining })), rally: b.rally || null })),
+      projectiles: (this.projectiles || []).map(p => ({ id: p.id, team: p.team, kind: p.kind || 'bullet', x: p.x, y: p.y, vx: p.vx ?? 0, vy: p.vy ?? 0, damage: p.damage ?? 0, targetId: p.targetId ?? p.target?.id ?? null, ttl: p.ttl ?? 0 })),
+      orders: (this.orderLog || [])
+    });
   }
 
   // P0.019: topology debug overlay — visuals derived from live nav truth only.

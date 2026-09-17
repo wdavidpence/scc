@@ -34,3 +34,5 @@
 - P0.019 — Phase-0 RC: F5 topology debug overlay (renders nav truth; mountain/ramp/valley), verify-rc-phase0.cjs 10/10 incl nested coach 28/28, restarts x2, 100% overlay-truth agreement, zero page errors. RC build index-Ck1UuTjr.js.
 
 - P0.020 — GATED-WAIVED by owner (option 2). Automated-only acceptance; deferred human fun-gate mandated again at P1.055/P2.100+. 5 outside testers required at first fun-gate opportunity.
+
+- P1.021 — src2/engine/simSchema.js canonical sim state (tickIndex/rng/terrain/players/units/buildings/projectiles/orders), allowlist projection + order-stable canonicalizer + FNV hash; BattleScene.exportSimState live seam verified in Chromium; gate SIM-SCHEMA 16/16; coach 28/28 regression green.
