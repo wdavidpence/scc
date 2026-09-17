@@ -22,3 +22,5 @@
 - P0.013 — dual-base font gate passes for `/` and `/scc/`: zero unresolved build warnings, all 3 TTFs HTTP 200, zero 404/request/page errors, and all Orbitron/Rajdhani font checks true.
 
 - P0.014 — deleted legacy src/ runtime (93 tracked files) + 9 src/-reading legacy harnesses/scripts; import-graph BFS over 25 src2 modules reaches zero src/; production build exit 0; coach gate 28/28 live on real Chromium; deletion quota count=1 verified by scripts/verify-legacy-src-p0014.cjs (P0.014-GREEN).
+
+- P0.015 — deleted vite2.config.js, vite2.preview.config.js, index2.html, dist2/, and 6 orphaned v216-v221 harnesses; sole documented preview command = vite build + python http.server under /scc/; active gates reference zero index2/vite2; build exit 0; coach gate 28/28 x2 (first post-build run = known CDN/staging flake, rerun green); deletion quota count=2.

@@ -249,18 +249,19 @@
   },
   {
    "id": "P0.015",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
     "P0.001"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "one documented preview command remains, all gates use it, and deletion quota count=2",
    "estimate": "2h",
-   "task": "Delete redundant preview configurations not used by CI or the verified local gate [P3]"
+   "task": "Delete redundant preview configurations not used by CI or the verified local gate [P3]",
+   "finished_at": "2026-09-17T14:12:39Z"
   },
   {
    "id": "P0.016",
