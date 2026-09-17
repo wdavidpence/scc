@@ -21,3 +21,4 @@ P0.016,ANTIGRAV,1,0,0,2026-09-17T14:15:26Z,pass,deleted 2 tracked symlinks + git
 P0.018,ANTIGRAV,1,0,0,2026-09-17T14:46:14Z,pass,seeded-routing 100 seeds + suite wiring
 P0.017,ANTIGRAV,1,0,0,2026-09-17T14:49:01Z,waived,quota-vetoed-evidence
 P0.019,ANTIGRAV,1,0,0,2026-09-17T14:59:44Z,pass,RC-PHASE0 10/10 overlay-100pct
+P0.020,OWNER,0,0,0,2026-09-17T19:29:40Z,waived,automated-only

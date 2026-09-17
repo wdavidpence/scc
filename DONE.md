@@ -32,3 +32,5 @@
 - P0.017 — WAIVED quota for v2.66 (autonomous default after human-gate timeout). Evidence: full src2 audit names zero intact dead gameplay systems; only orphan fragments recorded in BACKLOG. Reversible ruling; deletion ticket pending.
 
 - P0.019 — Phase-0 RC: F5 topology debug overlay (renders nav truth; mountain/ramp/valley), verify-rc-phase0.cjs 10/10 incl nested coach 28/28, restarts x2, 100% overlay-truth agreement, zero page errors. RC build index-Ck1UuTjr.js.
+
+- P0.020 — GATED-WAIVED by owner (option 2). Automated-only acceptance; deferred human fun-gate mandated again at P1.055/P2.100+. 5 outside testers required at first fun-gate opportunity.

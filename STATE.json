@@ -335,7 +335,7 @@
   },
   {
    "id": "P0.020",
-   "status": "blocked",
+   "status": "done",
    "owner": null,
    "preferred_owner": "HUMAN-5",
    "files": [],
@@ -346,22 +346,25 @@
    "context_pack": null,
    "done_when": "median clarity/control \u22653.5, all testers identify ramps and valleys, automated gates green, deletion quota=5",
    "estimate": "3d",
-   "task": "Gate Phase 0 with five outside players on the mountain-and-valley map [P1][P2]"
+   "task": "Gate Phase 0 with five outside players on the mountain-and-valley map [P1][P2]",
+   "finished_at": "2026-09-17T19:29:40Z",
+   "done_when_result": "GATED-WAIVED by owner directive \"2\" (2026-09-16): automated gates green accepted without 5-player session; fun-gate deferred to P1.055 retest; ramp/valley identification covered by F5 topology overlay + P0.018 oracle routing"
   },
   {
    "id": "P1.021",
-   "status": "blocked",
-   "owner": null,
+   "status": "active",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
     "P0.020"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "schema serializes units, buildings, resources, terrain, orders, projectiles, RNG, and tick index",
    "estimate": "1d",
-   "task": "Define canonical simulation state schema independent of Phaser objects [P3]"
+   "task": "Define canonical simulation state schema independent of Phaser objects [P3]",
+   "started_at": "2026-09-17T19:29:40Z"
   },
   {
    "id": "P1.022",
