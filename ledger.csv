@@ -18,3 +18,4 @@ P0.013,gemini-3.8-flash-high,2,,,,pass,296
 P0.014,ANTIGRAV,1,0,0,2026-09-17T14:05:46Z,pass,107 files changed, 187 insertions(+), 12198 deletions(-)
 P0.015,ANTIGRAV,1,0,0,2026-09-17T14:12:39Z,pass,deleted 5 paths+6 harnesses
 P0.016,ANTIGRAV,1,0,0,2026-09-17T14:15:26Z,pass,deleted 2 tracked symlinks + gitignore
+P0.018,ANTIGRAV,1,0,0,2026-09-17T14:46:14Z,pass,seeded-routing 100 seeds + suite wiring

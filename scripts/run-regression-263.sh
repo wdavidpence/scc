@@ -7,5 +7,8 @@ for g in verify-v247-grade verify-v248-chips verify-v249-accent verify-v250-fx v
   out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/$g.cjs 2>&1 | tail -2)
   if echo "$out" | grep -q "PASS"; then echo "OK   $g :: $(echo "$out" | grep -oE 'GATE-V[0-9]+ [0-9]+/[0-9]+')"; else echo "FAIL $g :: $out"; FAIL=1; fi
 done
+# P0.018 seeded routing (pure Node, oracle-checked)
+out=$(node scripts/verify-routing-seeded.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "fail=0"; then echo "OK   routing-seeded :: $out"; else echo "FAIL routing-seeded :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"
 exit $FAIL

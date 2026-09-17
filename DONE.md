@@ -26,3 +26,5 @@
 - P0.015 — deleted vite2.config.js, vite2.preview.config.js, index2.html, dist2/, and 6 orphaned v216-v221 harnesses; sole documented preview command = vite build + python http.server under /scc/; active gates reference zero index2/vite2; build exit 0; coach gate 28/28 x2 (first post-build run = known CDN/staging flake, rerun green); deletion quota count=2.
 
 - P0.016 — deleted orphaned tracked stage artifacts .stage/scc and .gate-root/scc (serve-time symlinks, referenced by zero gates); gitignored; clean rebuild regenerates only dist/ (ignored), tracked stage output count=0; coach gate 28/28 post-rebuild; deletion quota count=3.
+
+- P0.018 — scripts/verify-routing-seeded.cjs: 100 seeded dual-ridge mountain maps, routes validated against independent no-corner-cut BFS oracle; 200/200 assertions pass (route-exists for every oracle-reachable pair, zero solid-cell entry); wired into run-regression-263.sh; full suite GREEN.

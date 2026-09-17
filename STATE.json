@@ -281,7 +281,7 @@
   },
   {
    "id": "P0.017",
-   "status": "ready",
+   "status": "blocked",
    "owner": null,
    "preferred_owner": "QWEN-ONE",
    "files": [],
@@ -292,12 +292,13 @@
    "context_pack": null,
    "done_when": "evidence names exactly two dead systems; ANTIGRAV deletes them; build passes; deletion quota count=5",
    "estimate": "6h",
-   "task": "Delete two gameplay systems that have no input route, test, or five-minute-loop role [P1][P3]"
+   "task": "Delete two gameplay systems that have no input route, test, or five-minute-loop role [P1][P3]",
+   "blocker": "HUMAN GATE: audit found candidates are fragments (2 orphan helpers findTransportNear/findBunkerNear; upgrade-tint pass; orphan callback onProjectileHit), not two whole dead systems. Deleting would remove backlog bugs, not quota-free dead code. Needs architect approval."
   },
   {
    "id": "P0.018",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
@@ -305,11 +306,13 @@
     "P0.008",
     "P0.009"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "all cases pass with zero solid entry and route success \u226599% for reachable pairs",
    "estimate": "6h",
-   "task": "Add 100 seeded mountain-crossing and valley-routing cases to CI [P2][P3]"
+   "task": "Add 100 seeded mountain-crossing and valley-routing cases to CI [P2][P3]",
+   "finished_at": "2026-09-17T14:46:14Z",
+   "done_when_result": "ROUTING-SEEDED pass=200 fail=0 over 100 seeds (100 route-exists + 100 zero-solid-entry vs independent BFS oracle); wired into run-regression-263.sh suite; SUITE GREEN"
   },
   {
    "id": "P0.019",
