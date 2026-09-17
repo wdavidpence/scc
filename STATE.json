@@ -233,7 +233,7 @@
     },
     {
       "id": "P0.014",
-      "status": "blocked",
+      "status": "ready",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],

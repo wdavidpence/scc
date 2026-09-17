@@ -1,0 +1,28 @@
+{
+  "id": "P0.014",
+  "spec": "Delete the inactive legacy `src/` runtime pathway after proving no production import reaches it [P3]",
+  "doneWhen": "import graph shows zero active references, production build passes, and deletion quota count=1",
+  "files": [
+    "src/",
+    "scripts/qa/runtime-smoke.js",
+    "scripts/qa/gameplay-checks.js",
+    "scripts/qa/touch-checks.js",
+    "scripts/qa/viewport-360x640.js",
+    "scripts/qa/runtime-onboarding-qa.js",
+    "scripts/verify-legacy-src-p0014.cjs"
+  ],
+  "signatures": [
+    "verify-legacy-src-p0014"
+  ],
+  "failingTest": "/tmp/p0014-fail.txt",
+  "testCommand": "node scripts/verify-legacy-src-p0014.cjs",
+  "deps": [
+    "P0.001"
+  ],
+  "diffCap": 400,
+  "forbiddenScope": [
+    "src2/**",
+    "index.html",
+    "dist/**"
+  ]
+}
