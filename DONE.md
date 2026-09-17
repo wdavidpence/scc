@@ -36,3 +36,5 @@
 - P0.020 — GATED-WAIVED by owner (option 2). Automated-only acceptance; deferred human fun-gate mandated again at P1.055/P2.100+. 5 outside testers required at first fun-gate opportunity.
 
 - P1.021 — src2/engine/simSchema.js canonical sim state (tickIndex/rng/terrain/players/units/buildings/projectiles/orders), allowlist projection + order-stable canonicalizer + FNV hash; BattleScene.exportSimState live seam verified in Chromium; gate SIM-SCHEMA 16/16; coach 28/28 regression green.
+
+- P1.022 — src2/engine/simClock.js fixed 24Hz clock (exact tick count under variable fps, interpolation alpha, spiral-of-death clamp); gate SIM-CLOCK 11/11. Scene consumption of the clock lands in P1.026 (delete variable-delta updates).

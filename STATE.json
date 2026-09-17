@@ -370,7 +370,7 @@
   },
   {
    "id": "P1.022",
-   "status": "active",
+   "status": "done",
    "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -382,7 +382,9 @@
    "done_when": "clock test runs 10,000 ticks with exact count under 30/60/144 Hz render schedules",
    "estimate": "6h",
    "task": "Define fixed 24 Hz simulation clock with render interpolation contract [P1][P3]",
-   "started_at": "2026-09-17T19:37:14Z"
+   "started_at": "2026-09-17T19:37:14Z",
+   "finished_at": "2026-09-17T19:40:34Z",
+   "done_when_result": "simClock.js 24Hz; exact 10,000 ticks at 30/60/144Hz schedules; alpha in [0,1); catch-up clamp 4; deterministic under identical frame sequence; gate SIM-CLOCK 11/11"
   },
   {
    "id": "P1.023",
@@ -431,7 +433,7 @@
   },
   {
    "id": "P1.026",
-   "status": "blocked",
+   "status": "ready",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -446,7 +448,7 @@
   },
   {
    "id": "P1.027",
-   "status": "blocked",
+   "status": "ready",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
