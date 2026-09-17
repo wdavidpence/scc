@@ -265,18 +265,19 @@
   },
   {
    "id": "P0.016",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
     "P0.001"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "clean checkout rebuild recreates no tracked stage output and deletion quota count=3",
    "estimate": "2h",
-   "task": "Delete orphaned generated stage artifacts and prevent them from asset/test censuses [P3]"
+   "task": "Delete orphaned generated stage artifacts and prevent them from asset/test censuses [P3]",
+   "finished_at": "2026-09-17T14:15:26Z"
   },
   {
    "id": "P0.017",

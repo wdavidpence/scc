@@ -10,3 +10,6 @@ qa-shots/campaign243/*.tmp
 /v238_battle.png
 /v238_title.png
 scc
+.stage/
+.gate-root/
+qa-shots/**/*.tmp

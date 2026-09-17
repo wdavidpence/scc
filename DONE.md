@@ -24,3 +24,5 @@
 - P0.014 — deleted legacy src/ runtime (93 tracked files) + 9 src/-reading legacy harnesses/scripts; import-graph BFS over 25 src2 modules reaches zero src/; production build exit 0; coach gate 28/28 live on real Chromium; deletion quota count=1 verified by scripts/verify-legacy-src-p0014.cjs (P0.014-GREEN).
 
 - P0.015 — deleted vite2.config.js, vite2.preview.config.js, index2.html, dist2/, and 6 orphaned v216-v221 harnesses; sole documented preview command = vite build + python http.server under /scc/; active gates reference zero index2/vite2; build exit 0; coach gate 28/28 x2 (first post-build run = known CDN/staging flake, rerun green); deletion quota count=2.
+
+- P0.016 — deleted orphaned tracked stage artifacts .stage/scc and .gate-root/scc (serve-time symlinks, referenced by zero gates); gitignored; clean rebuild regenerates only dist/ (ignored), tracked stage output count=0; coach gate 28/28 post-rebuild; deletion quota count=3.
