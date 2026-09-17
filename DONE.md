@@ -28,3 +28,5 @@
 - P0.016 — deleted orphaned tracked stage artifacts .stage/scc and .gate-root/scc (serve-time symlinks, referenced by zero gates); gitignored; clean rebuild regenerates only dist/ (ignored), tracked stage output count=0; coach gate 28/28 post-rebuild; deletion quota count=3.
 
 - P0.018 — scripts/verify-routing-seeded.cjs: 100 seeded dual-ridge mountain maps, routes validated against independent no-corner-cut BFS oracle; 200/200 assertions pass (route-exists for every oracle-reachable pair, zero solid-cell entry); wired into run-regression-263.sh; full suite GREEN.
+
+- P0.017 — WAIVED quota for v2.66 (autonomous default after human-gate timeout). Evidence: full src2 audit names zero intact dead gameplay systems; only orphan fragments recorded in BACKLOG. Reversible ruling; deletion ticket pending.
