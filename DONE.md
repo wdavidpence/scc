@@ -30,3 +30,5 @@
 - P0.018 — scripts/verify-routing-seeded.cjs: 100 seeded dual-ridge mountain maps, routes validated against independent no-corner-cut BFS oracle; 200/200 assertions pass (route-exists for every oracle-reachable pair, zero solid-cell entry); wired into run-regression-263.sh; full suite GREEN.
 
 - P0.017 — WAIVED quota for v2.66 (autonomous default after human-gate timeout). Evidence: full src2 audit names zero intact dead gameplay systems; only orphan fragments recorded in BACKLOG. Reversible ruling; deletion ticket pending.
+
+- P0.019 — Phase-0 RC: F5 topology debug overlay (renders nav truth; mountain/ramp/valley), verify-rc-phase0.cjs 10/10 incl nested coach 28/28, restarts x2, 100% overlay-truth agreement, zero page errors. RC build index-Ck1UuTjr.js.

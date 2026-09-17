@@ -1692,6 +1692,35 @@ export class BattleScene extends Phaser.Scene {
     return false;
   }
 
+  // P0.019: topology debug overlay — visuals derived from live nav truth only.
+  toggleTopologyOverlay() {
+    if (this._topoOverlay) {
+      const on = !this._topoOverlay.visible;
+      this._topoOverlay.setVisible(on);
+      this.events.emit('hud:alert', on ? 'TOPOLOGY OVERLAY ON (mountain/red ramp/yellow cliff/orange)' : 'TOPOLOGY OVERLAY OFF');
+      return on;
+    }
+    const nav = this.nav; if (!nav) return false;
+    const g = this.add.graphics().setScrollFactor(1).setDepth(150).setAlpha(0.4);
+    const ts = nav.tileSize;
+    const rampSet = new Set(); if (this.ramp) for (let i = 0; i < this.ramp.length; i++) if (this.ramp[i]) rampSet.add(i);
+    for (let ty = 0; ty < nav.h; ty++) {
+      for (let tx = 0; tx < nav.w; tx++) {
+        const i = nav.idx(tx, ty);
+        if (!nav.solid[i]) continue;
+        const isRamp = rampSet.has(i);
+        g.fillStyle(isRamp ? 0xffd24a : 0xe04545, 1);
+        g.fillRect(tx * ts, ty * ts, ts, ts);
+      }
+    }
+    g.fillStyle(0x37b0ff, 1);
+    for (const [tx, ty] of (this.valleys || [])) g.fillRect(tx * ts, ty * ts, ts, ts);
+    this._topoOverlay = g;
+    this.events.once('shutdown', () => { this._topoOverlay = null; });
+    this.events.emit('hud:alert', 'TOPOLOGY OVERLAY ON (mountain/red ramp/yellow cliff/orange)');
+    return true;
+  }
+
   // P0.005: read-only terrain truth export over actual runtime fields/masks.
   exportTerrainTruth() {
     const nav = this.nav;
@@ -2895,6 +2924,8 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-F6', () => this.polish?.cycleSpeed());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
     this.input.keyboard.on('keydown-F8', () => { if (this.hotseat) { this.switchActiveTeam(); return; } this.restoreBookmark(); });
+    // P0.019: topology debug overlay toggle (renders from nav truth, never mutates it)
+    this.input.keyboard.on('keydown-F5', () => this.toggleTopologyOverlay());
     if (this.hotseat) {
       // AAA hot-seat: TAB passes controls to the other commander
       this.input.keyboard.on('keydown-TAB', (e) => { if (e.preventDefault) e.preventDefault(); this.switchActiveTeam(); });

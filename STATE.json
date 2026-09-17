@@ -318,18 +318,20 @@
   },
   {
    "id": "P0.019",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
     "P0.010-P0.018"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "clean build launches, training completes, battle restarts, and terrain overlay agrees 100%",
    "estimate": "4h",
-   "task": "Produce a playable Phase-0 release candidate with topology debug overlay toggle [P1][P2][P3]"
+   "task": "Produce a playable Phase-0 release candidate with topology debug overlay toggle [P1][P2][P3]",
+   "finished_at": "2026-09-17T14:59:44Z",
+   "done_when_result": "RC-PHASE0 PASS 10/10: clean build launches, real-mouse training completes (coach 28/28 nested), 2 battle restarts nav-ready, topology overlay agrees 100% (nav_solid=truth=1985), zero page errors"
   },
   {
    "id": "P0.020",
