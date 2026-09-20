@@ -406,18 +406,21 @@
   },
   {
    "id": "P1.024",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "ANTIGRAV",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
     "P1.023"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "no simulation field requires floating-point math and numeric schema rejects floats",
    "estimate": "1d",
-   "task": "Introduce integer velocity, acceleration, facing, cooldown, and resource arithmetic [P3]"
+   "task": "Introduce integer velocity, acceleration, facing, cooldown, and resource arithmetic [P3]",
+   "started_at": "2026-09-20T01:30:00Z",
+   "finished_at": "2026-09-20T02:05:00Z",
+   "done_when_result": "simNum.js integer-number contract (Q8 pos, Q8/tick rates, 24Hz ticks, 1/256 bearing) + schema rejects floats/NaN on declared fields + BattleScene seam emits canonical integers; gates SIM-NUM 14/14 + SIM-SCHEMA 18/18 + full browser suite green (v253 AudioContext env-flake proven identical on deployed pre-change bundle)"
   },
   {
    "id": "P1.025",

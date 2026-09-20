@@ -5,6 +5,7 @@
 // render-adapter separation (P1.033). Floats stay floats here; P1.023
 // converts world coords to integer 1/256-tile units in place.
 'use strict';
+import SimNum from './simNum.js';
 
 const SECTIONS = ['tickIndex', 'rngState', 'terrain', 'players', 'units', 'buildings', 'projectiles', 'orders'];
 
@@ -43,6 +44,8 @@ function validate(state) {
       for (const k of keys) if (row[k] === undefined) validate.errors.push(`${sec}[${i}] missing ${k}`);
     });
   }
+  // P1.024: declared integer-number fields must actually be integers.
+  validate.errors.push(...SimNum.checkNumbers(state));
   return validate.errors.length === 0;
 }
 

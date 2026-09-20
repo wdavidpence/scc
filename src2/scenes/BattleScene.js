@@ -15,6 +15,7 @@ import { missionChatter, DEBRIEFS_WIN, DEBRIEFS_LOSE } from '../engine/cutscenes
 import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
 import { SimSchema } from '../engine/simSchema.js';
+import { SimNum } from '../engine/simNum.js';
 import { Coach } from '../engine/coach.js';
 import { PolishFX } from '../engine/polish.js';
 
@@ -1694,15 +1695,19 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // P1.021: canonical sim-state export (read-only; render objects never enter here)
+  // P1.024: exported numbers are canonical integers (Q8 pos, Q8/tick rates,
+  // 24Hz ticks, 1/256-turn bearing) via SimNum; scene stays float-internal
+  // until P1.026/P1.029 replace it.
   exportSimState() {
+    const q8 = SimNum.toQ8, tk = SimNum.toTicks, b256 = SimNum.octToBearing, oc = SimNum.orderToCanonical;
     return SimSchema.serialize({
       tickIndex: this.simTickIndex || 0,
       rngState: this.simRngState || 0,
       terrain: { w: this.nav.w, h: this.nav.h, tileSize: this.nav.tileSize, solid: Array.from(this.nav.solid), ramp: Array.from(this.ramp || []) },
       players: this.players.map(p => ({ team: p.team, race: p.race, minerals: p.minerals, gas: p.gas, supplyUsed: p.supplyUsed, supplyCap: p.supplyCap, techs: p.techs, upgrades: p.upgrades })),
-      units: this.units.map(u => ({ id: u.id, team: u.team, kind: u.kind, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, shield: u.shield, maxShield: u.maxShield, state: u.state, order: u.order, cargo: u.cargo, facing: u.facing ?? 0, attackTimer: u.attackTimer ?? 0, dead: !!u.dead })),
-      buildings: this.buildings.map(b => ({ id: b.id, team: b.team, buildId: b.buildId, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, built: !!b.built, queue: (b.queue || []).map(q => ({ kind: q.kind, remaining: q.remaining })), rally: b.rally || null })),
-      projectiles: (this.projectiles || []).map(p => ({ id: p.id, team: p.team, kind: p.kind || 'bullet', x: p.x, y: p.y, vx: p.vx ?? 0, vy: p.vy ?? 0, damage: p.damage ?? 0, targetId: p.targetId ?? p.target?.id ?? null, ttl: p.ttl ?? 0 })),
+      units: this.units.map(u => ({ id: u.id, team: u.team, kind: u.kind, x: q8(u.x), y: q8(u.y), hp: u.hp, maxHp: u.maxHp, shield: u.shield, maxShield: u.maxShield, state: u.state, order: oc(u.order), cargo: Math.round(u.cargo || 0), facing: b256(u._facing8 || 0), attackTimer: tk(u.attackTimer || 0), dead: !!u.dead })),
+      buildings: this.buildings.map(b => ({ id: b.id, team: b.team, buildId: b.buildId, x: q8(b.x), y: q8(b.y), hp: b.hp, maxHp: b.maxHp, built: !!b.built, queue: (b.queue || []).map(q => ({ kind: q.kind, remaining: tk(q.remaining) })), rally: b.rally ? { x: q8(b.rally.x), y: q8(b.rally.y) } : null })),
+      projectiles: (this.projectiles || []).map(p => ({ id: p.id, team: p.team, kind: p.kind || 'bullet', x: q8(p.x), y: q8(p.y), vx: Math.round(p.vx || 0), vy: Math.round(p.vy || 0), damage: p.damage ?? 0, targetId: p.targetId ?? p.target?.id ?? null, ttl: tk(p.ttl || 0) })),
       orders: (this.orderLog || [])
     });
   }
