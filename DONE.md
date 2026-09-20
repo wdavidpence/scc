@@ -38,3 +38,5 @@
 - P1.021 — src2/engine/simSchema.js canonical sim state (tickIndex/rng/terrain/players/units/buildings/projectiles/orders), allowlist projection + order-stable canonicalizer + FNV hash; BattleScene.exportSimState live seam verified in Chromium; gate SIM-SCHEMA 16/16; coach 28/28 regression green.
 
 - P1.022 — src2/engine/simClock.js fixed 24Hz clock (exact tick count under variable fps, interpolation alpha, spiral-of-death clamp); gate SIM-CLOCK 11/11. Scene consumption of the clock lands in P1.026 (delete variable-delta updates).
+
+- P1.023 — src2/engine/simInt.js integer world coordinates (Q8 = 1/256 px), pure deterministic movement kernel: footprint probe, segment audit (no-tunnel), axis-priority slide, blocked-at-truth. WIP inherited with a Q16/Q8 velocity unit mix (teleport + tunneling); fixed to single-unit arithmetic. Gate scripts/verify-int-coords.cjs 13/13 incl cross-engine hash equality (default V8 vs --jitless V8 + in-process, 20,000 ticks).
