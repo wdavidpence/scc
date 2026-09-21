@@ -736,7 +736,12 @@ export class Unit {
     const d = Math.hypot(b.x - this.x, b.y - this.y);
     if (d > (b.def.w * TILE) / 2 + 18) {
       if (this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(b.x, b.y + (b.def.h * TILE) / 2); }
-      this.stepAlongPath(dt);
+      // PLAYABILITY: same straight-line fallback as updateBuild
+      if (this.pathIndex >= this.path.length) {
+        const dx = b.x - this.x, dy = b.y - this.y, dd = Math.hypot(dx, dy) || 1;
+        const step = this.speed * dt;
+        this.setPos(this.x + dx / dd * Math.min(step, dd), this.y + dy / dd * Math.min(step, dd));
+      } else this.stepAlongPath(dt);
       return;
     }
     this._repairT = (this._repairT || 0) - dt;
@@ -757,7 +762,28 @@ export class Unit {
     const d = Math.hypot(b.x - this.x, b.y - this.y);
     if (d > (b.def.w * TILE) / 2 + 18) {
       if (this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(b.x, b.y + (b.def.h * TILE) / 2); }
-      this.stepAlongPath(dt);
+      // PLAYABILITY: when the path is exhausted but we're still out of build
+      // range (blocked/partial paths, or a 2-point path marked arrived while
+      // far away), walk straight toward the site — otherwise construction
+      // stalls at 0 forever and the tutorial dead-locks. Also cover the
+      // case where the path exists but the unit isn't closing on the next
+      // waypoint (stale/reused path): fall back to straight-line after 2.5s.
+      if (this.pathIndex >= this.path.length) {
+        const dx = b.x - this.x, dy = b.y - this.y, dd = Math.hypot(dx, dy) || 1;
+        const step = this.speed * dt;
+        this.setPos(this.x + dx / dd * Math.min(step, dd), this.y + dy / dd * Math.min(step, dd));
+        return;
+      }
+      const nextP = this.path[this.pathIndex];
+      const toNext = Math.hypot(nextP.x - this.x, nextP.y - this.y);
+      this._pathStuckT = (this._pathStuckT ?? 0) + dt;
+      if (this._pathStuckTo !== undefined && Math.abs(toNext - this._pathStuckTo) > 0.75) this._pathStuckT = 0;
+      this._pathStuckTo = toNext;
+      if (this._pathStuckT > 2.5) {
+        const dx = b.x - this.x, dy = b.y - this.y, dd = Math.hypot(dx, dy) || 1;
+        const step = this.speed * dt;
+        this.setPos(this.x + dx / dd * Math.min(step, dd), this.y + dy / dd * Math.min(step, dd));
+      } else this.stepAlongPath(dt);
       return;
     }
     b.constructionProgress += dt;

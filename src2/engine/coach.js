@@ -388,11 +388,13 @@ export class Coach {
       if (t) {
         ok = true;
         const c = b.cameras.main;
-        // FIX: ring is drawn in SCREEN space (scrollFactor 0) — must convert the
-        // target's WORLD coords through the camera first, else the pulsing ring
-        // sat at world coords on screen (pointing at nothing) and players could
-        // never find the target.
-        hx = (t.x - c.scrollX) * c.zoom; hy = (t.y - c.scrollY) * c.zoom;
+        // Ring is drawn in SCREEN space (scrollFactor 0) but Phaser's
+        // worldView starts at (240,150) on this camera — screen coord of a
+        // world point is (w - worldView.x) * zoom (verified: getWorldPoint
+        // inverse). Using scrollX/scrollY (0,0 here) offset every ring by
+        // 240/150*zoom, so rings pointed away from their targets and
+        // "click the pulsing ring" never hit.
+        hx = (t.x - c.worldView.x) * c.zoom; hy = (t.y - c.worldView.y) * c.zoom;
         hr = (s.radius || 30) * c.zoom;
         this.markerTarget = t;
       }
