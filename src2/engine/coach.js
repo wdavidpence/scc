@@ -388,7 +388,11 @@ export class Coach {
       if (t) {
         ok = true;
         const c = b.cameras.main;
-        hx = (t.x - c.worldView.x) * c.zoom; hy = (t.y - c.worldView.y) * c.zoom;
+        // FIX: ring is drawn in SCREEN space (scrollFactor 0) — must convert the
+        // target's WORLD coords through the camera first, else the pulsing ring
+        // sat at world coords on screen (pointing at nothing) and players could
+        // never find the target.
+        hx = (t.x - c.scrollX) * c.zoom; hy = (t.y - c.scrollY) * c.zoom;
         hr = (s.radius || 30) * c.zoom;
         this.markerTarget = t;
       }
@@ -422,6 +426,22 @@ export class Coach {
       if (t && s.cam) b.cameras.main.centerOn(t.x, t.y);
       this.stepAt = b.gameTime - 12;
       this.nudge(s.tip);
+    }
+    // Playability anti-stall: if the step waits on a structure that got
+    // placed with no builder assigned (e.g. ghost placed with no worker
+    // selected), auto-send the nearest idle worker so the chain never dies.
+    {
+      let t = s.mode === 'button' ? null : s.target?.();
+      if (!t && s.waitBefore && !s.waitBefore() && this.prodBid)
+        t = b.buildings.find(x => x.buildId === this.prodBid && x.team === 0 && !x.built); // chain stalled on unstaffed construction
+      if (t && t.def && !t.built && t.buildId && !b.units.some(u => !u.dead && u.order?.building === t)) {
+        if (this._noBuilderFor !== t) {
+          this._noBuilderFor = t;
+          const wk = b.units.filter(u => u.team === 0 && !u.dead && u.def.worker)
+            .sort((a, c) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(c.x - t.x, c.y - t.y))[0];
+          if (wk) { wk.setOrder({ type: 'build', building: t }); this.nudge('WORKER SENT — WATCH THE CONSTRUCTION'); }
+        }
+      } else this._noBuilderFor = null;
     }
     if (s.waitBefore && !s.waitBefore()) return;
     if (s.done()) {

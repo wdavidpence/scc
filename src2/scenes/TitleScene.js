@@ -341,6 +341,10 @@ export class TitleScene extends Phaser.Scene {
       const str = `SECTOR CLOCK ${mm}:${ss}`;
       if (this._clockTxt.text !== str) this._clockTxt.setText(str);
     }
+    // Playability fix: while a cutscene (Cut) is running, Title must not
+    // run its idle-attract loop — it re-drew the menu over the intro and
+    // kept swapping hero cards, which made the beginning read as broken.
+    if (this.scene.isActive('Cut')) { this._attract = 0; if (this._attractOn) this.endAttract(); return; }
     this._attract += dt;
     if (this._attract > 8 && !this._attractOn) this.startAttract();
     if (this._attractOn) {
@@ -470,6 +474,7 @@ export class TitleScene extends Phaser.Scene {
       this.endAttract();
       this.scene.pause('Title');
       this.scene.launch('Cut', { script: brief.beats, title: `MISSION ${m.n} BRIEFING`, mode: 'brief', onComplete: () => this.scene.start('Battle', args) });
+      this.scene.bringToTop('Cut');
     } else {
       cin.whoosh(0.6);
       this.scene.start('Battle', args);
@@ -490,6 +495,7 @@ export class TitleScene extends Phaser.Scene {
       this.endAttract();
       this.scene.pause('Title');
       this.scene.launch('Cut', { script: brief.beats, title: `MISSION ${m.n} BRIEFING`, mode: 'brief', onComplete: () => this.scene.start('Battle', args) });
+      this.scene.bringToTop('Cut');
     } else {
       cin.whoosh(0.6);
       this.scene.start('Battle', args);
@@ -525,6 +531,9 @@ export class TitleScene extends Phaser.Scene {
     this.endAttract();
     this.scene.pause('Title');
     this.scene.launch('Cut', { script: INTRO_SCRIPT, title: 'OPENING TRANSMISSION', mode: 'intro', onComplete: () => this.scene.resume('Title') });
+    // Playability fix: guarantee Cut renders ABOVE Title (launch alone kept
+    // Title later in the render list, so the menu drew on top of the intro).
+    this.scene.bringToTop('Cut');
   }
 
   showIntroIfNew() {

@@ -5,6 +5,12 @@ import { liveProjectiles } from './liveProjectiles.js';
 
 let nextId = 1;
 
+// P1.025: entity-side SIM randomness draws from the world (BattleScene)
+// one match PRNG; fallback keeps entities constructible headless/offline.
+// Only decision/targeting/spawn draws use this — every FX jitter in this
+// file stays on Math.random (presentation stream, render-rate coupling).
+function simRng(world) { return world?.simRng; }
+
 export function teamColorHex(team) {
   return team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
 }
@@ -39,7 +45,7 @@ export class Unit {
     this.target = null;
     this.path = [];
     this.pathIndex = 0;
-    this.repathTimer = Math.random() * 0.5;
+    this.repathTimer = simRng(world)?.u01() * 0.5;
     this.attackTimer = 0;
     this.cargo = 0;
     this.harvestTimer = 0;
@@ -344,7 +350,7 @@ export class Unit {
     const arrived = this.stepAlongPath(dt);
     this.repathTimer -= dt;
     if (!arrived && this.repathTimer <= 0) {
-      this.repathTimer = 0.7 + Math.random() * 0.4;
+      this.repathTimer = 0.7 + (simRng(this.world)?.u01() ?? Math.random()) * 0.4;
       const stillBlocked = this.world.nav.blockedBy[this.world.nav.idx(Math.floor(this.x / TILE), Math.floor(this.y / TILE))] >= 0 && this.world.nav.blockedBy[this.world.nav.idx(Math.floor(this.x / TILE), Math.floor(this.y / TILE))] !== this.id;
       if (stillBlocked) this.repath(this.order.point.x, this.order.point.y);
     }
@@ -481,7 +487,7 @@ export class Unit {
       it.cd -= dt;
       if (it.dive && (it.dive.dead || Math.hypot(it.x - it.dive.x, it.y - it.dive.y) < 8)) {
         if (it.dive && !it.dive.dead) this.world.applyHit(it.dive, this.def.damage, 0);
-        it.dive = null; it.cd = 1.4 + Math.random();
+        it.dive = null; it.cd = 1.4 + (simRng(this.world)?.u01() ?? Math.random());
       }
       let tx, ty;
       if (it.dive && !it.dive.dead) {
@@ -595,7 +601,7 @@ export class Unit {
     for (let v = 0; v < volley; v++) {
       const off = volley > 1 ? { x: (Math.random() * 24 - 12), y: (Math.random() * 16 - 8) } : { x: 0, y: 0 };
       const from = { x: this.x + off.x * 0.2, y: this.y + off.y * 0.2 };
-      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying, this.team) || target);
+      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + ((simRng(this.world)?.u01() ?? Math.random()) * 40 - 20), this.y + ((simRng(this.world)?.u01() ?? Math.random()) * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying, this.team) || target);
       this.world.spawnProjectile({
         from,
         target: tgt,
@@ -1222,7 +1228,7 @@ export class Building {
     const def = UNITS[kind];
     const n = def.trainCount || 1;
     for (let i = 0; i < n; i++) {
-      const u = this.world.spawnUnit(this.team, kind, rx + (Math.random() * 20 - 10) + i * 10, ry + Math.random() * 8, { arriveReady: true });
+      const u = this.world.spawnUnit(this.team, kind, rx + ((simRng(this.world)?.u01() ?? Math.random()) * 20 - 10) + i * 10, ry + (simRng(this.world)?.u01() ?? Math.random()) * 8, { arriveReady: true });
       if (u) this.world.audio?.spawn();
     }
   }

@@ -16,6 +16,7 @@ import { pickCommander } from '../engine/commanders.js';
 import { Triggers } from '../engine/triggers.js';
 import { SimSchema } from '../engine/simSchema.js';
 import { SimNum } from '../engine/simNum.js';
+import { SimRng } from '../engine/simRng.js';
 import { Coach } from '../engine/coach.js';
 import { PolishFX } from '../engine/polish.js';
 
@@ -67,6 +68,12 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.timeScale = 1;
+    // P1.025: one seeded PRNG per match (all simulation randomness).
+    // Default seed is fixed for reproducible builds/tests; replays and the
+    // lobby will inject matchSeed per match later (P1.035/P1.043).
+    // Presentation jitter stays on its own stream (render-rate coupling).
+    this.matchSeed = (this.registry?.get?.('matchSeed') | 0) || 0x5CA1;
+    this.simRng = new SimRng(this.matchSeed);
     this.units = [];
     this.buildings = [];
     this.projectiles = [];
@@ -929,15 +936,19 @@ export class BattleScene extends Phaser.Scene {
       const pool = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
       for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); this.time.delayedCall(12000, () => { if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } }); } }
       // pulsing brood sacs erupt at the target, each hatching a skarnling
+      // P1.025: spawn spots + hatch move-targets drawn from simRng at CAST
+      // time (was Math.random at cast and at land-time in delayedCall) so
+      // the whole spell is one deterministic draw batch.
       for (let i = 0; i < 8; i++) {
-        const sx = wx + Math.random() * 90 - 45, sy = wy + Math.random() * 90 - 45;
+        const sx = wx + this.simRng.range(-45, 45), sy = wy + this.simRng.range(-45, 45);
+        const mx = wx + this.simRng.range(-30, 30), my = wy + this.simRng.range(-30, 30);
         const sac = this.add.circle(sx, sy, 6, 0x8a3a22, 0.95).setStrokeStyle(2, 0xff7b2e, 0.8).setDepth(48);
         this.tweens.add({ targets: sac, scale: 1.6, duration: 300 + i * 90, yoyo: false });
         this.tweens.add({ targets: sac, scale: 2.6, alpha: 0, duration: 220, delay: 320 + i * 90, onComplete: () => sac.destroy() });
         this.time.delayedCall(340 + i * 90, () => {
           const burst = this.add.image(sx, sy, 'glow').setTint(0xff7b2e).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.3);
           this.tweens.add({ targets: burst, scale: 0.3, alpha: 0, duration: 300, onComplete: () => burst.destroy() });
-          const u = this.spawnUnit(0, 'skarnling', sx, sy, { arriveReady: true }); if (u) u.issueMove(wx + Math.random() * 60 - 30, wy + Math.random() * 60 - 30, true);
+          const u = this.spawnUnit(0, 'skarnling', sx, sy, { arriveReady: true }); if (u) u.issueMove(mx, my, true);
         });
       }
       // organic tendrils spreading from center
@@ -1358,7 +1369,9 @@ export class BattleScene extends Phaser.Scene {
     let carveGuard = 0;
     while (!pass() && carveGuard++ < 40) {
       // carve a 2-wide jagged corridor at a random diagonal crossing point of the mid band
-      const midY = Math.round(MAP_H * (0.15 + Math.random() * 0.7));
+      // P1.025: corridor choice was Math.random (non-deterministic map on
+      // every load) — now draws from the seeded map stream (rnd).
+      const midY = Math.round(MAP_H * (0.15 + rnd() * 0.7));
       for (let tx = Math.floor(MAP_W * 0.15); tx <= Math.ceil(MAP_W * 0.85); tx++) {
         const ty = midY + Math.round(Math.sin(tx * 0.35 + carveGuard) * 2);
         solid[this.nav.idx(tx, ty)] = 0;
@@ -1702,7 +1715,7 @@ export class BattleScene extends Phaser.Scene {
     const q8 = SimNum.toQ8, tk = SimNum.toTicks, b256 = SimNum.octToBearing, oc = SimNum.orderToCanonical;
     return SimSchema.serialize({
       tickIndex: this.simTickIndex || 0,
-      rngState: this.simRngState || 0,
+      rngState: this.simRng?.digest() || 0,   // P1.025: live digest of the seeded match PRNG (state + draw counter)
       terrain: { w: this.nav.w, h: this.nav.h, tileSize: this.nav.tileSize, solid: Array.from(this.nav.solid), ramp: Array.from(this.ramp || []) },
       players: this.players.map(p => ({ team: p.team, race: p.race, minerals: p.minerals, gas: p.gas, supplyUsed: p.supplyUsed, supplyCap: p.supplyCap, techs: p.techs, upgrades: p.upgrades })),
       units: this.units.map(u => ({ id: u.id, team: u.team, kind: u.kind, x: q8(u.x), y: q8(u.y), hp: u.hp, maxHp: u.maxHp, shield: u.shield, maxShield: u.maxShield, state: u.state, order: oc(u.order), cargo: Math.round(u.cargo || 0), facing: b256(u._facing8 || 0), attackTimer: tk(u.attackTimer || 0), dead: !!u.dead })),
@@ -3114,12 +3127,12 @@ export class BattleScene extends Phaser.Scene {
         if (batch.length < 2) { // cycled through — wrap: divide whole selection at this point
           this._sgCycle = 1;
           const half = list.slice(0, Math.ceil(list.length / 2));
-          half.forEach(u => u.issueMove(wp.x + (Math.random() * 30 - 15), wp.y + (Math.random() * 30 - 15), this.attackMoveMode));
+          half.forEach(u => u.issueMove(wp.x + this.simRng.range(-15, 15), wp.y + this.simRng.range(-15, 15), this.attackMoveMode));
           const rest = list.filter(u => !half.includes(u));
-          rest.forEach(u => u.issueMove(wp.x + (Math.random() * 30 - 15), wp.y + (Math.random() * 30 - 15), this.attackMoveMode));
+          rest.forEach(u => u.issueMove(wp.x + this.simRng.range(-15, 15), wp.y + this.simRng.range(-15, 15), this.attackMoveMode));
           this.events.emit('hud:alert', 'MOVE: ALL');
         } else {
-          batch.forEach(u => u.issueMove(wp.x + (Math.random() * 26 - 13), wp.y + (Math.random() * 26 - 13), this.attackMoveMode));
+          batch.forEach(u => u.issueMove(wp.x + this.simRng.range(-13, 13), wp.y + this.simRng.range(-13, 13), this.attackMoveMode));
           this.events.emit('hud:alert', `MOVE GROUP ${this._sgCycle} (${batch.length})`);
         }
         this.audio?.move();
@@ -3626,8 +3639,8 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: t, y: c.y - 30, alpha: 0, duration: 1100, onComplete: () => t.destroy() });
     };
     this.audio?.orderPing?.();
-    if (c.kind === 'minerals') { const amt = 500 + ((Math.random() * 500) | 0); this.players[0].minerals += amt; pop(`+${amt} MINERALS`, '#7db4ff'); }
-    else if (c.kind === 'gas') { const amt = 250 + ((Math.random() * 250) | 0); this.players[0].gas += amt; pop(`+${amt} GAS`, '#7dffd9'); }
+    if (c.kind === 'minerals') { const amt = 500 + this.simRng.int(500); this.players[0].minerals += amt; pop(`+${amt} MINERALS`, '#7db4ff'); }
+    else if (c.kind === 'gas') { const amt = 250 + this.simRng.int(250); this.players[0].gas += amt; pop(`+${amt} GAS`, '#7dffd9'); }
     else if (c.kind === 'power') { this.powerSurgeUntil = this.gameTime + 30; pop('POWER SURGE — UNITS +1 ARMOR', '#ffd23f'); this.events.emit('hud:alert', 'POWER SURGE: +1 ARMOR 30s'); }
     else if (c.kind === 'spawn') { const m = this.spawnUnit(0, 'marine', c.x, c.y, { arriveReady: true }); pop(m ? 'REINFORCEMENT!' : '+200 MINERALS', '#ffd23f'); if (!m) this.players[0].minerals += 200; }
     else { this.scannerSweep(c.x, c.y); pop('DATA: AREA REVEALED', '#9fffff'); }
@@ -3758,7 +3771,12 @@ export class BattleScene extends Phaser.Scene {
     const race = this.players[T].race;
     if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.announcer?.('supply'); return; }
     const workers = [...this.selection].filter(u => u.def.worker && u.team === T);
-    if (race === 'terran' && workers.length === 0) { this.audio?.announcer?.('nocrew'); return; }
+    if (race === 'terran' && workers.length === 0) {
+      // Playability: allow placing anyway — an idle worker will be auto-assigned
+      // at tryPlace (SC1 carrier behavior), so the ghost never dead-ends.
+      const anyWorker = this.units.some(u => u.team === T && !u.dead && u.def.worker);
+      if (!anyWorker) { this.audio?.announcer?.('nocrew'); return; }
+    }
     this.placing = { buildId };
     this._ghostOk = null;
     this.ghost = this.add.image(0, 0, this.ghostTexKey(buildId)).setDepth(501).setAlpha(0.5);
@@ -3862,8 +3880,17 @@ export class BattleScene extends Phaser.Scene {
     this.buildings.push(b);
     const race = this.players[T].race;
     if (race === 'terran') {
-      const workers = [...this.selection].filter(u => u.def.worker);
-      workers.forEach(w => w.setOrder({ type: 'build', building: b }));
+      let builders = [...this.selection].filter(u => u.def.worker && !u.dead);
+      // Playability: placement must never dead-end — if the player placed
+      // with no worker selected, auto-send the nearest idle worker so the
+      // building always gets built (SC1 carrier-worker behavior).
+      if (builders.length === 0) {
+        const cands = this.units.filter(u => u.team === T && !u.dead && u.def.worker);
+        builders = cands.filter(u => !u.order || u.state === 'idle')
+          .sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y));
+        if (builders.length === 0) builders = cands.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y)).slice(0, 1);
+      }
+      builders.forEach(w => w.setOrder({ type: 'build', building: b }));
     }
     if (race === 'auraxis') { this.players[T].supplyCap = this.computeSupplyCap(T); }
     this.audio?.buildStart();
@@ -4190,7 +4217,7 @@ export class BattleScene extends Phaser.Scene {
         const i = ty * MAP_W + tx;
         if (cells[i]) continue;
         if (cells[i - 1] || cells[i + 1] || cells[i - MAP_W] || cells[i + MAP_W]) {
-          if (Math.random() < 0.06) {
+          if (this.simRng.u01() < 0.06) {
             // don't blight over rocks/water handled downstream in placement check
             next[i] = 1;
             ctx.fillStyle = team === 0 ? '#2f4e8f' : '#5a2340';
@@ -4214,7 +4241,7 @@ export class BattleScene extends Phaser.Scene {
         let best = null, bd = 1e9;
         for (const m of this.minerals) { if (m.amount <= 0) continue; const d = Math.hypot(m.x - aiMCV.x, m.y - aiMCV.y); if (d < bd) { bd = d; best = m; } }
         if (this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, 1)) this.deployMCV(aiMCV, true);
-        else if (best) { const ang = Math.random() * Math.PI * 2; aiMCV.issueMove(best.x + Math.cos(ang) * TILE * 3, best.y + Math.sin(ang) * TILE * 3, false); }
+        else if (best) { const ang = this.simRng.u01() * Math.PI * 2; aiMCV.issueMove(best.x + Math.cos(ang) * TILE * 3, best.y + Math.sin(ang) * TILE * 3, false); }
       }
       return;
     }
@@ -4268,13 +4295,13 @@ export class BattleScene extends Phaser.Scene {
           if (this.deploySpotValid(BUILDINGS[aiMCV.def.deploysTo], aiMCV.x, aiMCV.y, team)) {
             this.deployMCV(aiMCV, true);
           } else if (!aiMCV.order || aiMCV.order.type !== 'move') {
-            const ang = Math.random() * Math.PI * 2;
-            const rr = bd < TILE * 2 ? TILE * (2 + Math.random() * 3) : TILE * (1 + Math.random() * 2);
+            const ang = this.simRng.u01() * Math.PI * 2;
+            const rr = bd < TILE * 2 ? TILE * (2 + this.simRng.u01() * 3) : TILE * (1 + this.simRng.u01() * 2);
             aiMCV.issueMove(best.x + Math.cos(ang) * rr, best.y + Math.sin(ang) * rr, false);
           }
         } else if (best && (!aiMCV.order || aiMCV.order.type !== 'move')) {
-          const ang = Math.random() * Math.PI * 2;
-          const rr = TILE * (4 + Math.random() * 6);
+          const ang = this.simRng.u01() * Math.PI * 2;
+          const rr = TILE * (4 + this.simRng.u01() * 6);
           aiMCV.issueMove(best.x + Math.cos(ang) * rr, best.y + Math.sin(ang) * rr, false);
         }
       }
@@ -4483,7 +4510,7 @@ export class BattleScene extends Phaser.Scene {
               if (medicUnits.length) { const md = medicUnits.shift(); if (md) squad.push(md); }
               if (!squad.length) break;
               squad.forEach(m => { if (!this.loadUnitInto(ds, m)) { /* full */ } });
-              ds.setOrder({ type: 'unload', point: { x: dropTgt.x + Math.random() * 80 - 40, y: dropTgt.y + Math.random() * 60 - 30 } });
+              ds.setOrder({ type: 'unload', point: { x: dropTgt.x + this.simRng.range(-40, 40), y: dropTgt.y + this.simRng.range(-30, 30) } });
               ds._dropAt = dropTgt;
               // fighter escort follows the dropship to its drop zone
               for (const esc of army.filter(u => u.flying && !u.def.transport && !u.dead)) esc.setOrder({ type: 'attackMove', point: { x: dropTgt.x, y: dropTgt.y } });
@@ -4506,7 +4533,7 @@ export class BattleScene extends Phaser.Scene {
       s.harvestSquad = squad;
       // attack-move at player's visible miners; if blind, probe a random enemy-half direction
       const victim = this.units.find(u => u.team === 0 && u.def.worker && this.isVisible(u.x, u.y));
-      const tgt = victim ? { x: victim.x, y: victim.y } : { x: PXW * (0.15 + Math.random() * 0.35), y: PXH * (0.15 + Math.random() * 0.35) };
+      const tgt = victim ? { x: victim.x, y: victim.y } : { x: PXW * (0.15 + this.simRng.u01() * 0.35), y: PXH * (0.15 + this.simRng.u01() * 0.35) };
       squad.forEach(u => u.issueMove(tgt.x, tgt.y, true));
     } else {
       s.harvestSquad = s.harvestSquad.filter(u => !u.dead);
@@ -4519,7 +4546,7 @@ export class BattleScene extends Phaser.Scene {
       if (!s.scoutAxes) s.scoutAxes = [[0.30, 0.55], [0.55, 0.30], [0.42, 0.42], [0.25, 0.30], [0.50, 0.55]];
       s.scoutAxisI = ((s.scoutAxisI ?? -1) + 1) % s.scoutAxes.length;
       const ax = s.scoutAxes[s.scoutAxisI];
-      const sx = PXW * ax[0] + (Math.random() * 120 - 60), sy = PXH * ax[1] + (Math.random() * 120 - 60);
+      const sx = PXW * ax[0] + this.simRng.range(-60, 60), sy = PXH * ax[1] + this.simRng.range(-60, 60);
       if (race === 'skarn') {
         const ov = army.find(u => u.kind === 'skywarden');
         if (ov) { ov.issueMove(sx, sy, false); }
@@ -4553,18 +4580,18 @@ export class BattleScene extends Phaser.Scene {
       s.nextAttackAt = prof.attackGap;
       // v2.45: attack only toward LAST SPOTTED contact — no hardcoded player-base knowledge.
       // Without intel, commit to a random mid-map axis and let scouts refine it.
-      const tgt = s.lastSeenPlayerPos || { x: PXW * (0.35 + Math.random() * 0.3), y: PXH * (0.35 + Math.random() * 0.3) };
+      const tgt = s.lastSeenPlayerPos || { x: PXW * (0.35 + this.simRng.u01() * 0.3), y: PXH * (0.35 + this.simRng.u01() * 0.3) };
       // split force: main push + flank
       const flank = ready.slice(Math.ceil(ready.length * prof.flankSplit));
-      for (const u of ready.slice(0, Math.ceil(ready.length * prof.flankSplit))) u.issueMove(tgt.x + Math.random() * 60 - 30, tgt.y + Math.random() * 60 - 30, true);
-      for (const u of flank) u.issueMove(tgt.x + 140 + Math.random() * 60, tgt.y - 120 + Math.random() * 60, true);
+      for (const u of ready.slice(0, Math.ceil(ready.length * prof.flankSplit))) u.issueMove(tgt.x + this.simRng.range(-30, 30), tgt.y + this.simRng.range(-30, 30), true);
+      for (const u of flank) u.issueMove(tgt.x + 140 + this.simRng.u01() * 60, tgt.y - 120 + this.simRng.u01() * 60, true);
       s.aggroUntil = 0;
     }
     // retreat when hopelessly outvalued (fight another day)
     if (advantage < 0.55 && ready.length > 3 && s.myDrop < (this.gameTime | 0) / 30) {
       s.myDrop = (this.gameTime | 0) / 30;
       const base = this.buildings.find(b => b.team === team && b.def.primary);
-      if (base) ready.slice(0, 6).forEach(u => { if (!this.isVisible(u.x, u.y) || Math.random() < 0.5) u.issueMove(base.x + Math.random() * 60 - 30, base.y + Math.random() * 60 - 30, false); });
+      if (base) ready.slice(0, 6).forEach(u => { if (!this.isVisible(u.x, u.y) || this.simRng.u01() < 0.5) u.issueMove(base.x + this.simRng.range(-30, 30), base.y + this.simRng.range(-30, 30), false); });
     }
     // defenders: units near base under attack already handled by auto-acquire
   }
