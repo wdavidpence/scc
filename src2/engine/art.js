@@ -553,8 +553,12 @@ function createUnitTextures(scene) {
   for (const [kind, fn] of Object.entries(defs)) {
     for (let team = 0; team < 3; team++) {
       const col = team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
-      const raw = document.createElement('canvas'); raw.width = 20; raw.height = 20;
-      fn(raw.getContext('2d'), col);
+      const raw = document.createElement('canvas'); raw.width = 40; raw.height = 40;
+      const rctx = raw.getContext('2d');
+      // v2.66: draw at 2x resolution so zoomed views (1.6-2.6x) show real detail
+      rctx.save(); rctx.scale(2, 2);
+      fn(rctx, col);
+      rctx.restore();
       const finished = finishSprite(raw, raceOf[kind] || 'terran', col);
       if (!scene.textures.exists(`u-${kind}-t${team}`)) scene.textures.addCanvas(`u-${kind}-t${team}`, finished);
       // AAA: walk-cycle frames — cut the FINISHED sprite halves and offset them (finishSprite re-centers raw, so cutting raw would cancel the shift)
