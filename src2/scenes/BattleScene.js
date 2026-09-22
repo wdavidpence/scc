@@ -7,6 +7,7 @@ import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
 import { createAllTextures } from '../engine/art.js';
 import { createBuildingsAAA } from '../engine/art3d.js';
+import { createTerrainArt } from '../engine/terrainArt.js';
 import { preloadAIKit, applyAIKit } from '../engine/aiKit.js';
 import { Audio2 } from '../engine/audio2.js';
 import { applyUpgradesToPlayer, saveCampaign, MISSIONS } from '../engine/campaign.js';
@@ -168,6 +169,7 @@ export class BattleScene extends Phaser.Scene {
 
     createAllTextures(this);
     try { createBuildingsAAA(this); } catch (e) { console.warn('AAA buildings fallback', String(e)); }
+    try { createTerrainArt(this); } catch (e) { console.warn('terrain-art fallback', String(e)); }
     // v2.39 deep AI kit: repaint unit/structure/fx keys in-place (safe no-op if assets absent)
     try { this._aiBaked = applyAIKit(this); } catch (e) { console.warn('ai-kit fallback', String(e)); this._aiBaked = 0; }
     // v2.60 KEYCUT: Pollinations rocks/minerals/geysers ship with painted skies baked in —
@@ -1063,21 +1065,22 @@ export class BattleScene extends Phaser.Scene {
         kept.push({ tx, ty });
       }
       for (const r of kept) {
-        const key = this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : (rnd() < 0.5 ? 'rock' : 'rock2');
+        const key = this.textures.exists('rock-hi0') ? 'rock-hi' + ((rnd() * 3) | 0) : this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : (rnd() < 0.5 ? 'rock' : 'rock2');
         const img = this.add.image(r.tx * TILE + 8, r.ty * TILE + 8, key);
-        if (key.startsWith('ai-rock')) { img.setScale(0.38 + rnd() * 0.22).setFlipX(rnd() < 0.5); }
+        if (key.startsWith('rock-hi')) img.setScale(0.42 + rnd() * 0.2).setFlipX(rnd() < 0.5); // v2.66 hi-res boulders (~20-25px, real detail)
+        else if (key.startsWith('ai-rock')) { img.setScale(0.38 + rnd() * 0.22).setFlipX(rnd() < 0.5); }
         img.setDepth(25);
       }
       this.rockClusters.push(kept);
       return kept;
     };
     // borders
-    const borderRock = () => this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : 'rock';
+    const borderRock = () => this.textures.exists('rock-hi0') ? 'rock-hi' + ((rnd() * 3) | 0) : this.textures.exists('ai-rock0') ? 'ai-rock' + ((rnd() * 3) | 0) : 'rock';
     for (let t = 0; t < MAP_W; t++) {
-      for (const ty of [0, MAP_H - 1]) { const k = borderRock(); const im = this.add.image(t * TILE + 8, ty * TILE + 8, k); if (k.startsWith('ai-rock')) im.setScale(0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
+      for (const ty of [0, MAP_H - 1]) { const k = borderRock(); const im = this.add.image(t * TILE + 8, ty * TILE + 8, k); if (/^(ai|rock)-/.test(k)) im.setScale(k.startsWith('rock-hi') ? 0.42 + rnd() * 0.2 : 0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
     }
     for (let ty = 0; ty < MAP_H; ty++) {
-      for (const tx of [0, MAP_W - 1]) { const k = borderRock(); const im = this.add.image(tx * TILE + 8, ty * TILE + 8, k); if (k.startsWith('ai-rock')) im.setScale(0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
+      for (const tx of [0, MAP_W - 1]) { const k = borderRock(); const im = this.add.image(tx * TILE + 8, ty * TILE + 8, k); if (/^(ai|rock)-/.test(k)) im.setScale(k.startsWith('rock-hi') ? 0.42 + rnd() * 0.2 : 0.42 + rnd() * 0.18).setFlipX(rnd() < 0.5); im.setDepth(25); }
     }
     // chokes near each base
     this.rockTiles = [];
@@ -1404,7 +1407,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.children && this.children.list) {
           for (const r of toRemove) {
             for (const c of [...this.children.list]) {
-              if (c.type === 'Image' && c.texture && (/^ai-rock/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
+              if (c.type === 'Image' && c.texture && (/^ai-rock|^rock-hi/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
                   Math.abs(c.x - (r.tx * TILE + 8)) < 9 && Math.abs(c.y - (r.ty * TILE + 8)) < 9) c.destroy();
             }
           }
@@ -1426,17 +1429,44 @@ export class BattleScene extends Phaser.Scene {
       }
       this.textures.get('terrain').refresh();
     }
-    // scatter big rock sprites over ridge tops for 3D silhouette pop
+    // v2.66 mountain chains: dense back-to-front placement of hi-res mountain
+    // sprites — every other ridge cell carries one (~40-52px display), so
+    // ridges read as continuous ranges instead of sparse confetti. Rows are
+    // created back-to-front; equal depth keeps painter order, nearer rows
+    // overlap farther rows.
     this._mountainSprs = [];
-    const rockKey = this.textures.exists('ai-rock0') ? 'ai-rock' : 'rock';
-    let painted = new Set();
-    for (const [tx, ty] of this.mountains) {
-      if ((tx * 31 + ty * 57) % 7 !== 0) continue; // sparse sprite pass over solid mass
-      if (this.nav.blocked[this.nav.idx(tx, ty)]) continue;
-      const key = this.textures.exists('ai-rock0') ? 'ai-rock' + ((tx + ty) % 3) : rockKey;
-      const im = this.add.image(tx * TILE + 8, ty * TILE + 4, key).setDepth(24).setScale(1.1 + ((tx * ty) % 5) * 0.12).setFlipX(((tx + ty) % 2) === 0);
-      this._mountainSprs.push(im);
-      painted.add(`${tx},${ty}`);
+    if (this.textures.exists('mtn-0')) {
+      const seenCells = new Set();
+      const cells = [];
+      for (const [tx, ty] of this.mountains) {
+        const k = tx + ',' + ty;
+        if (seenCells.has(k)) continue;
+        seenCells.add(k);
+        if (this.nav.blocked[this.nav.idx(tx, ty)]) continue;
+        if (this.rockTiles.some(r => r.tx === tx && r.ty === ty)) continue; // boulder already owns this cell
+        cells.push([tx, ty]);
+      }
+      cells.sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
+      for (const [tx, ty] of cells) {
+        const key = 'mtn-' + ((tx * 7 + ty * 3) % 3);
+        const jx = ((tx * 31 + ty * 17) % 5) - 2, jy = ((tx * 13 + ty * 29) % 5) - 2;
+        const im = this.add.image(tx * TILE + 8 + jx, ty * TILE + 2 + jy, key)
+          .setDepth(24)
+          .setScale(0.7 + ((tx * ty) % 5) * 0.08)
+          .setFlipX(((tx + ty) % 2) === 0);
+        this._mountainSprs.push(im);
+      }
+    } else {
+      const rockKey = this.textures.exists('ai-rock0') ? 'ai-rock' : 'rock';
+      let painted = new Set();
+      for (const [tx, ty] of this.mountains) {
+        if ((tx * 31 + ty * 57) % 7 !== 0) continue; // sparse sprite pass over solid mass
+        if (this.nav.blocked[this.nav.idx(tx, ty)]) continue;
+        const key = this.textures.exists('ai-rock0') ? 'ai-rock' + ((tx + ty) % 3) : rockKey;
+        const im = this.add.image(tx * TILE + 4, ty * TILE + 4, key).setDepth(24).setScale(1.1 + ((tx * ty) % 5) * 0.12).setFlipX(((tx + ty) % 2) === 0);
+        this._mountainSprs.push(im);
+        painted.add(`${tx},${ty}`);
+      }
     }
   }
 
@@ -1856,7 +1886,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.nav.blockedBy[i] === -2) { this.nav.blocked[i] = 0; this.nav.blockedBy[i] = -1; }
     this.flows?.invalidateNear(tx * TILE + TILE / 2, ty * TILE + TILE / 2);
     for (const c of [...this.children.list]) {
-      if (c.type === 'Image' && c.texture && (/^ai-rock/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
+      if (c.type === 'Image' && c.texture && (/^ai-rock|^rock-hi/.test(c.texture.key) || c.texture.key === 'rock' || c.texture.key === 'rock2') &&
           Math.abs(c.x - (tx * TILE + 8)) < 9 && Math.abs(c.y - (ty * TILE + 8)) < 9) c.destroy();
     }
     this.rockTiles = this.rockTiles.filter(r => r !== rk);
