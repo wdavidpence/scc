@@ -119,7 +119,12 @@ const fs = require('fs');
   // ---------- T3: dead-path audit — per-frame gameplay random removed ----------
   {
     const bs = fs.readFileSync(path.resolve(__dirname, '../src2/scenes/BattleScene.js'), 'utf8');
-    ok('TRAIL_GUARDED', /Math\.random\(\) < 0\.4 && (this\.camNear|camNear)/.test(bs), 'shell trail roll is camera-guarded (fixed draw set)');
+        // 2026-09-23 P1.029: the shell-trail roll was DELETED with the flight
+    // loop's move into fixed-tick stepSim (polish.projTrail call + guarded
+    // roll removed together — no unguarded variant introduced). Gate now
+    // fails only if a trail roll exists WITHOUT a camera guard nearby.
+    const trailRolls = [...bs.matchAll(/Math\.random\(\) < 0\.4/g)];
+    ok('TRAIL_GUARDED', trailRolls.length === 0 || trailRolls.every(m => /camNear/.test(bs.slice(m.index, m.index + 80))), 'shell trail: no unguarded camera-dependent random draw');
     const inner = fs.readFileSync(path.resolve(__dirname, '../src2/engine/entity.js'), 'utf8');
     // interceptor orbit/dive must not mix render dt with tick timers for
     // damage decisions once migrated; today it is live but dt-only — flag

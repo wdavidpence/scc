@@ -25,6 +25,7 @@ import { PolishFX } from '../engine/polish.js';
 const FOGRES = 4;   // v2.44: fog/intel canvas pixels per tile — smooth vision edges
 const PXW = MAP_W * TILE;
 const PXH = MAP_H * TILE;
+const TICK = 1 / 24; // fixed sim tick (P1.026 kernel rate; P1.029 live loop)
 
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
@@ -3999,21 +4000,48 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.__manual) return; // P1.029 golden-replay harness: natural clock is off; tests drive __step() directly
+    this.__step(delta);
+  }
+
+  __step(delta) {
     if (this.gameOver) return;
     if (this.paused) { this.updateAmbient(0); return; } // F8: world frozen, orders still work via input
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
-    this.gameTime += dt;
-    // P1.028: fixed 24Hz sim-clock advance + deadline drain. Timer-driven
-    // combat effects execute in canonical order here, never on render
-    // timers; a paused/frozen world drains nothing (see verify-sim-timers).
-    this._tickAcc += dt;
-    let _ts = 0;
-    while (this._tickAcc >= 1 / 24 && _ts < 4) {
-      this._tickAcc -= 1 / 24; this.simTickIndex++;
+    // P1.026/28/29: fixed 24Hz sim-clock advance + deadline drain. Timer-
+    // driven combat effects and all sim mutation execute here, never on
+    // render timers; a paused/frozen world drains nothing.
+    // P1.029 CRITICAL: the accumulator is CLAMPED to one step, never capped
+    // by step count. An earlier cap let the accumulator grow every frame at
+    // normal frame rates (see the 2026-09-23 regression note), silently
+    // throttling the whole world to a fraction of real time.
+    this._tickAcc = Math.min(0.25, this._tickAcc + dt);
+    while (this._tickAcc >= TICK) {
+      this._tickAcc -= TICK; this.simTickIndex++;
+      this.gameTime += TICK;
       for (const e of drainTimers(this.simTimers, this.simTickIndex)) this.execSimTimer(e);
-      _ts++;
+      this.stepSim(TICK);
+      // P1.029: AI decisions, evac window, and convoy orders mutate sim
+      // state (orders/spawns/end-state) — they execute on the fixed tick,
+      // never on render dt. updateThreats stays render-side: HUD reader.
+      this.updateAI(TICK);
+      this.updateEscape(TICK);
+      this.updateConvoy(TICK);
+      // P1.029: topology consumption is tick-side too (wakes units +
+      // rebuilds flow fields) so field freshness cannot depend on render pace.
+      this.processTopologyChanges();
+      this.__simPassive(TICK);
+      // P1.029: fog/depletion/stealth trio + first-contact were render-dt
+      // paced but write intel & resource state — now tick-paced (0.25s cadence).
+      this.fogTimer -= TICK;
+      if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); this.updateResourceDepletion(); }
+      if (!this._contacted) {
+        for (const u of this.units) {
+          if (u.dead || u.team === 0 || u.cloaked || u.burrowed) continue;
+          if (this.currentlyVisible(u.x, u.y)) { this._contacted = true; this.addEventPing(u.x, u.y, 0xff5c5c, true); break; }
+        }
+      }
     }
-    this.processTopologyChanges();
 
     // in-mission radio chatter beats
     if (this.chatter && this._chatterIdx < this.chatter.length && this.gameTime >= this.chatter[this._chatterIdx].t) {
@@ -4086,110 +4114,7 @@ export class BattleScene extends Phaser.Scene {
     }
     // autoscroll to selection back (Q handled elsewhere)
 
-    // spatial hash rebuild (separation + neighbor queries)
-    this.spatial.clear();
-    for (const u of this.units) if (!u.dead && !u.flying) this.spatial.insert(u);
-
-    // SC1: warn the player when an enemy spy first penetrates toward their base
-    if (!this._scoutWarned && (this.gameTime % 2) < dt) {
-      const pb = this.buildings.find(b => b.team === 0 && !b.dead && b.def.primary);
-      if (pb) {
-        for (const u of this.units) {
-          if (u.dead || u.team === 0) continue;
-          if (Math.hypot(u.x - pb.x, u.y - pb.y) < TILE * 14) {
-            this._scoutWarned = true;
-            this.events.emit('hud:alert', '⚠ YOU ARE BEING SCOUTED', 0xffd23f);
-            this.audio?.orderPing?.();
-            break;
-          }
-        }
-      }
-    }
-
-    // flow cohorts refresh (throttled; only goal keys still in use)
-    this.flowRefreshTimer = (this.flowRefreshTimer ?? 0) - dt;
-    if (this.flowRefreshTimer <= 0) {
-      this.flowRefreshTimer = 0.5;
-      for (const rec of this.flows.fields.values()) {
-        if (!rec.field.valid || this.gameTime - rec.lastBuild >= 0.5) rec.field.build(rec.goalX, rec.goalY, -1, 0);
-      }
-    }
-
-    // units
-    for (const u of this.units) u.update(dt);
-    // buildings
-    for (const b of this.buildings) b.update(dt);
-    // blight growth (skarn)
-    this.blightTimer -= dt;
-    if (this.blightTimer <= 0) {
-      this.blightTimer = 0.9;
-      for (const b of this.buildings) {
-        if (!b.dead && b.built && b.def.blightGrowth) this.addBlight(b.team, b.x, b.y, (b.def.blightRadius || 8));
-        else if (!b.dead && b.team === 1 && this.enemyRace === 'skarn' && b.buildId === 'broodNest') this.addBlight(b.team, b.x, b.y, 8);
-      }
-      // blight follows structures passively
-      if (this.enemyRace === 'skarn') this.growBlight(1);
-      if (this.race === 'skarn') this.growBlight(0);
-    }
-
-    // projectiles (spark-based)
-    for (const sp of this.children.list.filter(c => c._proj && c.active)) {
-      const pr = sp._proj;
-      if (pr.target.dead) { sp.destroy(); continue; }
-      this.polish?.projTrail(sp);
-      const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
-      const d = Math.hypot(dx, dy);
-      const step = pr.speed * dt;
-      if (d <= step + pr.target.radius) {
-        this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker);
-        // tank shells leave a smoking impact crater
-        if (pr.shell && this.camNear(sp.x, sp.y)) {
-          const cr = this.add.image(pr.target.x, pr.target.y + 4, 'scorch').setDepth(5).setScale(0.9 + Math.random() * 0.4).setAlpha(0.55).setRotation(Math.random() * 6.28);
-          this.tweens.add({ targets: cr, alpha: 0.15, duration: 14000 });
-          const fl = this.add.image(pr.target.x, pr.target.y, 'explosion').setDepth(58).setScale(1.1);
-          this.tweens.add({ targets: fl, scale: 2.1, alpha: 0, duration: 220, onComplete: () => fl.destroy() });
-          for (let i = 0; i < 3; i++) {
-            const sm = this.add.circle(pr.target.x + (Math.random() * 14 - 7), pr.target.y + (Math.random() * 10 - 5), 4, 0x8f9aa4, 0.4).setDepth(44);
-            this.tweens.add({ targets: sm, alpha: 0, y: sm.y - 18, scale: 2.2, duration: 700 + Math.random() * 400, onComplete: () => sm.destroy() });
-          }
-        }
-        sp.destroy(); continue;
-      }
-      sp.x += (dx / d) * step; sp.y += (dy / d) * step;
-      if (pr.shell && Math.random() < 0.4 && this.camNear(sp.x, sp.y)) {
-        const tr = this.add.circle(sp.x, sp.y, 1.8, 0xb8c2cc, 0.35).setDepth(44);
-        this.tweens.add({ targets: tr, alpha: 0, scale: 2.4, duration: 380, onComplete: () => tr.destroy() });
-      }
-    }
-
-    // SC1 spider mines + scanner cooldown + temp reveal expiry
-    this.updateSpiderMines(dt);
-    this.updateCrates(dt);
-    this.updateCritters(dt);
-    if (this._scanCd > 0) this._scanCd -= dt;
-    if (this._tempReveals?.length) {
-      this._tempReveals = this._tempReveals.filter(rv => {
-        if (this.gameTime >= rv.until) { for (const i of rv.seenCells) if (this.seen[i] === 2) this.seen[i] = 1; return false; }
-        return true;
-      });
-    }
-
-    // fog update throttled
-    this.fogTimer -= dt;
-    if (this.fogTimer <= 0) { this.fogTimer = 0.25; this.updateFog(); this.updateStealthVisibility(); this.updateResourceDepletion(); }
-
-    // GAP: first-contact detection — first enemy seen on sensors
-    if (!this._contacted && !this.gameOver) {
-      for (const u of this.units) {
-        if (u.dead || u.team === 0 || u.cloaked || u.burrowed) continue;
-        if (this.currentlyVisible(u.x, u.y)) {
-          this._contacted = true;
-          this.events.emit('hud:radio', 'We have contact! Hostile units on sensors.', 'Rigger');
-          this.addEventPing(u.x, u.y, 0xff5c5c, true);
-          break;
-        }
-      }
-    }
+    // (P1.029: fog trio + first-contact moved into the fixed-tick loop)
 
     // GAP 20: radio chatter triggers on zone entry
     this.updateZoneChatter();
@@ -4209,15 +4134,9 @@ export class BattleScene extends Phaser.Scene {
     if (engaged.length >= 6) this.audio?.markHeavyCombat();
     const combatNow = this.units.some(u => !u.dead && u.team === 0 && u.target && !u.target.dead) || this.units.some(u => !u.dead && u.team === 1 && Math.abs(u.x - cam.midPoint.x) < 400);
     this.audio?.setCombat(combatNow);
-    this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + dt * (5 + this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker).length * 0.25));
-    // SC1 power-up crate surge: +1 armor to all own combat units while active
-    if (this.powerSurgeUntil && this.gameTime < this.powerSurgeUntil && !this._surgeApplied) {
-      this._surgeApplied = true;
-      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor += 1; u.sprite.setTint(0xfff3c4); }
-    } else if (this._surgeApplied && this.gameTime >= this.powerSurgeUntil) {
-      this._surgeApplied = false;
-      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor = Math.max(0, u.bonusArmor - 1); if (!u.burrowed && !u.cloaked) u.sprite.clearTint(); }
-    }
+    // P1.029: ultimate energy charge + crate-surge armor now per-tick
+    // (__simPassive in the fixed-tick loop). Recording snapshot is
+    // display/replay-only — no sim feedback.
     this._recTimer -= dt;
     if (this._recTimer <= 0) {
       this._recTimer = 1;
@@ -4228,14 +4147,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.record.frames.length > 900) this.record.frames.shift();
     }
 
-    // AAA: mission triggers tick (event/condition/action framework)
-    this.triggers?.tick(dt, {
-      gameTime: this.gameTime, scene: this, units: this.units, buildings: this.buildings,
-      objectives: this.objectives, events: this.events, audio: this.audio,
-      isVisible: (x, y) => this.isVisible(x, y),
-      spawnUnit: (team, kind, x, y, o) => this.spawnUnit(team, kind, x, y, o),
-      PXW, PXH, cameras: this.cameras,
-    });
+    // AAA: mission triggers tick moved into __simPassive (per-tick, P1.029)
 
     // hold-the-line objective countdown
     if (this._holdUntil != null && !this.gameOver) {
@@ -4251,7 +4163,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // enemy AI
-    this.updateAI(dt);
+    // P1.029: updateAI/updateEscape/updateConvoy moved into the fixed-tick
+    // loop above (sim state). Render pass below is presentation only.
     this.updateThreats(dt);
     this.polish?.tick(dt, { units: this.units, buildings: this.buildings, gameTime: this.gameTime });
     // polish: rally pennants flutter + construction countdown arcs
@@ -4260,8 +4173,7 @@ export class BattleScene extends Phaser.Scene {
     { const T = this.hotseat ? (this.activeTeam ?? 0) : 0; const pp = this.players[T];
       const over = pp.supplyUsed >= pp.supplyCap && this.buildings.some(b => b.team === T && !b.dead && b.def.production);
       if (over !== this._supOver) { this._supOver = over; this.polish?.supplyVignette(over); } }
-    this.updateEscape(dt);
-    this.updateConvoy(dt);
+    // (updateEscape/updateConvoy now tick-side — see fixed-tick loop)
     this.updateAmbient(dt);
     this.updateLighting(dt);
     this.updateTutorial();
@@ -4303,6 +4215,106 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     if (changed) { this.blightCanvases[team].cells = next; this.textures.get(`blight-t${team}`).refresh(); }
+  }
+
+  // ---------------- P1.029: fixed-tick simulation step ----------------
+  // All world-state mutation runs here, exactly once per 1/24s sim tick,
+  // never on the render clock. Pure-visual FX stay on the render pass.
+  // P1.029: per-tick passive sim — everything here mutates match state and
+  // must run identically under any render pacing (see verify-tick-parity).
+  __simPassive(dt) {
+    this.ultimateEnergy = Math.min(this.ultimateMax, this.ultimateEnergy + dt * (5 + this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker).length * 0.25));
+    // SC1 power-up crate surge: +1 armor to all own combat units while active
+    if (this.powerSurgeUntil && this.gameTime < this.powerSurgeUntil && !this._surgeApplied) {
+      this._surgeApplied = true;
+      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor += 1; u.sprite.setTint(0xfff3c4); }
+    } else if (this._surgeApplied && this.gameTime >= this.powerSurgeUntil) {
+      this._surgeApplied = false;
+      for (const u of this.units) if (!u.dead && u.team === 0 && !u.def.worker) { u.bonusArmor = Math.max(0, u.bonusArmor - 1); if (!u.burrowed && !u.cloaked) u.sprite.clearTint(); }
+    }
+    // AAA: mission triggers tick (event/condition/action framework)
+    this.triggers?.tick(dt, {
+      gameTime: this.gameTime, scene: this, units: this.units, buildings: this.buildings,
+      objectives: this.objectives, events: this.events, audio: this.audio,
+      isVisible: (x, y) => this.isVisible(x, y),
+      spawnUnit: (team, kind, x, y, o) => this.spawnUnit(team, kind, x, y, o),
+      PXW, PXH, cameras: this.cameras,
+    });
+  }
+
+  stepSim(dt) {
+    // spatial hash rebuild (separation + neighbor queries)
+    this.spatial.clear();
+    for (const u of this.units) if (!u.dead && !u.flying) this.spatial.insert(u);
+
+    // SC1: warn the player when an enemy spy first penetrates toward their base
+    if (!this._scoutWarned && (this.gameTime % 2) < dt) {
+      const pb = this.buildings.find(b => b.team === 0 && !b.dead && b.def.primary);
+      if (pb) {
+        for (const u of this.units) {
+          if (u.dead || u.team === 0) continue;
+          if (Math.hypot(u.x - pb.x, u.y - pb.y) < TILE * 14) {
+            this._scoutWarned = true;
+            this.events.emit('hud:alert', '⚠ YOU ARE BEING SCOUTED', 0xffd23f);
+            this.audio?.orderPing?.();
+            break;
+          }
+        }
+      }
+    }
+
+    // flow cohorts refresh (throttled on sim time; only goal keys still in use)
+    this.flowRefreshTimer = (this.flowRefreshTimer ?? 0) - dt;
+    if (this.flowRefreshTimer <= 0) {
+      this.flowRefreshTimer = 0.5;
+      for (const rec of this.flows.fields.values()) {
+        if (!rec.field.valid || this.gameTime - rec.lastBuild >= 0.5) rec.field.build(rec.goalX, rec.goalY, -1, 0);
+      }
+    }
+
+    // units
+    for (const u of this.units) u.update(dt);
+    // buildings
+    for (const b of this.buildings) b.update(dt);
+    // blight growth (skarn)
+    this.blightTimer -= dt;
+    if (this.blightTimer <= 0) {
+      this.blightTimer = 0.9;
+      for (const b of this.buildings) {
+        if (!b.dead && b.built && b.def.blightGrowth) this.addBlight(b.team, b.x, b.y, (b.def.blightRadius || 8));
+        else if (!b.dead && b.team === 1 && this.enemyRace === 'skarn' && b.buildId === 'broodNest') this.addBlight(b.team, b.x, b.y, 8);
+      }
+      // blight follows structures passively
+      if (this.enemyRace === 'skarn') this.growBlight(1);
+      if (this.race === 'skarn') this.growBlight(0);
+    }
+
+    // projectiles (spark-based) — flight/hit are SIM (which tick an hit
+    // lands decides damage timing); trails/craters are visual, camNear-gated
+    for (const sp of this.children.list.filter(c => c._proj && c.active)) {
+      const pr = sp._proj;
+      if (pr.target.dead) { sp.destroy(); continue; }
+      const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
+      const d = Math.hypot(dx, dy);
+      const step = pr.speed * dt;
+      if (d <= step + pr.target.radius) {
+        this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker);
+        sp.destroy(); continue;
+      }
+      sp.x += (dx / d) * step; sp.y += (dy / d) * step;
+    }
+
+    // SC1 spider mines + scanner cooldown + temp reveal expiry
+    this.updateSpiderMines(dt);
+    this.updateCrates(dt);
+    this.updateCritters(dt);
+    if (this._scanCd > 0) this._scanCd -= dt;
+    if (this._tempReveals?.length) {
+      this._tempReveals = this._tempReveals.filter(rv => {
+        if (this.gameTime >= rv.until) { for (const i of rv.seenCells) if (this.seen[i] === 2) this.seen[i] = 1; return false; }
+        return true;
+      });
+    }
   }
 
   // ---------------- AI ----------------

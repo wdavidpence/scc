@@ -30,3 +30,4 @@ P1.025,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T14:20:00Z,pass,rng 18/1
 P1.026,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T14:40:00Z,pass,fixed-tick 8/8 + backlog deferral recorded
 P1.027,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T15:05:00Z,pass-increment,cmd kernel v2 12/12 + suite green; scene wiring deferred to P1.027-i3/P1.029
 P1.028,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T15:30:00Z,pass-increment,simTimers kernel 9/9 + 5 render-clock state paths moved to sim clock; suite 18/18 green; live done-when gated by P1.029 dt migration
+P1.029-i1,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T17:40:00Z,pass-increment,Fixed-tick live migration + tick-parity harness 3/3 (3 paces identical digest + combat attrition); queue-clock and render-pass state writers deleted; suite 23/23 green
