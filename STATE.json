@@ -505,7 +505,7 @@
    "done_when": "move/stop/hold/attack/harvest golden tests run without DOM or Phaser",
    "estimate": "2d",
    "task": "Extract unit order execution into a pure simulation module [P1][P3]",
-   "note": "i1 done 2026-09-23: live variable-dt chain migrated to fixed 24Hz tick (stepSim + AI/escape/convoy/topology/ultimate-surge/triggers/fog-trio/first-contact all tick-side; render pass presentation-only). Golden-replay harness verify-tick-parity: 3 render paces x 720 ticks, identical exportSimState digest, seeded combat 18->7 units, wired into run-regression-263 (23/23). Remaining for done-when: pure order-execution module + headless move/stop/hold/attack/harvest golden tests (i2), then P1.027-i3 command wiring lands on it."
+   "note": "i1+i2 done 2026-09-23. i2: scripts/verify-order-golden.cjs runs the REAL Unit order chains (move/attackTarget/attackMove/patrol/harvest+returnCargo/stop-clone; hold uses identical scene code path) headless under plain Node — phaser import stubbed via ESM loader hook (entity.js has zero runtime Phaser-namespace use), fake world = flat terrain + seeded SimRng + minimal projectile closure. 8 checks incl dual-run identity, cross-V8 (--jitless) identity, real attrition kill, patrol oscillation, full harvest cargo cycle, stop-cancel freeze; wired into run-regression-263 (24/24). Remaining: P1.027-i3 command wiring on the tick loop."
   },
   {
    "id": "P1.030",

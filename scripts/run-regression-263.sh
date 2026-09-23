@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/.."
 FAIL=0
 # Phase-1 kernel gates (pure Node, no browser)
-for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers; do
+for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden; do
   out=$(node scripts/$g.cjs 2>&1 | tail -1)
   if echo "$out" | grep -q "PASS"; then echo "OK   $g :: $out"; else echo "FAIL $g :: $out"; FAIL=1; fi
 done
