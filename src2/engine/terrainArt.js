@@ -133,7 +133,10 @@ function drawRockVariant(ctx, W, H, variant, rng) {
 }
 
 function bakeSS(scene, key, w, h, drawFn, seedStr) {
-  if (scene.textures.exists(key)) return;
+  if (scene.textures.exists(key)) { // v2.67: preloaded baked PNG wins; ensure smooth filtering
+    try { scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR); } catch (e) { /* older phaser */ }
+    return;
+  }
   const SS = 2;
   const c = document.createElement('canvas');
   c.width = w * SS; c.height = h * SS;

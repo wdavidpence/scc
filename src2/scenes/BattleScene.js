@@ -38,6 +38,13 @@ export class BattleScene extends Phaser.Scene {
       if (!this.textures.exists('ai-' + k)) this.load.image('ai-' + k, AI + k + '.png');
     // v2.39 deep kit: every unit + structure + fx
     preloadAIKit(this);
+    // v2.67: baked hi-res terrain art (keycut from generated sprites) —
+    // loaded under the SAME keys terrainArt would generate, so units and
+    // terrain both use real painted art instead of procedural shapes.
+    for (let i = 0; i < 3; i++) {
+      if (!this.textures.exists('mtn-' + i)) this.load.image('mtn-' + i, 'assets/ai267/mtn-' + i + '.png');
+      if (!this.textures.exists('rock-hi' + i)) this.load.image('rock-hi' + i, 'assets/ai267/rock-hi' + i + '.png');
+    }
   }
 
   init(data) {
