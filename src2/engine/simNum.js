@@ -32,11 +32,30 @@ const isInt = (v) => Number.isInteger(v);
 // Order payload -> canonical form: float {point:{x,y}} becomes Q8 {tx,ty}.
 function orderToCanonical(o) {
   if (!o) return o;
-  const c = { ...o };
-  if (c.point) {
-    c.tx = toQ8(c.point.x);
-    c.ty = toQ8(c.point.y);
-    delete c.point;
+  // P1.036: canonical order must be DATA ONLY. Orders carry live object
+  // refs ({ type:'attackTarget', target: Unit } etc.); a shallow spread used
+  // to leak them into the hash stream (cycle -> canonicalize blowup).
+  // Rule: primitives and arrays-of-primitives pass through; object refs
+  // become stable scalar descriptors ('#id' when known, dropped otherwise);
+  // functions dropped. Equal states still hash equal; different targets
+  // hash different (id distinguishes them).
+  const c = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (typeof v === 'function' || v === undefined) continue;
+    if (v === null || typeof v !== 'object') { c[k] = v; continue; }
+    if (Array.isArray(v)) {
+      if (v.every(x => x === null || typeof x !== 'object')) { c[k] = v; continue; }
+      const ids = v.map(x => (x && typeof x === 'object' && x.id !== undefined ? x.id : null));
+      if (ids.every(x => x !== null)) { c[k] = ids; continue; } // refs -> ids
+      const pts = v.every(x => x && typeof x === 'object' && typeof x.x === 'number' && typeof x.y === 'number');
+      if (pts) c[k] = v.flatMap(p => [toQ8(p.x), toQ8(p.y)]); // waypoint arrays -> Q8 pairs (state preserved)
+      // else: non-representable payload; drop
+    }
+    // object ref: point-like {x,y} converts; unit-like becomes '#id'
+    if (k === 'point' && typeof v.x === 'number' && typeof v.y === 'number') {
+      c.tx = toQ8(v.x); c.ty = toQ8(v.y); continue;
+    }
+    if (typeof v.id !== 'undefined') c[k] = '#' + v.id;
   }
   return c;
 }

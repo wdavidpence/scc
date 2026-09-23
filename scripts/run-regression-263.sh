@@ -19,6 +19,10 @@ if echo "$out" | grep -q "fail=0"; then echo "OK   routing-seeded :: $out"; else
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cmd-live.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "PASS 8/8"; then echo "OK   cmd-live :: $out"; else echo "FAIL cmd-live :: $out"; FAIL=1; fi
 # P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
+# P1.036 per-tick hash ring (browser, manual-clock harness)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-hash-ring.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "HASH-RING PASS"; then echo "OK   hash-ring :: $out"; else echo "FAIL hash-ring :: $out"; FAIL=1; fi
+# P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-tick-parity.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo "FAIL tick-parity :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"

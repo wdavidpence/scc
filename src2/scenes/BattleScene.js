@@ -4051,6 +4051,7 @@ export class BattleScene extends Phaser.Scene {
     this._tickAcc = Math.min(0.25, this._tickAcc + dt);
     while (this._tickAcc >= TICK) {
       this._tickAcc -= TICK; this.simTickIndex++;
+
       this.gameTime += TICK;
       for (const e of drainTimers(this.simTimers, this.simTickIndex)) this.execSimTimer(e);
       for (const c of drainTo(this.matchCmds, this.simTickIndex)) this.execCmd(c);
@@ -4073,6 +4074,22 @@ export class BattleScene extends Phaser.Scene {
         for (const u of this.units) {
           if (u.dead || u.team === 0 || u.cloaked || u.burrowed) continue;
           if (this.currentlyVisible(u.x, u.y)) { this._contacted = true; this.addEventPing(u.x, u.y, 0xff5c5c, true); break; }
+        }
+      }
+
+      // P1.036: per-tick canonical hash ring. Records the FINISHED tick
+      // (ring index === simTickIndex), 1200 deep = 5 min @24Hz, for P1.037
+      // first-divergent-tick diffs and P1.045 checksum exchange. Input:
+      // exactly the exportSimState allow-list, so presentation can never
+      // enter the hash. __collectHashes gates collection (harness sets it);
+      // __hashEvery=1 default = hash every tick.
+      if (this.__collectHashes) {
+        const iv = this.__hashEvery || 1;
+        if (this.simTickIndex % iv === 0) {
+          const h = SimSchema.hashState(this.exportSimState()); // export already projects through SimSchema.serialize
+          if (!this.hashRing) this.hashRing = [];
+          this.hashRing.push(h);
+          if (this.hashRing.length > 1200) this.hashRing.shift();
         }
       }
     }

@@ -600,7 +600,7 @@
   },
   {
    "id": "P1.036",
-   "status": "ready",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -611,7 +611,8 @@
    "context_pack": null,
    "done_when": "equivalent states hash equally independent of object insertion order",
    "estimate": "6h",
-   "task": "Add per-tick canonical state hashing [P3]"
+   "task": "Add per-tick canonical state hashing [P3]",
+   "note": "per-tick hash ring live (opt-in __collectHashes, finished-tick, 1200-deep) + verify-hash-ring 7/7 incl first-divergent-tick proof at 500. orderToCanonical hardened (refs->#id, waypoints->Q8 pairs)."
   },
   {
    "id": "P1.037",

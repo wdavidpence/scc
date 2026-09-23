@@ -46,3 +46,8 @@
 
 - P1.026 — variable-delta deletion, Phase-1 shape (option B, pack-approved): src2/engine/simWorld.js pure fixed-24Hz kernel (consumes simClock tick counts + simInt Q8 movement + seeded SimRng; scripted 16-unit skirmish fixture in-gate) + scripts/verify-fixed-tick.cjs 8/8 — exact tick counts under 30/60/144Hz/stutter render schedules, cadence-equal state (paced === straight-through at same tick count), 10k-tick hash identity across in-process/default-V8/--jitless, render observer cannot alter sim hash, shell-trail roll camera-guarded, single interceptor damage pathway. Kernel shipped in playability commit; this pass = audit + closure + BACKLOG deferral record. Live variable-dt chain removal is P1.029-mandated first task (see BACKLOG).
 
+
+## P1.036 — per-tick canonical state hashing (2026-09-23)
+- Ring: BattleScene fixed-tick loop records hashState(exportSimState()) per finished tick, 1200 deep, opt-in via __collectHashes (default off).
+- orderToCanonical: no more live-object leakage into canonical stream (attackTarget.target cycle -> stack overflow, found by mutation test); refs become #id, waypoint arrays become Q8 pairs.
+- Gate scripts/verify-hash-ring.cjs 7/7 (Node canonical checks + dual-granularity live ring identity + mutation-at-500 firstDiff=500). Suite 26/26 GREEN.
