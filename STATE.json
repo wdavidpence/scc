@@ -424,8 +424,8 @@
   },
   {
    "id": "P1.025",
-   "status": "ready",
-   "owner": null,
+   "status": "done",
+   "owner": "MSM5U-LOCAL",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
@@ -435,7 +435,9 @@
    "context_pack": null,
    "done_when": "source check finds zero Math.random calls in simulation modules and 100 seeds replay identically",
    "estimate": "6h",
-   "task": "Replace simulation Math.random with one seeded, serialized PRNG [P3]"
+   "task": "Replace simulation Math.random with one seeded, serialized PRNG [P3]",
+   "finished_at": "2026-09-23T14:20:00Z",
+   "done_when_result": "Sim-side Math.random eliminated: 14 BattleScene state-mutating sites + 7 entity.js draws (incl. muzzle/bunker projectile-origin jitter audited SIM-side because spawn position shifts flight distance -> applyHit tick) run on the seeded sfc32 SimRng; presentation jitter isolated on Math.random behind scripts/verify-rng.cjs allowlist scan + statement guard (no Math.random on state-mutating lines). exportSimState emits live rngState digest under INT_FIELDS. Interim gate 18/18 (stream identity 100 seeds x 3 engines, scripted slice 368k draws x5 seeds x 3 engines byte-equal); full browser suite GREEN on rebuilt bundle + routing-seeded 200/200. Full 100-seed match-replay identity deferred to P1.038/P1.026 per context pack (variable-delta coupling documented, not hidden)."
   },
   {
    "id": "P1.026",

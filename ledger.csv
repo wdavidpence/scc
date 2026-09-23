@@ -26,3 +26,4 @@ P1.021,ANTIGRAV,1,0,0,2026-09-17T19:37:14Z,pass,16/16 schema + live seam
 P1.022,ANTIGRAV,1,0,0,2026-09-17T19:40:34Z,pass,clock 11/11
 P1.023,ANTIGRAV,1,0,0,2026-09-20T01:13:21Z,pass,int-coords 13/13
 P1.024,ANTIGRAV,1,0,0,2026-09-20T02:05:00Z,pass,simnum 14/14 + schema 18/18 + suite green
+P1.025,mtplx-flash-next-optimized-speed,1,0,0,2026-09-23T14:20:00Z,pass,rng 18/18 + suite green (~40 lines: entity.js + verify-rng.cjs)

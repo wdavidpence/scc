@@ -6,10 +6,16 @@ import { liveProjectiles } from './liveProjectiles.js';
 let nextId = 1;
 
 // P1.025: entity-side SIM randomness draws from the world (BattleScene)
-// one match PRNG; fallback keeps entities constructible headless/offline.
-// Only decision/targeting/spawn draws use this — every FX jitter in this
-// file stays on Math.random (presentation stream, render-rate coupling).
-function simRng(world) { return world?.simRng; }
+// one match PRNG (world.simRng). That includes muzzle/volley origin jitter:
+// projectile spawn position changes flight distance and therefore which tick
+// applyHit lands on — match state, not FX. Presentation-only jitter (dust,
+// sparks, blood, casings, decals, anim phase) stays on Math.random.
+// s01 reads world.simRng (live play) or world.rng (simWorld oracle); the
+// Math.random fallback exists ONLY for headless mock worlds without an rng
+// so entities stay constructible in unit harnesses. Any real sim world must
+// carry a seeded rng — do not feed s01 a stateless world.
+function simRng(world) { return world?.simRng ?? world?.rng; }
+function s01(world) { const r = simRng(world); return r ? r.u01() : Math.random(); }
 
 export function teamColorHex(team) {
   return team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
@@ -45,7 +51,7 @@ export class Unit {
     this.target = null;
     this.path = [];
     this.pathIndex = 0;
-    this.repathTimer = simRng(world)?.u01() * 0.5;
+    this.repathTimer = s01(world) * 0.5;
     this.attackTimer = 0;
     this.cargo = 0;
     this.harvestTimer = 0;
@@ -350,7 +356,7 @@ export class Unit {
     const arrived = this.stepAlongPath(dt);
     this.repathTimer -= dt;
     if (!arrived && this.repathTimer <= 0) {
-      this.repathTimer = 0.7 + (simRng(this.world)?.u01() ?? Math.random()) * 0.4;
+      this.repathTimer = 0.7 + s01(this.world) * 0.4;
       const stillBlocked = this.world.nav.blockedBy[this.world.nav.idx(Math.floor(this.x / TILE), Math.floor(this.y / TILE))] >= 0 && this.world.nav.blockedBy[this.world.nav.idx(Math.floor(this.x / TILE), Math.floor(this.y / TILE))] !== this.id;
       if (stillBlocked) this.repath(this.order.point.x, this.order.point.y);
     }
@@ -487,7 +493,7 @@ export class Unit {
       it.cd -= dt;
       if (it.dive && (it.dive.dead || Math.hypot(it.x - it.dive.x, it.y - it.dive.y) < 8)) {
         if (it.dive && !it.dive.dead) this.world.applyHit(it.dive, this.def.damage, 0);
-        it.dive = null; it.cd = 1.4 + (simRng(this.world)?.u01() ?? Math.random());
+        it.dive = null; it.cd = 1.4 + s01(this.world);
       }
       let tx, ty;
       if (it.dive && !it.dive.dead) {
@@ -599,9 +605,9 @@ export class Unit {
     const lvl = this.level || 0;
     const volley = this.def.attacksPerVolley || 1;
     for (let v = 0; v < volley; v++) {
-      const off = volley > 1 ? { x: (Math.random() * 24 - 12), y: (Math.random() * 16 - 8) } : { x: 0, y: 0 };
+      const off = volley > 1 ? { x: (s01(this.world) * 24 - 12), y: (s01(this.world) * 16 - 8) } : { x: 0, y: 0 };
       const from = { x: this.x + off.x * 0.2, y: this.y + off.y * 0.2 };
-      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + ((simRng(this.world)?.u01() ?? Math.random()) * 40 - 20), this.y + ((simRng(this.world)?.u01() ?? Math.random()) * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying, this.team) || target);
+      const tgt = v === 0 ? target : (this.world.findNearestEnemy(this.x + (s01(this.world) * 40 - 20), this.y + (s01(this.world) * 40 - 20), this.def.range * TILE * 1.2, this.flying, !this.flying, this.team) || target);
       this.world.spawnProjectile({
         from,
         target: tgt,
@@ -1234,7 +1240,7 @@ export class Building {
             if (g.dead) continue;
             const mult = SIZE_MULT[g.def.attackType || gd.attackType]?.[foe.def.size] ?? 1;
             const dmg = Math.max(1, Math.round((g.def.damage || gd.damage) * mult - foe.def.armor));
-            this.world.spawnProjectile({ from: { x: this.x + (Math.random() * 20 - 10), y: this.y - 8 }, target: foe, damage: dmg, splash: 0, team: this.team, kind: 'marine', speed: 640, attacker: g });
+            this.world.spawnProjectile({ from: { x: this.x + (s01(this.world) * 20 - 10), y: this.y - 8 }, target: foe, damage: dmg, splash: 0, team: this.team, kind: 'marine', speed: 640, attacker: g });
             g._bunkerShot = true;
           }
           this.attackTimer = gd.cooldown;
@@ -1254,7 +1260,7 @@ export class Building {
     const def = UNITS[kind];
     const n = def.trainCount || 1;
     for (let i = 0; i < n; i++) {
-      const u = this.world.spawnUnit(this.team, kind, rx + ((simRng(this.world)?.u01() ?? Math.random()) * 20 - 10) + i * 10, ry + (simRng(this.world)?.u01() ?? Math.random()) * 8, { arriveReady: true });
+      const u = this.world.spawnUnit(this.team, kind, rx + (s01(this.world) * 20 - 10) + i * 10, ry + s01(this.world) * 8, { arriveReady: true });
       if (u) this.world.audio?.spawn();
     }
   }

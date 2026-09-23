@@ -53,6 +53,11 @@ if (process.env.SCC_SLICE) {
     for (let u = 0; u < 4; u++) trace.push(1.4 + r());
     // volley target jitter pairs (L598)
     for (let u = 0; u < 10; u++) { trace.push(r() * 40 - 20); trace.push(r() * 40 - 20); }
+    // muzzle origin jitter pairs (L602) — origin shifts flight distance,
+    // i.e. which tick the geometric applyHit lands on: SIM-side.
+    for (let u = 0; u < 10; u++) { trace.push(r() * 24 - 12); trace.push(r() * 16 - 8); }
+    // bunker garrison origin jitter (L1243)
+    for (let u = 0; u < 2; u++) trace.push(r() * 20 - 10);
     // training spawn offsets (Building L1228)
     for (let u = 0; u < 3; u++) { trace.push(r() * 20 - 10); trace.push(r() * 8); }
   }
@@ -109,8 +114,9 @@ if (process.env.SCC_SLICE) {
     const a = run([], seed);
     const b = run(['--jitless'], seed);
     total += 2;
-    // trace length is 4000 ticks x 70 draws = 280000 (was wrongly 172000)
-    if (m && a && b && a.hash === m.hash && b.hash === m.hash && m.n === 280000) same++;
+    // trace length is 4000 ticks x 92 draws = 368000 (was 70/tick; muzzle
+    // + bunker origin draws added after the entity.js sim-side audit)
+    if (m && a && b && a.hash === m.hash && b.hash === m.hash && m.n === 368000) same++;
   }
   ok('SLICE_3ENGINE_x5seeds', same === 5, `${same}/${total} slices byte-equal across engines`);
 }
@@ -137,9 +143,20 @@ if (process.env.SCC_SLICE) {
   ];
   const leaked = SIM_LEFT.filter(rx => rx.test(bs));
   ok('SIM_BATTLESITE_converted', leaked.length === 0, leaked.length ? `left: ${leaked.length}` : 'all 14 state-side sites use simRng/rnd');
-  const ent = [/this\.repathTimer = Math\.random/, /repathTimer = 0\.7 \+ Math\.random/, /it\.cd = 1\.4 \+ Math\.random/, /findNearestEnemy\(this\.x \+ \(Math\.random/, /spawnUnit\(this\.team, kind, rx \+ \(Math\.random/];
+  const ent = [/this\.repathTimer = Math\.random/, /repathTimer = 0\.7 \+ Math\.random/, /it\.cd = 1\.4 \+ Math\.random/, /findNearestEnemy\(this\.x \+ \(Math\.random/, /spawnUnit\(this\.team, kind, rx \+ \(Math\.random/, /const off = volley > 1 \? \{ x: \(Math\.random/, /from: \{ x: this\.x \+ \(Math\.random \* 20 - 10\)/];
   const leakedE = ent.filter(rx => rx.test(en));
-  ok('SIM_ENTITY_converted', leakedE.length === 0, leakedE.length ? `left: ${leakedE.length}` : 'all 5 sim draws use world.simRng');
+  ok('SIM_ENTITY_converted', leakedE.length === 0, leakedE.length ? `left: ${leakedE.length}` : 'all 7 sim draws use the seeded stream (incl. muzzle/bunker origins)');
+  // statement guard: no Math.random on the same line as a state-mutating
+  // call (order issued, unit/projectile spawned, target picked). Catches
+  // future regressions of the converted shapes and new variants thereof.
+  const GUARD_RX = /spawnProjectile\(|spawnUnit\(|issueMove\(|findNearestEnemy\(/;
+  const stmtLeaks = [];
+  for (const [f, src] of [['src2/engine/entity.js', en], ['src2/scenes/BattleScene.js', bs]]) {
+    src.split('\n').forEach((line, i) => {
+      if (GUARD_RX.test(line) && /Math\.random/.test(line)) stmtLeaks.push(`${f}:${i + 1} ${line.trim().slice(0, 80)}`);
+    });
+  }
+  ok('SIM_STATEMENT_guard', stmtLeaks.length === 0, stmtLeaks.length ? `leaks: ${stmtLeaks.join(' | ')}` : 'no Math.random on state-mutating lines');
   // allowlist files must not import the sim stream (presentation isolation)
   for (const f of ['src2/engine/polish.js', 'src2/engine/audio2.js', 'src2/engine/art.js', 'src2/engine/chrome.js', 'src2/scenes/TitleScene.js', 'src2/scenes/CutScene.js']) {
     const src = read(f);
