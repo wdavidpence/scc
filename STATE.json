@@ -458,18 +458,23 @@
   },
   {
    "id": "P1.027",
-   "status": "ready",
-   "owner": null,
+   "status": "active",
+   "owner": "MSM5U-LOCAL",
    "preferred_owner": "ANTIGRAV",
-   "files": [],
+   "files": [
+    "src2/engine/cmdQueue.js",
+    "scripts/verify-input-queue.cjs",
+    "src2/scenes/BattleScene.js"
+   ],
    "dependencies": [
     "P1.022"
    ],
    "attempts": 0,
-   "context_pack": null,
+   "context_pack": "context-packs/P1.027.md",
    "done_when": "inputs enqueue tick-stamped commands and deletion quota count=2",
    "estimate": "1d",
-   "task": "Delete direct DOM-to-simulation mutation [P1][P3]"
+   "task": "Delete direct DOM-to-simulation mutation [P1][P3]",
+   "started_at": "2026-09-23T14:55:00Z"
   },
   {
    "id": "P1.028",
