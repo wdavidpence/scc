@@ -1,6 +1,7 @@
 // BattleScene — the SCC2 world: terrain, fog of war, blight, selection,
 // commands, economy, combat, and the AI commander.
 import Phaser from 'phaser';
+import { createTimers, scheduleMs, drain as drainTimers } from '../engine/simTimers.js';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_H } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
@@ -82,6 +83,11 @@ export class BattleScene extends Phaser.Scene {
     // Presentation jitter stays on its own stream (render-rate coupling).
     this.matchSeed = (this.registry?.get?.('matchSeed') | 0) || 0x5CA1;
     this.simRng = new SimRng(this.matchSeed);
+    // P1.028: sim-clock deadline queue (24Hz sim ticks, freezes with the
+    // world). Timed combat effects fire here, never on render-clock timers.
+    this.simTimers = createTimers();
+    this.simTickIndex = 0;
+    this._tickAcc = 0;
     this.units = [];
     this.buildings = [];
     this.projectiles = [];
@@ -516,7 +522,7 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: cont, alpha: 1, duration: 500, onComplete: () => {
       this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => cont.destroy() });
     } });
-    if (this.mods.boss) this.time.delayedCall(1500, () => this.spawnMissionBoss());
+    if (this.mods.boss) scheduleMs(this.simTimers, this.simTickIndex, 1500, 'boss_spawn');
   }
 
   // ---------------- tactical pause (F8) ----------------
@@ -943,7 +949,11 @@ export class BattleScene extends Phaser.Scene {
     } else if (kind === 'surge') {
       // skarn: brood surge — spawn extra skarnlings at target + speed/attack buff to nearby swarm
       const pool = this.units.filter(u => !u.dead && u.team === 0 && !u.def.worker);
-      for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); this.time.delayedCall(12000, () => { if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } }); } }
+      const buffed = [];
+      for (const u of pool) { if (Math.hypot(u.x - wx, u.y - wy) < 320) { u.bonusDamage += 4; u.speed *= 1.25; this.tweens.add({ targets: u.sprite, alpha: 0.55, duration: 240, yoyo: true }); buffed.push(u); } }
+      // P1.028: revert now fires on the sim clock (288 ticks = 12s of world
+      // time) — pause-frozen and render-teardown-proof, unlike delayedCall.
+      if (buffed.length) scheduleMs(this.simTimers, this.simTickIndex, 12000, 'surge_revert', { refs: buffed });
       // pulsing brood sacs erupt at the target, each hatching a skarnling
       // P1.025: spawn spots + hatch move-targets drawn from simRng at CAST
       // time (was Math.random at cast and at land-time in delayedCall) so
@@ -957,8 +967,10 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(340 + i * 90, () => {
           const burst = this.add.image(sx, sy, 'glow').setTint(0xff7b2e).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.3);
           this.tweens.add({ targets: burst, scale: 0.3, alpha: 0, duration: 300, onComplete: () => burst.destroy() });
-          const u = this.spawnUnit(0, 'skarnling', sx, sy, { arriveReady: true }); if (u) u.issueMove(mx, my, true);
         });
+        // P1.028: hatch STATE effect (spawn + move order) moved off the
+        // render timer onto the sim clock; only the burst FX stays visual.
+        scheduleMs(this.simTimers, this.simTickIndex, 340 + i * 90, 'hatch', { sx, sy, mx, my });
       }
       // organic tendrils spreading from center
       for (let i = 0; i < 10; i++) {
@@ -2491,7 +2503,9 @@ export class BattleScene extends Phaser.Scene {
       this.audio?.ultimateBark?.();
       // shield grid down: kill the enemy force's shields instantly for the cinematic collapse
       for (const u of this.units) if (!u.dead && u.team === 1 && u.shield > 0) { u.shield = 0; }
-      this.time.delayedCall(2500, () => { if (!this.gameOver) this.endGame('victory'); });
+      // P1.028: terminal state is sim state — end fires on the sim clock
+      // only (was time.delayedCall 2500ms on the render clock).
+      scheduleMs(this.simTimers, this.simTickIndex, 2500, 'endgame_victory');
       return;
     }
     if (b.buildId === info.primary) {
@@ -3705,7 +3719,9 @@ export class BattleScene extends Phaser.Scene {
         this.audio?.objective?.();
         this.events.emit('hud:alert', 'ALL CRATES RECLAIMED — EXFIL AUTHORIZED');
         this.events.emit('hud:radio', 'Cargo secure. Every crate accounted for. Outstanding work, commander.', 'FLEET CMD');
-        this.time.delayedCall(1800, () => { if (!this.gameOver) this.endGame('victory'); });
+        // P1.028: terminal state is sim state — end fires on the sim clock
+        // only (was time.delayedCall 1800ms on the render clock).
+        scheduleMs(this.simTimers, this.simTickIndex, 1800, 'endgame_victory');
       }
     }
   }
@@ -3970,11 +3986,33 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- update loop ----------------
+  // P1.028: sim-timer dispatch — state effects execute via the fixed-tick
+  // drain in update(). Keys are data (serializable), never closures.
+  execSimTimer(e) {
+    switch (e.key) {
+      case 'boss_spawn': this.spawnMissionBoss(); break;
+      case 'surge_revert': for (const u of (e.payload?.refs || [])) if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } break;
+      case 'hatch': { const p = e.payload || {}; const u = this.spawnUnit(0, 'skarnling', p.sx, p.sy, { arriveReady: true }); if (u) u.issueMove(p.mx, p.my, true); break; }
+      case 'endgame_victory': if (!this.gameOver) this.endGame('victory'); break;
+      default: break;
+    }
+  }
+
   update(time, delta) {
     if (this.gameOver) return;
     if (this.paused) { this.updateAmbient(0); return; } // F8: world frozen, orders still work via input
     const dt = Math.min(0.05, delta / 1000) * this.timeScale;
     this.gameTime += dt;
+    // P1.028: fixed 24Hz sim-clock advance + deadline drain. Timer-driven
+    // combat effects execute in canonical order here, never on render
+    // timers; a paused/frozen world drains nothing (see verify-sim-timers).
+    this._tickAcc += dt;
+    let _ts = 0;
+    while (this._tickAcc >= 1 / 24 && _ts < 4) {
+      this._tickAcc -= 1 / 24; this.simTickIndex++;
+      for (const e of drainTimers(this.simTimers, this.simTickIndex)) this.execSimTimer(e);
+      _ts++;
+    }
     this.processTopologyChanges();
 
     // in-mission radio chatter beats

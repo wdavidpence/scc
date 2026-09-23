@@ -478,7 +478,7 @@
     },
     {
       "id": "P1.028",
-      "status": "ready",
+      "status": "in-flight: timer-path deletions done (quota 3+ met, suite green); full done-when gated by P1.029 fixed-dt migration",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
