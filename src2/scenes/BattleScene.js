@@ -2,6 +2,7 @@
 // commands, economy, combat, and the AI commander.
 import Phaser from 'phaser';
 import { createTimers, scheduleMs, drain as drainTimers } from '../engine/simTimers.js';
+import { createMatchCmds, pushCmd, drainTo } from '../engine/cmdQueue.js';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_H } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
@@ -89,6 +90,7 @@ export class BattleScene extends Phaser.Scene {
     this.simTimers = createTimers();
     this.simTickIndex = 0;
     this._tickAcc = 0;
+    this.matchCmds = createMatchCmds(); // P1.027-i3: inputs enqueue here, drain at tick head (epoch = purge generation)
     this.units = [];
     this.buildings = [];
     this.projectiles = [];
@@ -526,10 +528,37 @@ export class BattleScene extends Phaser.Scene {
     if (this.mods.boss) scheduleMs(this.simTimers, this.simTickIndex, 1500, 'boss_spawn');
   }
 
+  // ---------------- P1.027-i3 command queue plumbing ----------------
+  selIds() { return [...(this.selection || [])].map(u => u.id); }
+  selFromIds(ids) { const m = new Map(this.units.map(u => [u.id, u])); return ids.map(id => m.get(id)).filter(u => u && !u.dead); }
+  __cmd(type, payload, player) { pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: type, type, payload }); }
+  execCmd(c) {
+    const pl = c.payload || {};
+    const sel = pl.sel !== undefined ? this.selFromIds(pl.sel) : null;
+    switch (c.type) {
+      case 'order': this.rightClickOrder(pl.wp, pl.shift, pl.alt, sel); break;
+      case 'stance': if (sel && sel.length) this.setStance(pl.stance, sel); break;
+      case 'stop': if (sel && sel.length) { for (const u of sel) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } this.audio?.orderPing?.(); } break;
+      case 'siege': if (sel) this.toggleSiegeSelected(sel); break;
+      case 'burrow': if (sel) this.toggleBurrowSelected(sel); break;
+      case 'cloak': if (sel) this.toggleCloakSelected(sel); break;
+      case 'stim': if (sel) this.stimSelected(sel); break;
+      case 'unload': {
+        const t = (pl.sel || []).map(id => this.units.find(u => u.id === id)).find(u => u && !u.dead && u.def.transport && u.carry?.length);
+        if (t) { t.unloadAt = { x: t.x, y: t.y }; t.setOrder({ type: 'unload', point: pl.point || { x: t.x + 160, y: t.y + 120 } }); return; }
+        const b = this.buildings.find(x => x.id === pl.b);
+        if (b && b.def.garrison && b.garrison?.length) this.emergeAll(b);
+        break;
+      }
+      case 'automine': this.toggleAutoMine(); break;
+    }
+  }
+
   // ---------------- tactical pause (F8) ----------------
   togglePause() {
     if (this.gameOver) return;
     this.paused = !this.paused;
+    if (this.paused) this.matchCmds.epoch++; // P1.027: stale-epoch purge; during-pause commands carry the new epoch and execute on resume
     this.audio?.orderPing();
     this.polish?.pauseOverlay(this.paused);
     this.events.emit('hud:pause', this.paused);
@@ -753,9 +782,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- battle stances (F6) ----------------
-  setStance(stance) {
-    if (!this.selection.size) return;
-    for (const u of this.selection) { if (!u.def.worker) u.stance = stance; }
+  setStance(stance, sel) {
+    const SEL = sel || [...this.selection];
+    if (!SEL.length) return;
+    for (const u of SEL) { if (!u.def.worker) u.stance = stance; }
     this.audio?.orderPing();
     this.events.emit('hud:alert', 'STANCE: ' + stance.toUpperCase());
   }
@@ -2881,7 +2911,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerup', (p) => {
       window.__inLog = window.__inLog || []; if (window.__inLog.length < 40) window.__inLog.push(['up', p.button, Math.round(p.x), Math.round(p.y), !!this.dragStart, !!this.dragMoved]);
       if (this.hotseat && this.cam2) this.autoTeamByPointer(p);
-      if (p.button === 2) { this.rightClickOrder(this.worldFor(p), p.shiftKey, p.altKey); return; }
+      if (p.button === 2) { this.__cmd('order', { wp: this.worldFor(p), shift: p.shiftKey, alt: p.altKey, sel: this.selIds() }, this.teamForPointer(p) ?? 0); return; } // P1.027: queued to next tick boundary
       if (!this.dragStart) return;
       if (this.dragStart.screen) {
         const c = this.teamForPointer(p) === 1 ? this.cam2 : this.cameras.main;
@@ -2963,49 +2993,47 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keyup-CTRL', () => { this.ctrlHeld = false; });
     // SC1 unload/eject: U = dropship unload at cursor position; works on selected bunker too
     this.input.keyboard.on('keydown-U', () => {
-      const t = [...(this.selection || [])].find(u => u.def.transport && u.carry?.length);
-      if (t) { t.unloadAt = { x: t.x, y: t.y }; t.setOrder({ type: 'unload', point: { x: this.pointerPos?.x ?? t.x + 160, y: this.pointerPos?.y ?? t.y + 120 } }); return; }
-      const b = this.selectedBuilding;
-      if (b && b.def.garrison && b.garrison?.length) this.emergeAll(b);
+      this.__cmd('unload', { sel: this.selIds(), point: this.pointerPos ? { x: this.pointerPos.x, y: this.pointerPos.y } : null, b: this.selectedBuilding?.id ?? -1 });
     });
     this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });
     this.input.keyboard.on('keydown-SPACE', (e) => { if (e.preventDefault) e.preventDefault(); this.togglePause(); });
-    this.input.keyboard.on('keydown-Z', () => this.setStance('aggressive'));
-    this.input.keyboard.on('keydown-X', () => this.setStance('defensive'));
+    this.input.keyboard.on('keydown-Z', () => { if (this.selection.size) this.__cmd('stance', { stance: 'aggressive', sel: this.selIds() }); });
+    this.input.keyboard.on('keydown-X', () => { if (this.selection.size) this.__cmd('stance', { stance: 'defensive', sel: this.selIds() }); });
     this.input.keyboard.on('keydown-C', () => {
-      // context: cloakers selected -> cloak toggle, otherwise hold-fire stance
-      if ([...this.selection].some(u => u.def.cloak)) { this.toggleCloakSelected(); return; }
-      this.setStance('hold');
+      // context (decided at press time, executed on tick): cloakers selected -> cloak toggle, otherwise hold-fire
+      if (!this.selection.size) return;
+      if ([...this.selection].some(u => u.def.cloak)) { this.__cmd('cloak', { sel: this.selIds() }); return; }
+      this.__cmd('stance', { stance: 'hold', sel: this.selIds() });
     });
-    this.input.keyboard.on('keydown-H', () => this.setStance('hold'));
+    this.input.keyboard.on('keydown-H', () => { if (this.selection.size) this.__cmd('stance', { stance: 'hold', sel: this.selIds() }); });
     this.input.keyboard.on('keydown-S', (e) => {
       // SC1: S = stop; if any siege tank is selected, S = toggle siege mode
-      const tanks = [...this.selection].filter(u => u.def.siege);
-      if (tanks.length) { this.toggleSiegeSelected(); return; }
-      if (this.selection.size) { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } this.audio?.orderPing?.(); }
+      if (!this.selection.size) return;
+      if ([...this.selection].some(u => u.def.siege)) { this.__cmd('siege', { sel: this.selIds() }); return; }
+      this.__cmd('stop', { sel: this.selIds() });
     });
     this.input.keyboard.on('keydown-T', () => this.armScan());
     // GAP 65: mining automation toggle
-    this.input.keyboard.on('keydown-J', () => this.toggleAutoMine());
+    this.input.keyboard.on('keydown-J', () => this.__cmd('automine', {}));
     this.input.keyboard.on('keydown-P', () => this.armPatrol());
-    this.input.keyboard.on('keydown-B', () => this.toggleBurrowSelected());
+    this.input.keyboard.on('keydown-B', () => { if (this.selection.size) this.__cmd('burrow', { sel: this.selIds() }); });
     // v2.45: D = deploy MCV-class starter into Command Center
     this.input.keyboard.on('keydown-D', () => {
       if (this.coach && this.coach.active) return; // v2.65: forced-click coach owns the deploy lesson
       const u = [...this.selection].find(x => x.def.mcv && !x.dead && x.team === (this.activeTeam ?? 0));
       if (u) this.deployMCV(u);
     });
-    this.input.keyboard.on('keydown-F', () => this.stimSelected());
+    this.input.keyboard.on('keydown-F', () => { if (this.selection.size) this.__cmd('stim', { sel: this.selIds() }); });
     // v2.27: camera follow lock (X) — cam tracks the selected unit until re-press
     this.input.keyboard.on('keydown-X', () => {
       if (this.polish?._follow) { this.polish.stopFollow(); this.events.emit('hud:alert', 'CAM FOLLOW RELEASED'); return; }
       const u = [...(this.selection || [])].find(x => !x.dead);
       if (u) this.polish?.follow(u); else this.events.emit('hud:alert', 'SELECT A UNIT TO FOLLOW');
     });
-    this.input.keyboard.on('keydown-K', () => this.toggleCloakSelected());
+    this.input.keyboard.on('keydown-K', () => { if (this.selection.size) this.__cmd('cloak', { sel: this.selIds() }); });
     this.input.keyboard.on('keydown-F6', () => this.polish?.cycleSpeed());
     this.input.keyboard.on('keydown-F9', () => this.saveBookmark());
     this.input.keyboard.on('keydown-F8', () => { if (this.hotseat) { this.switchActiveTeam(); return; } this.restoreBookmark(); });
@@ -3033,12 +3061,12 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:camera', ({ x, y }) => { this.polish?.stopFollow(); if (this.polish) this.polish.smoothCenter(x, y); else this.cameras.main.centerOn(x, y); });
     this.events.on('hud:attackMode', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.events.on('hud:cancelPlace', () => this.cancelPlacing());
-    this.events.on('hud:stim', () => this.stimSelected());
-    this.events.on('hud:siege', () => this.toggleSiegeSelected());
-    this.events.on('hud:burrow', () => this.toggleBurrowSelected());
+    this.events.on('hud:stim', () => { if (this.selection.size) this.__cmd('stim', { sel: this.selIds() }); });
+    this.events.on('hud:siege', () => { if (this.selection.size) this.__cmd('siege', { sel: this.selIds() }); });
+    this.events.on('hud:burrow', () => { if (this.selection.size) this.__cmd('burrow', { sel: this.selIds() }); });
     this.events.on('hud:patrol', () => this.armPatrol());
     this.events.on('hud:scan', () => this.armScan());
-    this.events.on('hud:cloak', () => this.toggleCloakSelected());
+    this.events.on('hud:cloak', () => { if (this.selection.size) this.__cmd('cloak', { sel: this.selIds() }); });
     this.events.on('hud:mergeRadiant', () => this.summonRadiant('radiant'));
     this.events.on('hud:mergeDarkRadiant', () => this.summonRadiant('umbral'));
     this.events.on('hud:morphSporecaster', () => this.morphSelected('sporecaster'));
@@ -3163,13 +3191,14 @@ export class BattleScene extends Phaser.Scene {
     this.events.emit('hud:selection', { building: b ? { buildId: b.buildId, name: b.def.name, hp: Math.ceil(b.hp), maxHp: b.maxHp, queue: b.queue.map(q => ({ kind: q.kind || q.research, remaining: Math.ceil(q.remaining), label: UNITS[q.kind]?.name || TECHS[q.research]?.name })), canProduce: Object.keys(UNITS).filter(k => UNITS[k].build === b.buildId && b.canProduce(k)) } : null });
   }
 
-  rightClickOrder(wp, shift, alt) {
+  rightClickOrder(wp, shift, alt, sel) {
+    const SEL = sel || [...this.selection]; // P1.027-i3: cmd-queue exec receives the press-time selection snapshot
     if (this.coach && this.coach.active && this.coach.gateRight(wp)) return; // v2.65 forced-click gate
     this.cmdCount++;
     this.showOrderMarker(wp.x, wp.y);
     // AAA/SC1: Alt+right-click movement subgroups — each alt-click selects the NEXT batch of units
-    if (alt && this.selection.size && !shift) {
-      const list = [...this.selection].filter(u => !u.dead);
+    if (alt && SEL.length && !shift) {
+      const list = [...SEL].filter(u => !u.dead);
       if (list.length > 1) {
         this._sgCycle = (this._sgCycle ?? 0) + 1;
         if (this._sgLast && Math.hypot(wp.x - this._sgLast.x, wp.y - this._sgLast.y) > 18) this._sgCycle = 1;
@@ -3192,8 +3221,8 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     // SC1 shift-queue: append move/attack-move waypoints to current selection
-    if (shift && this.selection.size && !this.attackMoveMode) {
-      for (const u of this.selection) {
+    if (shift && SEL.length && !this.attackMoveMode) {
+      for (const u of SEL) {
         u.waypoints = u.waypoints || [];
         u.waypoints.push({ x: wp.x, y: wp.y });
         if (u.waypoints.length > 7) u.waypoints.shift();
@@ -3212,7 +3241,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.attackMoveMode) {
-      const list = [...this.selection];
+      const list = [...SEL];
       if (list.length >= 3) this.issueGroupMove(list, wp.x, wp.y, true);
       else for (const u of list) u.issueMove(wp.x, wp.y, true);
       // v2.26 polish: SC-style "?" when a war party marches into unexplored fog
@@ -3220,12 +3249,12 @@ export class BattleScene extends Phaser.Scene {
       this.attackMoveMode = false;
       this.input.setDefaultCursor('default');
       this.audio?.move();
-      if (this.selection.size) this.audio?.moveBark();
+      if (SEL.length) this.audio?.moveBark();
       return;
     }
     // gather workers?
-    const workers = [...this.selection].filter(u => u.def.worker);
-    if (workers.length === this.selection.size && this.selection.size > 0) {
+    const workers = [...SEL].filter(u => u.def.worker);
+    if (workers.length === SEL.length && SEL.length > 0) {
       const foe = this.enemyUnitAt(wp.x, wp.y);
       if (foe) { workers.forEach(w => w.setOrder({ type: 'attackTarget', target: foe })); return; }
       const b = this.buildingAt(wp.x, wp.y);
@@ -3268,7 +3297,7 @@ export class BattleScene extends Phaser.Scene {
     {
       const ally = this.allyUnitAt(wp.x, wp.y);
       const ab = this.allyBuildingAt(wp.x, wp.y);
-      const list = [...this.selection];
+      const list = [...SEL];
       if (ally && ally.def.transport && list.length) {
         let loaded = 0;
         for (const u of list) { if (u !== ally && !u.def.flying && this.loadUnitInto(ally, u)) loaded++; }
@@ -3285,14 +3314,14 @@ export class BattleScene extends Phaser.Scene {
     // combat units
     const foe = this.enemyUnitAt(wp.x, wp.y);
     const fb = this.enemyBuildingAt(wp.x, wp.y);
-    const list = [...this.selection];
+    const list = [...SEL];
     if (!foe && !fb && list.length >= 3) {
       this.issueGroupMove(list, wp.x, wp.y, false);
       this.audio?.move();
       if (list.length >= 3) this.audio?.moveBark();
       return;
     }
-    for (const u of this.selection) {
+    for (const u of SEL) {
       if (foe) u.setOrder({ type: 'attackTarget', target: foe });
       else if (fb) u.setOrder({ type: 'attackTarget', target: fb });
       else u.issueMove(wp.x, wp.y, false);
@@ -3468,8 +3497,9 @@ export class BattleScene extends Phaser.Scene {
     this.audio?.select();
   }
 
-  stimSelected() {
-    for (const u of this.selection) {
+  stimSelected(sel) {
+    const SEL = sel || [...SEL];
+    for (const u of SEL) {
       if (u.kind === 'marine' && u.hp > 20) {
         u.speed *= 1.5; u.bonusDamage += 6;
         u.hp -= 10;
@@ -3482,9 +3512,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- SC1: siege / burrow / patrol / scan / bookmarks ----------------
-  toggleSiegeSelected() {
+  toggleSiegeSelected(sel) {
+    const SEL = sel || [...SEL];
     let did = false;
-    for (const u of this.selection) {
+    for (const u of SEL) {
       if (!u.def.siege) continue;
       did = true;
       if (u.sieged) u.unsiege(); else u.siegeUp();
@@ -3494,9 +3525,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // SC1: manual cloak toggle for nightblade etc.
-  toggleCloakSelected() {
+  toggleCloakSelected(sel) {
+    const SEL = sel || [...SEL];
     let did = false;
-    for (const u of this.selection) {
+    for (const u of SEL) {
       if (!u.def.cloak) continue;
       did = true;
       u.cloaked = !u.cloaked;
@@ -3504,12 +3536,13 @@ export class BattleScene extends Phaser.Scene {
       u._uncloakT = u.cloaked ? 0 : 2;
     }
     if (!did) { this.events.emit('hud:alert', 'CLOAK: SELECT NIGHTBLADES'); this.audio?.announcer?.('nocrew'); return; }
-    this.audio?.psiCast?.() ; this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.cloaked) ? 'CLOAKED' : 'DECLOAKED');
+    this.audio?.psiCast?.() ; this.events.emit('hud:alert', SEL.length && [...SEL].some(u => u.cloaked) ? 'CLOAKED' : 'DECLOAKED');
   }
 
-  toggleBurrowSelected() {
+  toggleBurrowSelected(sel) {
+    const SEL = sel || [...SEL];
     let did = false;
-    for (const u of this.selection) {
+    for (const u of SEL) {
       if (!u.def.burrow) continue;
       did = true;
       u.burrowed = !u.burrowed;
@@ -3517,7 +3550,7 @@ export class BattleScene extends Phaser.Scene {
       u.container.setScale(u.burrowed ? 0.8 : 1);
       if (u.burrowed) { u.order = null; u.path = []; u.state = 'idle'; }
     }
-    if (did) { this.audio?.orderPing?.(); this.events.emit('hud:alert', this.selection.size && [...this.selection].some(u => u.burrowed) ? 'BURROWED — IMMOBILE, UNSEEN' : 'UNBURROWED'); }
+    if (did) { this.audio?.orderPing?.(); this.events.emit('hud:alert', SEL.length && [...SEL].some(u => u.burrowed) ? 'BURROWED — IMMOBILE, UNSEEN' : 'UNBURROWED'); }
   }
 
   // ---------------- SC1: radiant convergence, aerie morphs, void/caustic casts ----------------
@@ -4020,6 +4053,7 @@ export class BattleScene extends Phaser.Scene {
       this._tickAcc -= TICK; this.simTickIndex++;
       this.gameTime += TICK;
       for (const e of drainTimers(this.simTimers, this.simTickIndex)) this.execSimTimer(e);
+      for (const c of drainTo(this.matchCmds, this.simTickIndex)) this.execCmd(c);
       this.stepSim(TICK);
       // P1.029: AI decisions, evac window, and convoy orders mutate sim
       // state (orders/spawns/end-state) — they execute on the fixed tick,

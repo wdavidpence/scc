@@ -55,7 +55,7 @@
    ],
    "attempts": 1,
    "context_pack": "context-packs/P0.003.md",
-   "done_when": "verify-pathfinding passes 4/4 and changed source is ≤20 lines",
+   "done_when": "verify-pathfinding passes 4/4 and changed source is \u226420 lines",
    "estimate": "1h",
    "task": "Correct the A* heap-entry extraction defect without changing public NavGrid signatures [P2][P3]",
    "started_at": "2026-09-14T19:32:15Z",
@@ -123,7 +123,7 @@
    ],
    "attempts": 2,
    "context_pack": "context-packs/P0.007.md",
-   "done_when": "every plateau has ≥1 ramp, ramp cells are walkable, and non-ramp cliff-edge crossings fail",
+   "done_when": "every plateau has \u22651 ramp, ramp cells are walkable, and non-ramp cliff-edge crossings fail",
    "estimate": "5h",
    "task": "Author explicit two-tile-or-wider ramps connecting each plateau to flat ground [P2]",
    "started_at": "2026-09-14T21:17:54Z",
@@ -208,7 +208,7 @@
    ],
    "attempts": 9,
    "context_pack": "context-packs/P0.012.md",
-   "done_when": "five restart cycles produce zero duplicate-key errors and memory growth ≤25 MB",
+   "done_when": "five restart cycles produce zero duplicate-key errors and memory growth \u226425 MB",
    "estimate": "4h",
    "task": "Fix duplicate dynamic texture lifecycle on five battle restarts [P1][P3]",
    "started_at": "2026-09-14T23:46:08Z",
@@ -310,7 +310,7 @@
    ],
    "attempts": 1,
    "context_pack": null,
-   "done_when": "all cases pass with zero solid entry and route success ≥99% for reachable pairs",
+   "done_when": "all cases pass with zero solid entry and route success \u226599% for reachable pairs",
    "estimate": "6h",
    "task": "Add 100 seeded mountain-crossing and valley-routing cases to CI [P2][P3]",
    "finished_at": "2026-09-17T14:46:14Z",
@@ -344,7 +344,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "median clarity/control ≥3.5, all testers identify ramps and valleys, automated gates green, deletion quota=5",
+   "done_when": "median clarity/control \u22653.5, all testers identify ramps and valleys, automated gates green, deletion quota=5",
    "estimate": "3d",
    "task": "Gate Phase 0 with five outside players on the mountain-and-valley map [P1][P2]",
    "finished_at": "2026-09-17T19:29:40Z",
@@ -454,11 +454,11 @@
    "estimate": "1d",
    "task": "Delete variable-delta simulation updates [P3]",
    "finished_at": "2026-09-23T14:40:00Z",
-   "done_when_result": "Option-B closure per context pack: simWorld.js fixed-24Hz kernel (simClock+simInt+seeded rng, no Phaser/DOM) shipped; verify-fixed-tick gate 8/8 (exact tick counts under 30/60/144Hz + stutter schedules, cadence-equal-state, cross-engine 10k-tick hash identity, render-observer cannot alter hash, trail-roll camera-guard audit, single interceptor damage path audit). Shell-trail random and interceptor dual-clock live sites handled within B scope. Deletion quota count=1 read as the scheduled DELETION of the variable-dt live pathway, which the kernel now supersedes; actual live-runtime switchover recorded as P1.029 mandated first task (BACKLOG). Honest caveat: live scene still mutates on variable dt until P1.029 — documented, not hidden."
+   "done_when_result": "Option-B closure per context pack: simWorld.js fixed-24Hz kernel (simClock+simInt+seeded rng, no Phaser/DOM) shipped; verify-fixed-tick gate 8/8 (exact tick counts under 30/60/144Hz + stutter schedules, cadence-equal-state, cross-engine 10k-tick hash identity, render-observer cannot alter hash, trail-roll camera-guard audit, single interceptor damage path audit). Shell-trail random and interceptor dual-clock live sites handled within B scope. Deletion quota count=1 read as the scheduled DELETION of the variable-dt live pathway, which the kernel now supersedes; actual live-runtime switchover recorded as P1.029 mandated first task (BACKLOG). Honest caveat: live scene still mutates on variable dt until P1.029 \u2014 documented, not hidden."
   },
   {
    "id": "P1.027",
-   "status": "in-flight (increment 2/3: kernel v2 + gate 12/12 green; increment 3 = scene wiring, see BACKLOG)",
+   "status": "in_progress",
    "owner": "MSM5U-LOCAL",
    "preferred_owner": "ANTIGRAV",
    "files": [
@@ -474,7 +474,8 @@
    "done_when": "inputs enqueue tick-stamped commands and deletion quota count=2",
    "estimate": "1d",
    "task": "Delete direct DOM-to-simulation mutation [P1][P3]",
-   "started_at": "2026-09-23T14:55:00Z"
+   "started_at": "2026-09-23T14:55:00Z",
+   "note": "i1+i2+i3a done 2026-09-23. i3a: RMB/keyboard/HUD order+stance+toggle handlers now enqueue to matchCmds (tick+epoch stamped) and execute at the fixed-tick drain; pause purges pre-pause backlog. i3b keeps placement/hotkey/summon/morph/queue sites + live-scope scan gate. Gate: verify-cmd-live 8/8 in suite."
   },
   {
    "id": "P1.028",
@@ -505,7 +506,7 @@
    "done_when": "move/stop/hold/attack/harvest golden tests run without DOM or Phaser",
    "estimate": "2d",
    "task": "Extract unit order execution into a pure simulation module [P1][P3]",
-   "note": "i1+i2 done 2026-09-23. i2: scripts/verify-order-golden.cjs runs the REAL Unit order chains (move/attackTarget/attackMove/patrol/harvest+returnCargo/stop-clone; hold uses identical scene code path) headless under plain Node — phaser import stubbed via ESM loader hook (entity.js has zero runtime Phaser-namespace use), fake world = flat terrain + seeded SimRng + minimal projectile closure. 8 checks incl dual-run identity, cross-V8 (--jitless) identity, real attrition kill, patrol oscillation, full harvest cargo cycle, stop-cancel freeze; wired into run-regression-263 (24/24). Remaining: P1.027-i3 command wiring on the tick loop."
+   "note": "i1+i2 done 2026-09-23. i2: scripts/verify-order-golden.cjs runs the REAL Unit order chains (move/attackTarget/attackMove/patrol/harvest+returnCargo/stop-clone; hold uses identical scene code path) headless under plain Node \u2014 phaser import stubbed via ESM loader hook (entity.js has zero runtime Phaser-namespace use), fake world = flat terrain + seeded SimRng + minimal projectile closure. 8 checks incl dual-run identity, cross-V8 (--jitless) identity, real attrition kill, patrol oscillation, full harvest cargo cycle, stop-cancel freeze; wired into run-regression-263 (24/24). Remaining: P1.027-i3 command wiring on the tick loop."
   },
   {
    "id": "P1.030",
@@ -794,7 +795,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "matrix covers 20–250 ms latency, 0–5% loss, and command hashes remain equal",
+   "done_when": "matrix covers 20\u2013250 ms latency, 0\u20135% loss, and command hashes remain equal",
    "estimate": "2d",
    "task": "Build network impairment harness for latency, jitter, loss, duplication, and reordering [P3]"
   },
@@ -874,7 +875,7 @@
    "context_pack": null,
    "done_when": "benchmark meets target without changed golden hashes",
    "estimate": "3d",
-   "task": "Optimize only measured Phase-1 bottlenecks until 400-unit p95 ≤8 ms [P3]"
+   "task": "Optimize only measured Phase-1 bottlenecks until 400-unit p95 \u22648 ms [P3]"
   },
   {
    "id": "P1.054",
@@ -902,7 +903,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "hashes identical, 400-unit p95 ≤8 ms, fun median ≥3.5, deletion quota=3",
+   "done_when": "hashes identical, 400-unit p95 \u22648 ms, fun median \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 1 on two-machine 10-minute equality and five-player fun test [P1][P2][P3]"
   },
@@ -1007,7 +1008,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "role curves hit approved 0–90% and stop-distance ranges within ±5%",
+   "done_when": "role curves hit approved 0\u201390% and stop-distance ranges within \u00b15%",
    "estimate": "1d",
    "task": "Tune ground acceleration and deceleration by unit role in hot-loadable data [P1][P3]"
   },
@@ -1098,7 +1099,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "40-unit arrival standard deviation ≤0.6 s across three valleys",
+   "done_when": "40-unit arrival standard deviation \u22640.6 s across three valleys",
    "estimate": "2d",
    "task": "Implement formation slot assignment minimizing travel-distance variance [P1][P3]"
   },
@@ -1207,7 +1208,7 @@
    "context_pack": null,
    "done_when": "recorded phrase serializes into replay and reproduces exact relative intents",
    "estimate": "2d",
-   "task": "Implement deterministic Command Echo recording for 4–12 second command phrases [P1][P3]"
+   "task": "Implement deterministic Command Echo recording for 4\u201312 second command phrases [P1][P3]"
   },
   {
    "id": "P2.076",
@@ -1250,7 +1251,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "testers identify echo direction/purpose at ≥80% accuracy",
+   "done_when": "testers identify echo direction/purpose at \u226580% accuracy",
    "estimate": "1d",
    "task": "Add Command Echo opponent-readable intent glyphs inside current vision [P1][P2]"
   },
@@ -1296,7 +1297,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "path/selection/formations/echo pass, p95 tick ≤8 ms, control median ≥3.5",
+   "done_when": "path/selection/formations/echo pass, p95 tick \u22648 ms, control median \u22653.5",
    "estimate": "2d",
    "task": "Run the pre-polish Phase-2 gameplay gate at 400 units [P1][P2][P3]"
   },
@@ -1326,7 +1327,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "blind test identifies command class ≥90% across 20 trials",
+   "done_when": "blind test identifies command class \u226590% across 20 trials",
    "estimate": "1d",
    "task": "Add distinct move, attack, invalid, queue, and echo command audio [P1]"
   },
@@ -1416,7 +1417,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "200-unit battle stays within 2 ms VFX budget and hits are identifiable ≥90%",
+   "done_when": "200-unit battle stays within 2 ms VFX budget and hits are identifiable \u226590%",
    "estimate": "1d",
    "task": "Add hit flash, directional spark, and bounded damage reaction [P1]"
   },
@@ -1446,7 +1447,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "blind mass classification ≥80% and 30-minute mix has zero clipping",
+   "done_when": "blind mass classification \u226580% and 30-minute mix has zero clipping",
    "estimate": "1d",
    "task": "Add impact SFX layers by weapon mass and surface [P1][P2]"
   },
@@ -1476,7 +1477,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "all camera actions remain inside bounds and tester control median ≥4.0",
+   "done_when": "all camera actions remain inside bounds and tester control median \u22654.0",
    "estimate": "1d",
    "task": "Add camera acceleration, deceleration, edge pan, drag pan, bookmarks, and follow tuning [P1]"
   },
@@ -1491,7 +1492,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "anchor drift ≤2 px across 100 zoom cycles",
+   "done_when": "anchor drift \u22642 px across 100 zoom cycles",
    "estimate": "6h",
    "task": "Add cursor-anchored zoom preserving world point [P1]"
   },
@@ -1583,7 +1584,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "all EVALS pass, median clarity/weight/control/tension/replay ≥3.5, deletion quota=3",
+   "done_when": "all EVALS pass, median clarity/weight/control/tension/replay \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 2 with automated suite and five outside 30-minute sessions [P1][P2][P3]"
   },
@@ -1658,7 +1659,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "measured 1–24 worker curve remains within ±5% of approved table",
+   "done_when": "measured 1\u201324 worker curve remains within \u00b15% of approved table",
    "estimate": "1d",
    "task": "Implement two-tier primary-resource saturation with full yield through two workers per node and diminishing third-worker yield [P1][P3]"
   },
@@ -1673,7 +1674,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "100 seeded openings report ≤3% income variance before player intervention",
+   "done_when": "100 seeded openings report \u22643% income variance before player intervention",
    "estimate": "1d",
    "task": "Place starting resource nodes so travel variance across spawn positions is below 3% [P2][P3]"
   },
@@ -1688,7 +1689,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "workers 1–3 scale within ±5% and worker 4 adds zero yield with visible feedback",
+   "done_when": "workers 1\u20133 scale within \u00b15% and worker 4 adds zero yield with visible feedback",
    "estimate": "1d",
    "task": "Implement secondary-resource extraction capped at three efficient workers per site [P1][P3]"
   },
@@ -1707,7 +1708,7 @@
    "context_pack": null,
    "done_when": "headless curves show ROI inside range across all approved faction macro rules",
    "estimate": "6h",
-   "task": "Tune command-hub and expansion costs to a 2.2–2.8 minute unprotected payback window [P2][P3]"
+   "task": "Tune command-hub and expansion costs to a 2.2\u20132.8 minute unprotected payback window [P2][P3]"
   },
   {
    "id": "P3.109",
@@ -1851,7 +1852,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five new players answer current bottleneck correctly in ≥80% of probes",
+   "done_when": "five new players answer current bottleneck correctly in \u226580% of probes",
    "estimate": "1d",
    "task": "Add income-rate, saturation, supply, queue, and prerequisite explanations to the command interface [P1]"
   },
@@ -1989,7 +1990,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "curves pass, first-decision median ≤90 s, fun median ≥3.5, deletion quota=3",
+   "done_when": "curves pass, first-decision median \u226490 s, fun median \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 3 with automated economy checks and five outside sessions [P1][P2][P3]"
   },
@@ -2051,7 +2052,7 @@
    "context_pack": null,
    "done_when": "matrix has no dominant role and every edge has a readable causal rule",
    "estimate": "1d",
-   "task": "Define a cost-normalized counter matrix with soft counters between 1.20× and 1.55× efficiency [P1][P3]"
+   "task": "Define a cost-normalized counter matrix with soft counters between 1.20\u00d7 and 1.55\u00d7 efficiency [P1][P3]"
   },
   {
    "id": "P4.130",
@@ -2064,7 +2065,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "automated pairings remain within ±7% of approved role bands",
+   "done_when": "automated pairings remain within \u00b17% of approved role bands",
    "estimate": "1d",
    "task": "Establish approved 1v1 TTK bands for skirmisher, line, siege, support, and structure targets [P1][P3]"
   },
@@ -2080,7 +2081,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "minimum focus-fire survival is ≥3 authoritative ticks except tagged executions",
+   "done_when": "minimum focus-fire survival is \u22653 authoritative ticks except tagged executions",
    "estimate": "1d",
    "task": "Cap focus-fire burst so equal-cost concentrated armies do not delete durable targets in one tick [P1][P3]"
   },
@@ -2095,7 +2096,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "40 attackers reduce wasted damage by ≥30% without changing commanded focus fire",
+   "done_when": "40 attackers reduce wasted damage by \u226530% without changing commanded focus fire",
    "estimate": "1d",
    "task": "Implement deterministic overkill reservation so projectiles distribute only when current target is lethally committed [P1][P3]"
   },
@@ -2173,7 +2174,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "every ability exposes all windows and has ≥6 ticks of intended counterplay unless instant-tagged",
+   "done_when": "every ability exposes all windows and has \u22656 ticks of intended counterplay unless instant-tagged",
    "estimate": "1d",
    "task": "Define ability cast, telegraph, response, impact, recovery, and cooldown windows in ticks [P1][P3]"
   },
@@ -2227,7 +2228,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "high-APM bot gains ≤20% efficiency over bounded humanlike bot at equal composition",
+   "done_when": "high-APM bot gains \u226420% efficiency over bounded humanlike bot at equal composition",
    "estimate": "1d",
    "task": "Set micro ceilings through turn rate, acceleration, projectile travel, and recovery rather than input rejection [P1][P3]"
   },
@@ -2244,7 +2245,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five testers identify action and response window in ≥80% of blind trials",
+   "done_when": "five testers identify action and response window in \u226580% of blind trials",
    "estimate": "1d",
    "task": "Give every high-impact action one visible and audible counterplay cue [P1]"
   },
@@ -2405,7 +2406,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "TTK ±7%, no dominant mix, cue recognition ≥80%, fun median ≥3.5, deletion quota=3",
+   "done_when": "TTK \u00b17%, no dominant mix, cue recognition \u226580%, fun median \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 4 with combat matrices and five outside sessions [P1][P2][P3]"
   },
@@ -2483,7 +2484,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "worker curves remain within ±5% long-run income but differ in timing and vulnerability",
+   "done_when": "worker curves remain within \u00b15% long-run income but differ in timing and vulnerability",
    "estimate": "2d",
    "task": "Give each faction a distinct worker production and saturation decision [P1][P3]"
   },
@@ -2519,7 +2520,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "supply loss simulations impose comparable recovery cost within ±10%",
+   "done_when": "supply loss simulations impose comparable recovery cost within \u00b110%",
    "estimate": "1d",
    "task": "Give each faction a distinct supply constraint with equivalent readable risk [P1][P3]"
   },
@@ -2535,7 +2536,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "expansion ROI remains 2.2–2.8 minutes while punish windows differ by ≥20 s",
+   "done_when": "expansion ROI remains 2.2\u20132.8 minutes while punish windows differ by \u226520 s",
    "estimate": "1d",
    "task": "Give each faction a distinct expansion setup and exposure window [P1][P2][P3]"
   },
@@ -2604,9 +2605,9 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "grayscale gameplay-scale classifier accuracy is ≥95%",
+   "done_when": "grayscale gameplay-scale classifier accuracy is \u226595%",
    "estimate": "2d",
-   "task": "Enforce silhouette, footprint, motion, and weapon-axis separation among each faction’s three units [P1]"
+   "task": "Enforce silhouette, footprint, motion, and weapon-axis separation among each faction\u2019s three units [P1]"
   },
   {
    "id": "P5.163",
@@ -2656,7 +2657,7 @@
    "context_pack": null,
    "done_when": "every spike has a detectable commitment and viable response in simulation",
    "estimate": "1d",
-   "task": "Tune faction technology timings so power spikes have visible scouting tells and ≥20 s response windows [P1][P2]"
+   "task": "Tune faction technology timings so power spikes have visible scouting tells and \u226520 s response windows [P1][P2]"
   },
   {
    "id": "P5.166",
@@ -2682,7 +2683,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "new players execute equivalent core tasks across all factions at ≥80% success",
+   "done_when": "new players execute equivalent core tasks across all factions at \u226580% success",
    "estimate": "2d",
    "task": "Build faction-specific command-card explanations without changing control grammar [P1]"
   },
@@ -2817,7 +2818,7 @@
    "context_pack": null,
    "done_when": "each economy must engage its faction macro rule and deletion quota count=2",
    "estimate": "1d",
-   "task": "Delete shared macro shortcuts that bypass each faction’s defining tension [P1][P3]"
+   "task": "Delete shared macro shortcuts that bypass each faction\u2019s defining tension [P1][P3]"
   },
   {
    "id": "P5.173",
@@ -2833,7 +2834,7 @@
    "context_pack": null,
    "done_when": "remaining ability windows are mechanically distinct and deletion quota count=3",
    "estimate": "1d",
-   "task": "Delete faction abilities that duplicate another faction’s timing and counterplay [P1][P3]"
+   "task": "Delete faction abilities that duplicate another faction\u2019s timing and counterplay [P1][P3]"
   },
   {
    "id": "P5.174",
@@ -2865,7 +2866,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "all matchups have responses, identity score ≥4.0, fun median ≥3.5, deletion quota=3",
+   "done_when": "all matchups have responses, identity score \u22654.0, fun median \u22653.5, deletion quota=3",
    "estimate": "4d",
    "task": "Gate Phase 5 with parity matrices and five outside sessions per faction [P1][P2][P3]"
   },
@@ -2926,7 +2927,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "bot discovers ≥80% of strategically relevant topology before committing cross-map army",
+   "done_when": "bot discovers \u226580% of strategically relevant topology before committing cross-map army",
    "estimate": "1d",
    "task": "Implement scouting goals that value unknown valleys, ramps, resources, and opponent commitments [P1][P2]"
   },
@@ -2961,7 +2962,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "bot selects a viable counter in ≥90% of matrix scenarios",
+   "done_when": "bot selects a viable counter in \u226590% of matrix scenarios",
    "estimate": "2d",
    "task": "Implement composition planner from observed enemy tags and cost-efficiency matrix [P1][P3]"
   },
@@ -3304,9 +3305,9 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "matrices meet target or documented asymmetry bounds, fun median ≥3.5, deletion quota=3",
+   "done_when": "matrices meet target or documented asymmetry bounds, fun median \u22653.5, deletion quota=3",
    "estimate": "4d",
-   "task": "Gate Phase 6 with 10,000 games, 45–55% target matrices, and five outside sessions [P1][P2][P3]"
+   "task": "Gate Phase 6 with 10,000 games, 45\u201355% target matrices, and five outside sessions [P1][P2][P3]"
   },
   {
    "id": "P7.201",
@@ -3351,7 +3352,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "gameplay-scale classifier accuracy is ≥95% across 1,000 randomized captures",
+   "done_when": "gameplay-scale classifier accuracy is \u226595% across 1,000 randomized captures",
    "estimate": "2d",
    "task": "Enforce unique grayscale silhouettes for all nine slice units [P1]"
   },
@@ -3367,9 +3368,9 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "pixel census passes every unit/facing/LOD and team accuracy is ≥98%",
+   "done_when": "pixel census passes every unit/facing/LOD and team accuracy is \u226598%",
    "estimate": "1d",
-   "task": "Enforce team-color masks covering 12–18% of visible unit area [P1]"
+   "task": "Enforce team-color masks covering 12\u201318% of visible unit area [P1]"
   },
   {
    "id": "P7.205",
@@ -3382,7 +3383,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "recognition remains ≥90% in each mode and failures name exact assets",
+   "done_when": "recognition remains \u226590% in each mode and failures name exact assets",
    "estimate": "1d",
    "task": "Validate faction and team recognition under protanopia, deuteranopia, tritanopia, and grayscale filters [P1]"
   },
@@ -3398,7 +3399,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "terrain_truth classifier matches navigation topology on ≥99.9% cells",
+   "done_when": "terrain_truth classifier matches navigation topology on \u226599.9% cells",
    "estimate": "2d",
    "task": "Make traversable ground, mountain mass, cliff faces, ramps, valleys, and blockers visually categorical [P1][P2]"
   },
@@ -3413,7 +3414,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five new players identify every legal plateau entrance in ≤10 s",
+   "done_when": "five new players identify every legal plateau entrance in \u226410 s",
    "estimate": "1d",
    "task": "Mark ramp mouths and summit transitions without UI arrows [P1][P2]"
   },
@@ -3429,7 +3430,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "100 fog/elevation captures expose zero hidden entities and testers identify occupied elevation ≥80%",
+   "done_when": "100 fog/elevation captures expose zero hidden entities and testers identify occupied elevation \u226580%",
    "estimate": "1d",
    "task": "Render cliff occlusion and high-ground ownership without leaking hidden units [P1][P2]"
   },
@@ -3447,7 +3448,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "ring state is identifiable ≥95% at all zoom tiers and never implies invalid ownership",
+   "done_when": "ring state is identifiable \u226595% at all zoom tiers and never implies invalid ownership",
    "estimate": "1d",
    "task": "Standardize selection, hover, target, and control-group rings across factions [P1]"
   },
@@ -3462,7 +3463,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "200-unit capture keeps UI overdraw within budget and status questions score ≥90%",
+   "done_when": "200-unit capture keeps UI overdraw within budget and status questions score \u226590%",
    "estimate": "1d",
    "task": "Display health, armor, shield, energy, construction, and production bars only at decision-relevant thresholds [P1]"
   },
@@ -3493,7 +3494,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "blind capture review identifies source faction/team ≥90%",
+   "done_when": "blind capture review identifies source faction/team \u226590%",
    "estimate": "2d",
    "task": "Assign faction, team, and weapon ownership cues to every combat VFX [P1]"
   },
@@ -3508,7 +3509,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "light/heavy/siege/support classes are identified ≥85% without audio",
+   "done_when": "light/heavy/siege/support classes are identified \u226585% without audio",
    "estimate": "1d",
    "task": "Make projectile speed, arc, thickness, and color communicate impact class [P1]"
   },
@@ -3524,7 +3525,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "testers choose the valid response in ≥80% of first exposures",
+   "done_when": "testers choose the valid response in \u226580% of first exposures",
    "estimate": "2d",
    "task": "Standardize ability telegraphs for area, delay, danger, ownership, and counter window [P1][P2]"
   },
@@ -3539,7 +3540,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "25/50/75% health bands are identified ≥80% and role recognition remains ≥95%",
+   "done_when": "25/50/75% health bands are identified \u226580% and role recognition remains \u226595%",
    "estimate": "2d",
    "task": "Add progressive unit and structure damage states that preserve silhouette [P1]"
   },
@@ -3554,7 +3555,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "30-minute match stays within object/memory caps and active units remain ≥95% recognizable",
+   "done_when": "30-minute match stays within object/memory caps and active units remain \u226595% recognizable",
    "estimate": "1d",
    "task": "Bound corpses, debris, scorch marks, and persistent decals by age, density, and information value [P1][P3]"
   },
@@ -3583,7 +3584,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "no required state disappears and p95 frame remains ≤16.7 ms through 100 zoom cycles",
+   "done_when": "no required state disappears and p95 frame remains \u226416.7 ms through 100 zoom cycles",
    "estimate": "2d",
    "task": "Define strategic-zoom LOD for units, structures, resources, terrain, and VFX [P1][P3]"
   },
@@ -3609,7 +3610,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five players answer six map-state questions at ≥85% accuracy",
+   "done_when": "five players answer six map-state questions at \u226585% accuracy",
    "estimate": "2d",
    "task": "Rebuild minimap symbology for terrain lanes, elevation, vision, objectives, armies, alerts, and camera bounds [P1][P2]"
   },
@@ -3640,7 +3641,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "core task completion remains ≥90% while persistent HUD area decreases by ≥20%",
+   "done_when": "core task completion remains \u226590% while persistent HUD area decreases by \u226520%",
    "estimate": "2d",
    "task": "Reduce HUD density to current resources, supply, selection, production, objectives, and alerts [P1]"
   },
@@ -3657,7 +3658,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "complete training at 1280×720 has zero overlap, clipping, missed targets, or unreadable text",
+   "done_when": "complete training at 1280\u00d7720 has zero overlap, clipping, missed targets, or unreadable text",
    "estimate": "1d",
    "task": "Validate tutorial text, target markers, skip control, and command card at minimum supported resolution [P1][P2]"
   },
@@ -3731,7 +3732,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "recognition ≥95%, terrain errors zero, fun median ≥3.5, deletion quota=3",
+   "done_when": "recognition \u226595%, terrain errors zero, fun median \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 7 with screenshot forensics and five outside sessions [P1][P2][P3]"
   },
@@ -3791,7 +3792,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "click/order/weapon onset p95 <80 ms and 30-minute memory growth ≤10 MB",
+   "done_when": "click/order/weapon onset p95 <80 ms and 30-minute memory growth \u226410 MB",
    "estimate": "1d",
    "task": "Predecode and pool latency-critical audio assets after first user gesture [P1][P3]"
   },
@@ -3806,7 +3807,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "blind UI-action identification is ≥90% and peak levels pass schema",
+   "done_when": "blind UI-action identification is \u226590% and peak levels pass schema",
    "estimate": "3d",
    "task": "Produce final selection, hover, tab, queue, cancel, denial, and confirmation sounds [P1]"
   },
@@ -3821,7 +3822,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "blind command identification is ≥90% across all factions",
+   "done_when": "blind command identification is \u226590% across all factions",
    "estimate": "3d",
    "task": "Produce final move, attack, hold, patrol, rally, retreat, and Command Echo sounds [P1][P2]"
   },
@@ -3836,7 +3837,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "role classification is ≥85% without visual input",
+   "done_when": "role classification is \u226585% without visual input",
    "estimate": "4d",
    "task": "Produce final weapon launch, loop, travel, and charge layers by combat role [P1]"
   },
@@ -3851,7 +3852,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "material/impact-class recognition is ≥80% and no combination clips",
+   "done_when": "material/impact-class recognition is \u226580% and no combination clips",
    "estimate": "4d",
    "task": "Produce final terrain-aware impact layers for ground, armor, flesh, shield, structure, and cliff surfaces [P1][P2]"
   },
@@ -3867,7 +3868,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "light/heavy/structure deaths are identified ≥90% without visuals",
+   "done_when": "light/heavy/structure deaths are identified \u226590% without visuals",
    "estimate": "3d",
    "task": "Produce final death, collapse, debris, and aftermath layers by mass class [P1]"
   },
@@ -4002,7 +4003,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "no bus exceeds its cap and priority cues retain ≥6 dB separation",
+   "done_when": "no bus exceeds its cap and priority cues retain \u22656 dB separation",
    "estimate": "1d",
    "task": "Enforce silence budgets and concurrency caps during 200-unit battles [P1][P3]"
   },
@@ -4018,7 +4019,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "speech intelligibility scores ≥90% during peak combat",
+   "done_when": "speech intelligibility scores \u226590% during peak combat",
    "estimate": "1d",
    "task": "Implement sidechain ducking for announcer, selected-unit bark, and critical warning priorities [P1]"
   },
@@ -4160,7 +4161,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "command recognition ≥90%, clipping zero, fun/weight median ≥3.5, deletion quota=3",
+   "done_when": "command recognition \u226590%, clipping zero, fun/weight median \u22653.5, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 8 with blind audio tests and five outside sessions [P1][P2][P3]"
   },
@@ -4237,7 +4238,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "material classifier accuracy is ≥90% at gameplay zoom",
+   "done_when": "material classifier accuracy is \u226590% at gameplay zoom",
    "estimate": "4d",
    "task": "Add terrain normals and roughness separating flat ground, cliff face, summit, ramp, resource, and road [P1][P2]"
   },
@@ -4252,7 +4253,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "faction recognition remains ≥95% without team color",
+   "done_when": "faction recognition remains \u226595% without team color",
    "estimate": "6d",
    "task": "Author faction-specific metal, chitin, crystal, glass, energy, and wear material families [P1]"
   },
@@ -4269,7 +4270,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "team recognition ≥98% and highlight clipping remains below 0.5% pixels",
+   "done_when": "team recognition \u226598% and highlight clipping remains below 0.5% pixels",
    "estimate": "2d",
    "task": "Integrate bounded team-color and emissive responses without washing out silhouettes [P1]"
   },
@@ -4284,7 +4285,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "shadow shimmer is absent in camera sweep and shadow cost ≤2 ms",
+   "done_when": "shadow shimmer is absent in camera sweep and shadow cost \u22642 ms",
    "estimate": "2d",
    "task": "Implement cascaded or equivalent stable shadows for terrain, units, structures, and flyers [P1][P2][P3]"
   },
@@ -4315,7 +4316,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "visual haze reveals zero hidden cells and valley entrances remain identifiable ≥90%",
+   "done_when": "visual haze reveals zero hidden cells and valley entrances remain identifiable \u226590%",
    "estimate": "2d",
    "task": "Add volumetric-height fog and valley haze that never changes fog-of-war truth [P1][P2][P3]"
   },
@@ -4331,7 +4332,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "rendered edges match terrain_truth mask ≥99.9%",
+   "done_when": "rendered edges match terrain_truth mask \u226599.9%",
    "estimate": "1d",
    "task": "Add elevation edge lighting and ramp blending sourced from simulation topology [P1][P2]"
   },
@@ -4346,7 +4347,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "200-unit scenario remains ≤16.7 ms p95 and classifier scores do not regress",
+   "done_when": "200-unit scenario remains \u226416.7 ms p95 and classifier scores do not regress",
    "estimate": "1d",
    "task": "Add restrained weather and atmospheric particles bounded by readability and performance [P1][P3]"
   },
@@ -4377,7 +4378,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "each stage toggles independently and total post cost ≤2 ms",
+   "done_when": "each stage toggles independently and total post cost \u22642 ms",
    "estimate": "2d",
    "task": "Build one configurable post stack with tone map, color grade, bloom, vignette, sharpen, and accessibility switches [P1][P3]"
   },
@@ -4425,7 +4426,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "bloom occupies <8% of gameplay pixels and role recognition remains ≥95%",
+   "done_when": "bloom occupies <8% of gameplay pixels and role recognition remains \u226595%",
    "estimate": "1d",
    "task": "Tune bloom to approved emissive masks and prohibit full-frame haze [P1]"
   },
@@ -4440,7 +4441,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "adaptation settles in 0.5–1.5 s and UI luminance varies <2%",
+   "done_when": "adaptation settles in 0.5\u20131.5 s and UI luminance varies <2%",
    "estimate": "1d",
    "task": "Implement bounded exposure adaptation excluding UI and transient flashes [P1]"
   },
@@ -4494,7 +4495,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "1080p p95 ≤16.7 ms and memory ≤1.5 GB in 200-unit battle",
+   "done_when": "1080p p95 \u226416.7 ms and memory \u22641.5 GB in 200-unit battle",
    "estimate": "2d",
    "task": "Implement and benchmark ART.md LOD tiers, texture residency, and light/VFX caps [P1][P3]"
   },
@@ -4581,7 +4582,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "visual clarity/weight median ≥3.5, performance passes, deletion quota=3",
+   "done_when": "visual clarity/weight median \u22653.5, performance passes, deletion quota=3",
    "estimate": "3d",
    "task": "Gate Phase 9 with numeric image forensics and five outside sessions [P1][P2][P3]"
   },
@@ -4611,7 +4612,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "new profile reaches training in ≤60 s and every choice can be changed later",
+   "done_when": "new profile reaches training in \u226460 s and every choice can be changed later",
    "estimate": "2d",
    "task": "Build first-run flow for accessibility, input, audio, display, and training choices [P1]"
   },
@@ -4627,7 +4628,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five new players complete both lessons and retain controls after 24 hours at ≥80%",
+   "done_when": "five new players complete both lessons and retain controls after 24 hours at \u226580%",
    "estimate": "2d",
    "task": "Integrate universal training plus one faction macro lesson into progression [P1][P2]"
   },
@@ -4659,7 +4660,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "side variance <3%, terrain truth ≥99.9%, and all 100 route cases pass",
+   "done_when": "side variance <3%, terrain truth \u226599.9%, and all 100 route cases pass",
    "estimate": "1d",
    "task": "Certify the vertical-slice mountain-and-valley map for 1v1 spawns, routes, resources, and objectives [P1][P2][P3]"
   },
@@ -4807,7 +4808,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "five new players finish in 8–15 minutes without external instruction",
+   "done_when": "five new players finish in 8\u201315 minutes without external instruction",
    "estimate": "3d",
    "task": "Build campaign mission 1 around deployment, harvesting, production, and a weak training opponent [P1][P2]"
   },
@@ -4840,7 +4841,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "players execute one Echo, protect macro infrastructure, and finish in 15–25 minutes",
+   "done_when": "players execute one Echo, protect macro infrastructure, and finish in 15\u201325 minutes",
    "estimate": "4d",
    "task": "Build campaign mission 3 around faction macro tension, Command Echo, and a full enemy base [P1][P2][P3]"
   },
@@ -4857,7 +4858,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "every mission path reaches a valid next action and retry loads in ≤10 s",
+   "done_when": "every mission path reaches a valid next action and retry loads in \u226410 s",
    "estimate": "3d",
    "task": "Build mission briefing, objective, checkpoint, victory, defeat, debrief, and retry shell states [P1]"
   },
@@ -4875,7 +4876,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "accessibility matrix passes every shell and gameplay scene at 1280×720",
+   "done_when": "accessibility matrix passes every shell and gameplay scene at 1280\u00d7720",
    "estimate": "2d",
    "task": "Complete shell-wide accessibility for text scale, subtitles, contrast, motion, flash, audio, and input timing [P1]"
   },
@@ -5026,7 +5027,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "all dimensions median ≥3.5, would-play-again ≥3.5, and no critical first-run failure",
+   "done_when": "all dimensions median \u22653.5, would-play-again \u22653.5, and no critical first-run failure",
    "estimate": "3d",
    "task": "Run final five-player 30-minute FUN-GATE plus 10-minute first-impression wow test [P1][P2][P3]"
   },
@@ -5041,7 +5042,7 @@
    ],
    "attempts": 0,
    "context_pack": null,
-   "done_when": "all EVALS pass, two-machine hashes match, 400-unit p95 ≤8 ms, 10,000-game report accepted, fun gate passes, deletion quota=3",
+   "done_when": "all EVALS pass, two-machine hashes match, 400-unit p95 \u22648 ms, 10,000-game report accepted, fun gate passes, deletion quota=3",
    "estimate": "2d",
    "task": "Gate and release the vertical slice [P1][P2][P3]"
   }

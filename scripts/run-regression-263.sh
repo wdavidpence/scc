@@ -15,6 +15,9 @@ done
 # P0.018 seeded routing (pure Node, oracle-checked)
 out=$(node scripts/verify-routing-seeded.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "fail=0"; then echo "OK   routing-seeded :: $out"; else echo "FAIL routing-seeded :: $out"; FAIL=1; fi
+# P1.027-i3 command-queue live wiring (browser, manual-clock harness)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cmd-live.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "PASS 8/8"; then echo "OK   cmd-live :: $out"; else echo "FAIL cmd-live :: $out"; FAIL=1; fi
 # P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-tick-parity.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo "FAIL tick-parity :: $out"; FAIL=1; fi
