@@ -51,3 +51,8 @@
 - Ring: BattleScene fixed-tick loop records hashState(exportSimState()) per finished tick, 1200 deep, opt-in via __collectHashes (default off).
 - orderToCanonical: no more live-object leakage into canonical stream (attackTarget.target cycle -> stack overflow, found by mutation test); refs become #id, waypoint arrays become Q8 pairs.
 - Gate scripts/verify-hash-ring.cjs 7/7 (Node canonical checks + dual-granularity live ring identity + mutation-at-500 firstDiff=500). Suite 26/26 GREEN.
+
+## P1.037 — first-divergent-tick desync report (2026-09-23)
+- src2/engine/desyncReport.js: ring scan -> first divergent tick, then leaf-level field diff (dotted paths, cap 64, truncation flag).
+- verify-desync-report.cjs 9/9 headless: tick-500 pos/hp/rng mutations each report tick 500 + exact field; control + insertion-order twins clean; 78ms.
+- Suite 27/27 GREEN (gate runs in kernel loop).

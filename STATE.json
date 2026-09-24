@@ -616,7 +616,7 @@
   },
   {
    "id": "P1.037",
-   "status": "blocked",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -627,7 +627,8 @@
    "context_pack": null,
    "done_when": "injected mutation at tick 500 reports tick 500 and exact divergent field",
    "estimate": "1d",
-   "task": "Add first-divergent-tick desync report with field-level diff [P3]"
+   "task": "Add first-divergent-tick desync report with field-level diff [P3]",
+   "note": "desyncReport.js + verify-desync-report 9/9; mutation-at-500 reports tick 500 + field paths."
   },
   {
    "id": "P1.038",
