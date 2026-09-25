@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/.."
 FAIL=0
 # Phase-1 kernel gates (pure Node, no browser)
-for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report; do
+for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report verify-replay-runner verify-worker-flow; do
   out=$(node scripts/$g.cjs 2>&1 | tail -1)
   if echo "$out" | grep -q "PASS"; then echo "OK   $g :: $out"; else echo "FAIL $g :: $out"; FAIL=1; fi
 done
@@ -25,5 +25,8 @@ if echo "$out" | grep -q "HASH-RING PASS"; then echo "OK   hash-ring :: $out"; e
 # P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-tick-parity.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo "FAIL tick-parity :: $out"; FAIL=1; fi
+# P1.039 player-economy chain (browser, ~3 min: deploy + train + 100 s hands-off mining)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-economy-live.cjs 2>&1 | tail -3)
+if echo "$out" | grep -q "ACCEPTANCE PASS"; then echo "OK   economy-live :: chain hands-off"; else echo "FAIL economy-live :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"
 exit $FAIL

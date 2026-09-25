@@ -267,13 +267,24 @@ export class Unit {
       // SC1 crowd feel: local separation even on individual paths (ground units only)
       if (!this.flying && this.world.separationVector) {
         const sep = this.world.separationVector(this);
-        mx += sep.x * step * 1.1; my += sep.y * step * 1.1;
+        // P0.39: cap separation so crowding can never overpower forward drive
+        // (uncapped push cancelled pathing -> pairs froze mid-field, the worker jam)
+        const sm2 = Math.hypot(sep.x, sep.y);
+        const kk = sm2 > 0.75 ? 0.75 / sm2 : 1;
+        mx += sep.x * kk * step * 1.1; my += sep.y * kk * step * 1.1;
       }
       // SC1 cliffs: ground units may enter high ground only via ramps (or while already on it)
       if (!this.flying && this.world.groundBlocked && this.world.groundBlocked(this, mx, my)) {
-        if (!this.world.groundBlocked(this, mx, this.y)) { mx = mx; }
-        else if (!this.world.groundBlocked(this, this.x, my)) { mx = this.x; }
-        else { mx = this.x; my = this.y; this.repathTimer = Math.min(this.repathTimer, 0.25); }
+        // wall dead-stop: slide ALONG the wall instead of freezing (deterministic side by id parity)
+        const sgn = (this.id & 1) ? 1 : -1;
+        const txN = -(dy / d) * sgn, tyN = (dx / d) * sgn;
+        let sx1 = this.x + txN * step, sy1 = this.y + tyN * step;
+        let slid = false;
+        if (!this.world.groundBlocked(this, sx1, sy1) && !this.world.groundBlocked(this, this.x + txN * step * 2, this.y + tyN * step * 2)) { mx = sx1; my = sy1; slid = true; }
+        else { sx1 = this.x - txN * step; sy1 = this.y - tyN * step;
+          if (!this.world.groundBlocked(this, sx1, sy1) && !this.world.groundBlocked(this, this.x - txN * step * 2, this.y - tyN * step * 2)) { mx = sx1; my = sy1; slid = true; } }
+        if (!slid) { mx = this.x; my = this.y; }
+        this.repathTimer = Math.min(this.repathTimer, 0.25);
       }
       this.setPos(mx, my);
       this.face(dx, dy);
@@ -681,16 +692,40 @@ export class Unit {
   }
 
   updateHarvest(dt) {
-    if (this.cargo >= 8) { this.setOrder({ type: 'returnCargo' }); return; }
+    if (this.cargo >= 8) { this._harvestStuck = 0; this.setOrder({ type: 'returnCargo' }); return; }
+    if (this.harvestTarget && (this.harvestTarget.amount <= 0
+      || Math.hypot(this.harvestTarget.x - this.x, this.harvestTarget.y - this.y) > 60 * TILE)) {
+      this.harvestTarget = null; this._mining = false; // depleted or drifted far: re-pick (spreads crowds)
+    }
     if (!this.harvestTarget) {
-      this.harvestTarget = this.world.pickMineralForWorker(this);
-      if (!this.harvestTarget) { this.state = 'idle'; return; }
+      this.harvestTarget = this.world.pickMineralForWorker(this, this._avoidM);
+      if (!this.harvestTarget) { this.state = 'idle'; this.order = null; return; }
+      this._harvestStuck = 0;
       this.needsPath = true;
       this.repath(this.harvestTarget.x, this.harvestTarget.y);
     }
     const t = this.harvestTarget;
     const d = Math.hypot(t.x - this.x, t.y - this.y);
-    if (d > TILE * 1.1) {
+    // P0.39 mine-ring hysteresis: keep mining while crowd push stays within +3px
+    if (d <= TILE * 1.1) { this._mining = true; if (this._avoidM) this._avoidM.length = 0; }
+    else if (d > TILE * 1.1 + 3) this._mining = false;
+    if (d > (this._mining ? TILE * 1.1 + 3 : TILE * 1.1)) {
+      // P0.39 anti-jam breaker: 10 s chasing an unreachable/crowded patch -> drop
+      // the target and re-pick a quieter one. Workers could oscillate here forever.
+      this._harvestStuck = (this._harvestStuck || 0) + 1;
+      if (this._harvestStuck > 240) {
+        this._harvestStuck = 0; this._mining = false;
+        // rotating per-worker blacklist: after repeated failures this patch is
+        // skipped once (oldest entry rotates out), so a genuinely unreachable
+        // crystal can never pin the whole workforce forever.
+        this._avoidM = this._avoidM || [];
+        if (this._avoidM.length >= 3) this._avoidM.shift();
+        if (!this._avoidM.includes(t)) this._avoidM.push(t);
+        this.harvestTarget = this.world.pickMineralForWorker(this, this._avoidM);
+        if (this.harvestTarget && this.harvestTarget !== t) { this.needsPath = true; this.repath(this.harvestTarget.x, this.harvestTarget.y); }
+        else this.harvestTarget = null;
+        return;
+      }
       if (this.pathIndex >= this.path.length) { this.repath(t.x, t.y); }
       this.stepAlongPath(dt);
       return;
@@ -720,13 +755,39 @@ export class Unit {
 
   updateReturnCargo(dt) {
     const drop = this.world.nearestDropOff(this);
-    if (!drop) { this.state = 'idle'; return; }
+    if (!drop) {
+      // no refinery: dump at the rally/nearest rally-eligible spot is handled by
+      // re-pick below; go find a new patch instead of freezing with cargo forever
+      this.cargo = 0; this.cargoGas = false;
+      this.setOrder({ type: 'harvest' });
+      return;
+    }
     const d = Math.hypot(drop.x - this.x, drop.y - this.y);
-    if (d > TILE * 2.4) {
+    // P0.39: dock range accounts for the refinery's own footprint + unit radius —
+    // previously workers pinned at the blocked footprint edge could never reach
+    // the 38px circle and starved holding full cargo.
+    const dockR = TILE * 2.4 + (drop.radius || 0) + this.radius;
+    if (d > dockR) {
+      // P0.39 anti-jam breaker: 12 s of NOT MOVING while loaded and outside dock
+      // range -> unload on the spot and re-join the chain. (Crowds + separation
+      // used to pin loaded workers permanently near the drop-off.) Walking a
+      // detour never counts as stalled, so long paths don't trigger this.
+      const movedSq = (this.x - (this._rx || 0)) ** 2 + (this.y - (this._ry || 0)) ** 2;
+      this._rx = this.x; this._ry = this.y;
+      if (movedSq < 0.0025) {
+        this._retreatT = (this._retreatT || 0) + 1;
+        if (this._retreatT > 288) {
+          this.world.onCargoDeposited(this);
+          this.cargo = 0; this.cargoGas = false; this._retreatT = 0;
+          this.setOrder({ type: 'harvest' });
+          return;
+        }
+      } else this._retreatT = 0;
       if (this.pathIndex >= this.path.length || this.needsPath) { this.needsPath = false; this.repath(drop.x, drop.y + TILE); }
       this.stepAlongPath(dt);
       return;
     }
+    this._retreatT = 0;
     this.world.onCargoDeposited(this);
     this.cargo = 0;
     const wasGas = this.cargoGas;
@@ -1020,6 +1081,9 @@ export class Building {
     this.dead = false;
     this.attackTimer = 0;
     this.container = world.add.container(x, y);
+    // P0.39: buildings own a collision radius so workers can dock (unload)
+    // at the footprint edge instead of needing unreachable center-distance.
+    this.radius = (Math.max(this.def.w, this.def.h) * TILE) / 2.4;
     const texKey = this.textureKey();
     // pseudo-3D: wide soft contact shadow under the footprint
     if (world.textures.exists('shadow-l') && this.def.w > 0) {

@@ -15,6 +15,19 @@ export class NavGrid {
 
   idx(tx, ty) { return ty * this.w + tx; }
 
+  // P0.39: elevation transition check. Cliff wall = high (elev) or low ground;
+  // a step is illegal only when it crosses directly between the two classes.
+  // Ramp tiles (ramp=1) connect both and are always passable. Mirrors
+  // BattleScene.groundBlocked so A* never plans paths the walker then refuses.
+  elevBlockedPair(tx0, ty0, tx1, ty1) {
+    if (!this.elev) return false;
+    const i0 = this.hIdx(tx0, ty0), i1 = this.hIdx(tx1, ty1);
+    const c0 = this.ramp[i0] ? 2 : (this.elev[i0] ? 1 : 0);
+    const c1 = this.ramp[i1] ? 2 : (this.elev[i1] ? 1 : 0);
+    if (c0 === 2 || c1 === 2) return false;
+    return (c0 === 1 && c1 === 0) || (c0 === 0 && c1 === 1);
+  }
+
   inBounds(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h; }
 
   blockRect(id, x0, y0, x1, y1) {
@@ -129,9 +142,13 @@ export class NavGrid {
         const nx = cx + dx, ny = cy + dy;
         if (!this.inBounds(nx, ny)) continue;
         if (!this.walkable(nx, ny, clearance, ignoreId)) continue;
+        // P0.39: elevation walls — never plan a step the walker must refuse
+        if (this.elev && this.elevBlockedPair(cx, cy, nx, ny)) continue;
         // no corner cutting
         if (dx !== 0 && dy !== 0) {
           if (!this.walkable(cx + dx, cy, clearance, ignoreId) || !this.walkable(cx, cy + dy, clearance, ignoreId)) continue;
+          if (this.elev && (this.elevBlockedPair(cx, cy, cx + dx, cy) || this.elevBlockedPair(cx + dx, cy, nx, ny)
+            || this.elevBlockedPair(cx, cy, cx, cy + dy) || this.elevBlockedPair(cx, cy + dy, nx, ny))) continue;
         }
         const nIdx = this.hIdx(nx, ny);
         const ng = cg + cost;
@@ -166,10 +183,19 @@ export class NavGrid {
     const ts = this.tileSize;
     const dist = Math.hypot(x1 - x0, y1 - y0);
     const steps = Math.max(1, Math.ceil(dist / (ts * 0.5)));
+    let prevX = Math.floor(x0 / ts), prevY = Math.floor(y0 / ts);
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
       const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
-      if (!this.walkable(Math.floor(x / ts), Math.floor(y / ts), clearance, ignoreId)) return false;
+      const cx = Math.floor(x / ts), cy = Math.floor(y / ts);
+      if (!this.walkable(cx, cy, clearance, ignoreId)) return false;
+      // P0.39: a shortcut may not cross a cliff wall (class change without a ramp)
+      if (this.elev && (cx !== prevX || cy !== prevY)) {
+        if (this.elevBlockedPair(prevX, prevY, cx, cy)) return false;
+        // multi-tile steps (fast sampling): check the L-shaped bridges too
+        if (this.elevBlockedPair(prevX, cy, cx, cy) || this.elevBlockedPair(cx, prevY, cx, cy)) return false;
+        prevX = cx; prevY = cy;
+      }
     }
     return true;
   }

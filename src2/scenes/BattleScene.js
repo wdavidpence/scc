@@ -291,6 +291,11 @@ export class BattleScene extends Phaser.Scene {
     } catch (e) { console.warn('keycut fallback', String(e)); }
     this.buildTerrain();
     this.nav = new NavGrid(MAP_W, MAP_H, TILE);
+    // P0.39: elevation-aware pathfinding — cliff walls are impassable to A*,
+    // so ground units (esp. the worker chain) route through ramps instead of
+    // walking face-first into scarp edges and jamming.
+    this.nav.elev = this.elev;
+    this.nav.ramp = this.ramp;
     this.flows.nav = this.nav;
     this.buildMountains(); // v2.45: impassable ridges + carved chokepoints before anything is placed
     this.placeResources(); // v2.45: minerals/geysers/crates on free ground after mountains exist
@@ -2703,12 +2708,29 @@ export class BattleScene extends Phaser.Scene {
     return best;
   }
 
-  pickMineralForWorker(u) {
+  pickMineralForWorker(u, avoid) {
     if (u.gasTarget && u.gasTarget.gas > 0 && u.team === 1) return null; // handled separately
     // enemy AI gas assignment
     const gey = this.geysers.find(g => g.workers.includes(u));
     if (gey) { u.gasActive = true; return null; }
-    return this.nearestMineralPatch(u, 40 * TILE);
+    // P0.39: load-aware pick (see entity updateHarvest for the anti-jam pair).
+    // `avoid` is the worker's rotating blacklist of repeatedly-unreachable
+    // crystals; if every candidate is blacklisted we ignore it (better a
+    // retry than idling forever next to unmined minerals).
+    let best = null, bs = Infinity, fb = null, fbs = Infinity;
+    const load = new Map();
+    for (const w of this.units) {
+      if (!w.dead && w !== u && w.harvestTarget) load.set(w.harvestTarget, (load.get(w.harvestTarget) || 0) + 1);
+    }
+    for (const m of this.minerals) {
+      if (m.amount <= 0) continue;
+      const d = Math.hypot(m.x - u.x, m.y - u.y);
+      if (d > 40 * TILE) continue;
+      const s = d + (load.get(m) || 0) * 28;
+      if (avoid && avoid.includes(m)) { if (s < fbs) { fbs = s; fb = m; } continue; }
+      if (s < bs) { bs = s; best = m; }
+    }
+    return best || fb;
   }
 
   nearestMineralPatch(u, maxD) {
@@ -4297,6 +4319,13 @@ export class BattleScene extends Phaser.Scene {
     // spatial hash rebuild (separation + neighbor queries)
     this.spatial.clear();
     for (const u of this.units) if (!u.dead && !u.flying) this.spatial.insert(u);
+
+    // P0.39 player auto-economy: every idle player worker re-claims a harvest
+    // order within 2 s of going idle (was: AI-only). Newly trained riggers no
+    // longer stand around; chain breakers that null the order self-recover.
+    if (this.autoMine && !this.gameOver && (this.gameTime % 2) < dt) {
+      for (const u of this.units) if (!u.dead && u.team === 0 && u.def.worker && !u.order) u.setOrder({ type: 'harvest' });
+    }
 
     // SC1: warn the player when an enemy spy first penetrates toward their base
     if (!this._scoutWarned && (this.gameTime % 2) < dt) {
