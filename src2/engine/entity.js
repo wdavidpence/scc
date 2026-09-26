@@ -1087,9 +1087,12 @@ export class Building {
     const texKey = this.textureKey();
     // pseudo-3D: wide soft contact shadow under the footprint
     if (world.textures.exists('shadow-l') && this.def.w > 0) {
-      this.shadow = world.add.image(3, (this.def.h * TILE) / 2 - 4, 'shadow-l');
-      this.shadow.setScale(Math.max(1, (this.def.w * TILE) / 34), Math.max(1, (this.def.h * TILE) / 14));
-      this.shadow.setAlpha(0.5);
+      // v2.69.1: anchor buildings harder — shadow offset SE (light from NW),
+      // slightly wider, denser. Reads as grounded 3D at zoom-out instead of
+      // a flat decal floating on the terrain.
+      this.shadow = world.add.image(6, (this.def.h * TILE) / 2 - 2, 'shadow-l');
+      this.shadow.setScale(Math.max(1, (this.def.w * TILE) / 30), Math.max(1, (this.def.h * TILE) / 13));
+      this.shadow.setAlpha(0.68);
       this.container.add(this.shadow);
     }
     this.sprite = world.add.image(0, 0, texKey);

@@ -5048,5 +5048,15 @@
    "estimate": "2d",
    "task": "Gate and release the vertical slice [P1][P2][P3]"
   }
- ]
+ ],
+ "active_release": {
+  "tag": "v2.69.1",
+  "date": "2026-09-25",
+  "summary": "worker chain un-jam + elevation nav + fractional-ridge root-cause fix (573 __MISSING green boxes -> 0) + soft scarps + stronger building shadows; suite 30/30",
+  "new_gates": [
+   "verify-worker-flow (6/6)",
+   "verify-economy-live (live acceptance)",
+   "suite total 30"
+  ]
+ }
 }

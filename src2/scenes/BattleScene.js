@@ -1213,14 +1213,16 @@ export class BattleScene extends Phaser.Scene {
           // v2.59: dithered scarp edges instead of flat fill blocks — highland blends into lowland
           if (hiPat) { gx.save(); gx.fillStyle = hiPat; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE); gx.restore(); }
           gx.fillStyle = 'rgba(210,225,245,0.06)'; gx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
-          const edge = (dy, up) => { // dither the boundary rows: alpha fades outward over 2 tiles
+          const edge = (dy, up) => { // v2.69.1: soft continuous scarp bands (the old mod-4 dash pattern read as green wireframe debug at zoom-out)
             const nb = this.elev[(ty + dy) * MAP_W + tx];
             if (nb) return;
-            for (let k = 0; k < 2; k++) {
-              const a = up ? (k === 0 ? 0.30 : 0.12) : (k === 0 ? 0.10 : 0.04);
-              gx.fillStyle = up ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * 0.6})`;
-              const yy = dy < 0 ? ty * TILE + k * 4 - (k ? 0 : 0) : (ty + 1) * TILE - 4 + k * 4;
-              for (let dx2 = 0; dx2 < TILE; dx2 += 2) if ((dx2 + ty * 3 + k) % 4 < (k === 0 ? 4 : 2)) gx.fillRect(tx * TILE + dx2, yy, 2, 4);
+            if (up) {
+              gx.fillStyle = 'rgba(6,8,12,0.24)'; gx.fillRect(tx * TILE, ty * TILE, TILE, 7);
+              gx.fillStyle = 'rgba(6,8,12,0.12)'; gx.fillRect(tx * TILE, ty * TILE + 7, TILE, 4);
+            } else {
+              gx.fillStyle = 'rgba(222,234,250,0.09)'; gx.fillRect(tx * TILE, ty * TILE + TILE - 10, TILE, 3);
+              gx.fillStyle = 'rgba(8,10,14,0.16)'; gx.fillRect(tx * TILE, ty * TILE + TILE - 7, TILE, 5);
+              gx.fillStyle = 'rgba(8,10,14,0.08)'; gx.fillRect(tx * TILE, ty * TILE + TILE - 2, TILE, 2);
             }
           };
           edge(-1, true); edge(1, false);
@@ -1366,7 +1368,7 @@ export class BattleScene extends Phaser.Scene {
       for (const fy of side ? [0.30, 0.72] : [0.22, 0.64]) {
         const finger = [];
         const lanes = side ? [0.55, 0.85] : [0.12, 0.42];
-        for (let tx = side ? MAP_W * 0.58 : MAP_W * 0.08; tx < (side ? MAP_W - 6 : MAP_W * 0.46); tx++) {
+        for (let tx = Math.round(side ? MAP_W * 0.58 : MAP_W * 0.08); tx < (side ? MAP_W - 6 : MAP_W * 0.46); tx++) {
           const ty = Math.round(MAP_H * fy + Math.sin(tx * 0.11 + fy * 9) * 5);
           if (lanes.some(L => tx > MAP_W * L - 4 && tx < MAP_W * L + 4)) continue; // carved lane
           for (let h = -1; h <= 1; h++) finger.push([tx, ty + h]);

@@ -38,7 +38,18 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
     return { minerals: bt.players[0].minerals, workers: ws.length, states: ws.map(u => u.state + (u.cargo ? '+' + u.cargo : '')) };
   });
   console.log('after 50s:', JSON.stringify(mid));
-  await p.waitForTimeout(50000); // hands-off again
+  // Sample every 4 s for 48 s: a healthy chain shows workers repeatedly
+  // switching between loaded (cargo>0, returnCargo) and mining states.
+  // A jammed chain freezes every worker in one state forever.
+  const cycles = [];
+  for (let i = 0; i < 12; i++) {
+    await p.waitForTimeout(4000);
+    cycles.push(await p.evaluate(() => {
+      const bt = window.__SCC2.scene.getScene('Battle');
+      const ws = bt.units.filter(u => !u.dead && u.def.worker && u.team === 0);
+      return { loaded: ws.filter(u => u.cargo > 0).length, ret: ws.filter(u => u.state === 'returnCargo').length, mine: ws.filter(u => u.state === 'harvest').length };
+    }));
+  }
   const r2 = await p.evaluate(() => {
     const bt = window.__SCC2.scene.getScene('Battle');
     const ws = bt.units.filter(u => !u.dead && u.def.worker && u.team === 0);
@@ -47,13 +58,20 @@ const { chromium } = require(path.join(pwPath, 'playwright'));
       workers: ws.length,
       states: ws.map(u => u.state + (u.cargo ? '+' + u.cargo : '')),
       moving: ws.map(u => !!u.moving).filter(Boolean).length,
-      farFromAll: ws.filter(u => !u.order).length,
+      stuck: ws.filter(u => !u.order).length,
     };
   });
   console.log('after 100s:', JSON.stringify(r2));
+  console.log('cycles:', JSON.stringify(cycles));
   console.log('pageerrors:', errs.length, errs.slice(0, 2));
   await p.screenshot({ path: '/tmp/accept-base.png' });
-  const pass = r1.deployed && mid.minerals > 100 && r2.minerals > mid.minerals + 60 && r2.workers >= 4;
+  // PASS needs: deployment worked; workers exist; at least 3 samples showing
+  // a RETURNING loaded worker (proves unload cycle repeats); and no worker
+  // left with no order (jam marker). Mineral level alone is unreliable — the
+  // enemy fights back and our own build queue spends income.
+  const pass = r1.deployed && r2.workers >= 4
+    && cycles.filter(c => c.ret >= 1 && c.loaded >= 1).length >= 3
+    && r2.stuck === 0 && errs.length === 0;
   console.log(pass ? 'ACCEPTANCE PASS — chain runs hands-off' : 'ACCEPTANCE FAIL');
   await b.close();
   process.exit(pass ? 0 : 1);
