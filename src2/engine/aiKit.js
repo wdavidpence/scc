@@ -5,7 +5,8 @@ import MANIFEST from '../data/ai-manifest.json';
 
 export function preloadAIKit(scene) {
   for (const k of MANIFEST.u) if (!scene.textures.exists('au-src-' + k)) scene.load.image('au-src-' + k, 'assets/ai/u/' + k + '.png');
-  for (const k of MANIFEST.b) { scene.load.image('ab-src-' + k, 'assets/ai/b/' + k + '.png'); }
+  // v2.69.2: building kit preload disabled (see applyAIKit BLD_AI) — saves 40 requests
+  for (const k of []) { scene.load.image('ab-src-' + k, 'assets/ai/b/' + k + '.png'); }
   for (const k of MANIFEST.fx) if (!scene.textures.exists('afx-src-' + k)) scene.load.image('afx-src-' + k, 'assets/ai/fx/' + k + '.png');
 }
 
@@ -162,7 +163,11 @@ export function applyAIKit(scene) {
       }
     }
   }
-  for (const k of MANIFEST.b) {
+  // v2.69.2: building repaint lane DISABLED — user verdict "buildings look flat
+  // and terrible". The AI kit flattened the art3d pseudo-3D studio (extruded
+  // facades/AO) into glow blobs at zoom-out. Units/FX keep their kit repaint.
+  const BLD_AI = false;
+  for (const k of (BLD_AI ? MANIFEST.b : [])) {
     const srcKey = 'ab-src-' + k;
     if (!scene.textures.exists(srcKey)) continue;
     // footprints baked at 64px/tile; world tiles are 16 -> display target = tiles*16

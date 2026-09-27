@@ -5050,13 +5050,12 @@
   }
  ],
  "active_release": {
-  "tag": "v2.69.1",
-  "date": "2026-09-25",
-  "summary": "worker chain un-jam + elevation nav + fractional-ridge root-cause fix (573 __MISSING green boxes -> 0) + soft scarps + stronger building shadows; suite 30/30",
+  "tag": "v2.69.2",
+  "date": "2026-09-27",
+  "summary": "building render lane: AI-kit flat glow-blob repaint disabled (BLD_AI=false) so procedural art3d pseudo-3D renders; building/unit glow tamed (bglow 0.38+drift-to-center stacking -> 0.13 fixed offsets; forge 0.34->0.16; geyser 0.55->0.22; crystal 0.32->0.10); 40 kit PNG requests saved",
   "new_gates": [
-   "verify-worker-flow (6/6)",
-   "verify-economy-live (live acceptance)",
-   "suite total 30"
-  ]
+   "verify-build-visual (5/5: no __MISSING, pseudo-3D tex, glow<=0.35, offset-stable, sprite-visible)"
+  ],
+  "suite": "31 gates"
  }
 }

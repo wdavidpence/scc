@@ -639,15 +639,15 @@ export class BattleScene extends Phaser.Scene {
     this._flashPool = [];
     // geyser cyan pulses — v2.41: brighter bloom (review: nothing in-frame exceeds lum ~99)
     for (const g of this.geysers) {
-      const glow = this.add.image(g.x, g.y - 4, 'glow-soft').setTint(0x4affc8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setScale(1.15);
+      const glow = this.add.image(g.x, g.y - 4, 'glow-soft').setTint(0x4affc8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.22).setScale(0.9);
       this.lightLayer.add(glow);
-      this._lights.push({ img: glow, base: 0.55, pulse: 0.2, phase: Math.random() * 6.28, sp: 1.4 });
+      this._lights.push({ img: glow, base: 0.22, pulse: 0.1, phase: Math.random() * 6.28, sp: 1.4 });
     }
     // mineral crystal shimmer — v2.41 brighter
     if (this.minerals) for (const m of this.minerals) {
-      const glow = this.add.image(m.x, m.y, 'glow').setTint(0x69a6ff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.32).setScale(0.9);
+      const glow = this.add.image(m.x, m.y, 'glow').setTint(0x69a6ff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.1).setScale(0.62);
       this.lightLayer.add(glow);
-      this._lights.push({ img: glow, base: 0.32, pulse: 0.1, phase: Math.random() * 6.28, sp: 2.2 });
+      this._lights.push({ img: glow, base: 0.1, pulse: 0.05, phase: Math.random() * 6.28, sp: 2.2 });
     }
     // v2.41 forge warmth — warm flicker pool, driven in updateLighting
     this._forgeLights = [];
@@ -661,12 +661,14 @@ export class BattleScene extends Phaser.Scene {
   addBuildingLights(b) {
     if (!this.lightLayer || !b || b.dead) return;
     const col = b.team === 0 ? 0x4ea1ff : b.team === 1 ? 0xff7b2e : 0xff4fa3;
-    const n = b.def.size === 'large' || (b.def.tiles && b.def.tiles >= 8) ? 3 : b.def.size === 'medium' ? 2 : 1;
+    const n = b.def.size === 'large' || (b.def.tiles && b.def.tiles >= 8) ? 2 : 1;
     b._bglows = [];
     for (let i = 0; i < n; i++) {
-      const dx = (Math.random() - 0.5) * 30, dy = (Math.random() - 0.5) * 20;
-      // v2.41: window glow pops on when built (was invisible alpha 0 post-build — review: no highlights)
-      const g = this.add.image(b.x + dx, b.y + dy, 'glow').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(b.built ? 0.38 : 0).setScale(0.6 + (b.built ? 0.25 : 0));
+      const dx = (Math.random() - 0.5) * 26, dy = (Math.random() - 0.5) * 18;
+      // v2.69.2: glow tamed — was 0.38 base + drift-to-center stacking, which
+      // ADD-blended whole building clusters into unreadable white-cyan blobs.
+      const g = this.add.image(b.x + dx, b.y + dy, 'glow').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setAlpha(b.built ? 0.13 : 0).setScale(b.built ? 0.42 : 0.32);
+      g._ox = dx; g._oy = dy;
       this.lightLayer.add(g);
       b._bglows.push(g);
     }
@@ -719,7 +721,7 @@ export class BattleScene extends Phaser.Scene {
     for (const l of this._lights) l.img.setAlpha(l.base + Math.sin(t * l.sp + l.phase) * l.pulse);
     // v2.41 forge flicker (warm key light on primaries once built)
     if (this._forgeLights) for (const f of this._forgeLights) {
-      const want = (f.b && f.b.built && !f.b.dead) ? 0.34 + Math.sin(t * 9 + f.ph) * 0.08 + Math.sin(t * 23 + f.ph * 2) * 0.05 : 0;
+      const want = (f.b && f.b.built && !f.b.dead) ? 0.16 + Math.sin(t * 9 + f.ph) * 0.05 + Math.sin(t * 23 + f.ph * 2) * 0.03 : 0;
       f.img.alpha += (want - f.img.alpha) * Math.min(1, dt * 3);
       f.img.x += (f.b.x - f.img.x) * Math.min(1, dt);
       f.img.y += (f.b.y - 8 - f.img.y) * Math.min(1, dt);
@@ -754,10 +756,13 @@ export class BattleScene extends Phaser.Scene {
     // building window glows fade in at night
     for (const b of this.buildings) {
       if (!b._bglows) continue;
-      const want = b.built && !b.dead ? 0.38 + night * 0.45 : 0;
+      const want = b.built && !b.dead ? 0.13 + night * 0.22 : 0;
       for (const g of b._bglows) {
         g.alpha += (want - g.alpha) * Math.min(1, dt * 2);
-        g.x += (b.x - g.x) * Math.min(1, dt); // follow if moved
+        // v2.69.2: follow building at FIXED offset (old code drifted every glow
+        // to building center where they stacked into one blown-out blob)
+        const tx = b.x + (g._ox || 0), ty = b.y + (g._oy || 0);
+        g.x += (tx - g.x) * Math.min(1, dt); g.y += (ty - g.y) * Math.min(1, dt);
       }
     }
   }
