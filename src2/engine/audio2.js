@@ -308,6 +308,10 @@ export class Audio2 {
     } catch (e) { return false; }
   }
 
+  // v2.69.3: some TTS voices (eSpeak-class) read punctuation as words — "Attack!"
+  // came out as "Attack exclamation point". Subtitles keep the punctuation;
+  // only the utterance is sanitized.
+  _vt(t) { return t.replace(/[!?…⚠⌬★☆✦'"“”]+/g, ' ').replace(/\s{2,}/g, ' ').trim(); }
   bark(text, pitch = 0.8, rate = 1.05) {
     // v2.27: voiced barks mirror as styled subtitle cards in the HUD
     if (this.scene && this.scene.events) this.scene.events.emit('hud:bark', text);
@@ -318,7 +322,7 @@ export class Audio2 {
       if (this._lastBark && now - this._lastBark < 1400) return;
       this._lastBark = now;
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
+      const u = new SpeechSynthesisUtterance(this._vt(text));
       const rp = this.racePitch || 0.8;
       u.pitch = pitch * rp; u.rate = rate; u.volume = 0.9;
       window.speechSynthesis.speak(u);
