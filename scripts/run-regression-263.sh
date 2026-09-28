@@ -31,5 +31,10 @@ if echo "$out" | grep -q "ACCEPTANCE PASS"; then echo "OK   economy-live :: chai
 # v2.69.2 building render gate (browser, ~40 s: no __MISSING, pseudo-3D tex, glow budget)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-build-visual.cjs 2>&1 | tail -3)
 if echo "$out" | grep -q "BUILD-VISUAL PASS"; then echo "OK   build-visual :: bld render"; else echo "FAIL build-visual :: $out"; FAIL=1; fi
+# v2.70 smokes: audio mixer (pause-panel + persistence) and R-replay debrief flow
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-audio-mixer.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q 'pageerrors: 0'; then echo "OK   audio-mixer :: pause panel"; else echo "FAIL audio-mixer :: $out"; FAIL=1; fi
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-replay.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q 'pageerrors: 0'; then echo "OK   replay-r :: debrief retry"; else echo "FAIL replay-r :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"
 exit $FAIL

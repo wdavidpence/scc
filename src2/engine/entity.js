@@ -529,12 +529,13 @@ export class Unit {
     if (!target || target.dead) {
       // acquire next
       const foe = this.world.acquireFor(this, this.def.range * TILE * 2);
-      if (foe) { this.target = foe; return; }
+      if (foe) { this.target = foe; this._chaseT = null; return; }
       if (this._patrolResume && this.def.patrol) { const pts = this._patrolResume; this._patrolResume = null; this.patrolPoints = pts; this.order = { type: 'patrol' }; this.state = 'patrol'; return; }
       if (this.state !== 'attackMove') { this.order = null; this.state = 'idle'; }
       return;
     }
     if (this.inWeaponRange(target)) {
+      this._chaseT = null; // back in range: anchor resets for any future chase
       // v2.34 L10: wind-up window (punishable, SC1 shot delay), then fire; 8-dir facing tracked
       this.face8(target.x - this.x, target.y - this.y);
       if (this._windupT > 0) {
@@ -547,6 +548,19 @@ export class Unit {
       }
     } else {
       if (this.sieged) { this.unsiege(); return; } // must unsiege to move
+      // v2.70 (#5): chase leash — a single bait unit must not drag the whole
+      // army across the map (the classic kited-into-explosion death spiral).
+      // Anchor = where the chase began; 9 tiles of pure chasing and the unit
+      // breaks off (attack-movers keep sweeping, focused targets go idle).
+      if (this._chaseT == null) { this._chaseT = 0; this._chaseAX = this.x; this._chaseAY = this.y; }
+      else {
+        this._chaseT += dt;
+        if (this._chaseT > 4 && Math.hypot(this.x - this._chaseAX, this.y - this._chaseAY) > 9 * TILE) {
+          this.target = null; this._chaseT = null;
+          if (this.state !== 'attackMove') { this.order = null; this.state = 'idle'; }
+          return;
+        }
+      }
       this.repathTimer -= dt;
       if (this.repathTimer <= 0 || this.path.length === 0 || this.pathIndex >= this.path.length) {
         this.repathTimer = 0.5;

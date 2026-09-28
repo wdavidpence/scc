@@ -5,6 +5,13 @@ export class Audio2 {
     this.scene = scene;
     this.ctx = null;
     this.enabled = true;
+    // v2.70 (#3): persisted mix levels + mute. 1.0 = as-designed.
+    try {
+      const s = JSON.parse(localStorage.getItem('scc.mix') || 'null');
+      this.mix = s && typeof s.sfx === 'number' ? s : null;
+    } catch (e) { this.mix = null; }
+    if (!this.mix) this.mix = { sfx: 1, music: 1, voice: 1, shake: 1, muted: false };
+    if (typeof this.mix.shake !== 'number') this.mix.shake = 1;
     // unlock/create on first input (headless-safe)
     scene.input.once('pointerdown', () => this.init());
     scene.input.keyboard.once('keydown', () => this.init());
@@ -13,10 +20,22 @@ export class Audio2 {
     if (this.ctx || !this.enabled) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) this.ctx = new AC();
+      if (AC) {
+        this.ctx = new AC();
+        this.sfxBus = this.ctx.createGain();
+        this.sfxBus.connect(this.ctx.destination);
+      }
       this.resume();
     } catch (e) { this.enabled = false; }
   }
+  _v(k) { return this.mix.muted ? 0 : (this.mix[k] ?? 1); }
+  applyMix() {
+    try { localStorage.setItem('scc.mix', JSON.stringify(this.mix)); } catch (e) { /* private mode */ }
+    if (this.sfxBus) { this.sfxBus.gain.value = this._v('sfx'); this.sfxBus.resume && this.sfxBus.resume(); }
+    if (this.musicBus) this.musicBus.gain.value = this._v('music') * (this.bossMode ? 0.11 : 0.09);
+  }
+  setBand(k, v) { this.mix[k] = Math.max(0, Math.min(1.5, v)); this.applyMix(); }
+  toggleMute() { this.mix.muted = !this.mix.muted; this.applyMix(); return this.mix.muted; }
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
   tone(freq, dur, type = 'square', vol = 0.05, slide = 0) {
     if (!this.enabled || !this.ctx) return;
@@ -27,7 +46,7 @@ export class Audio2 {
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(this.ctx.destination);
+    o.connect(g); g.connect(this.sfxBus || this.ctx.destination);
     o.start(t); o.stop(t + dur + 0.02);
   }
   noise(dur, vol = 0.08, lp = 800) {
@@ -40,7 +59,7 @@ export class Audio2 {
     const src = this.ctx.createBufferSource(); src.buffer = buf;
     const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp;
     const g = this.ctx.createGain(); g.gain.value = vol;
-    src.connect(f); f.connect(g); g.connect(this.ctx.destination);
+    src.connect(f); f.connect(g); g.connect(this.sfxBus || this.ctx.destination);
     src.start(t);
   }
   select() { this.tone(720, 0.07, 'square', 0.03); }
@@ -99,10 +118,10 @@ export class Audio2 {
     // master + per-layer buses with gentle master compression illusion
     this.musicBus = this.ctx.createGain();
     this.musicBus.gain.setValueAtTime(0.0001, t);
-    this.musicBus.gain.linearRampToValueAtTime(0.09, t + 3);
+    this.musicBus.gain.linearRampToValueAtTime(0.09 * this._v('music'), t + 3);
     const comp = this.ctx.createDynamicsCompressor ? this.ctx.createDynamicsCompressor() : null;
-    if (comp) { comp.threshold.value = -18; comp.ratio.value = 4; this.musicBus.connect(comp); comp.connect(this.ctx.destination); }
-    else this.musicBus.connect(this.ctx.destination);
+    if (comp) { comp.threshold.value = -18; comp.ratio.value = 4; this.musicBus.connect(comp); comp.connect(this.sfxBus || this.ctx.destination); }
+    else this.musicBus.connect(this.sfxBus || this.ctx.destination);
     this.layerBuses = {};
     for (const L of ['perc', 'pad', 'lead']) {
       const g = this.ctx.createGain();
@@ -225,7 +244,7 @@ export class Audio2 {
       g.gain.setValueAtTime(0.0001, t + k * 0.16);
       g.gain.exponentialRampToValueAtTime(0.16, t + k * 0.16 + 0.03);
       g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + (k >= 5 ? 1.4 : 0.4));
-      o.connect(g); g.connect(this.ctx.destination); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 1.6);
+      o.connect(g); g.connect(this.sfxBus || this.ctx.destination); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 1.6);
       const o2 = this.ctx.createOscillator(); const g2 = this.ctx.createGain();
       o2.type = 'sine'; o2.frequency.setValueAtTime(f * 2, t + k * 0.16);
       g2.gain.setValueAtTime(0.0001, t + k * 0.16); g2.gain.exponentialRampToValueAtTime(0.07, t + k * 0.16 + 0.03); g2.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.5);
@@ -300,7 +319,7 @@ export class Audio2 {
       const el = pooled || new Audio();
       if (!pooled) { el.preload = 'auto'; el.src = url; }
       else { try { el.currentTime = 0; } catch (e) {} }
-      el.volume = vol;
+      el.volume = Math.min(1, vol * this._v('voice'));
       el.playbackRate = Math.max(0.7, Math.min(1.5, pitch));
       const p = el.play(); if (p && p.catch) p.catch(() => {});
       this._lastBark = now;
@@ -330,10 +349,10 @@ export class Audio2 {
       const qb = (this._bq || []).filter(q => q.ttl > now && q.t !== text);
       this._lastBark = now;
       window.speechSynthesis.cancel();
-      if (qb.length) { for (const q of qb) { const q2 = new SpeechSynthesisUtterance(this._vt(q.t)); q2.pitch = (q.pitch || 0.8) * (this.racePitch || 0.8); q2.rate = q.rate || 1.05; q2.volume = 0.9; window.speechSynthesis.speak(q2); } this._bq = []; }
+      if (qb.length) { for (const q of qb) { const q2 = new SpeechSynthesisUtterance(this._vt(q.t)); q2.pitch = (q.pitch || 0.8) * (this.racePitch || 0.8); q2.rate = q.rate || 1.05; q2.volume = Math.min(1, 0.9 * this._v('voice')); window.speechSynthesis.speak(q2); } this._bq = []; }
       const u = new SpeechSynthesisUtterance(this._vt(text));
       const rp = this.racePitch || 0.8;
-      u.pitch = pitch * rp; u.rate = rate; u.volume = 0.9;
+      u.pitch = pitch * rp; u.rate = rate; u.volume = Math.min(1, 0.9 * this._v('voice'));
       window.speechSynthesis.speak(u);
     } catch (e) { /* silent */ }
   }

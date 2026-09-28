@@ -414,6 +414,11 @@ export class HudScene extends Phaser.Scene {
     // can't re-queue start('Title') onto the live instance (double-create crash).
     this.input.on('pointerdown', () => {
       if (!this.gameOver || this._goReturning) return;
+      // R = replay this mission (BattleScene keydown-R owns it). Read the
+      // battle-tracked R key state — Phaser.Keyboard.KeyCodes is not reliably
+      // available in this scope (broke verify-v262-go-panel on first try).
+      const bt = this.scene.get('Battle');
+      if (bt && bt.keys && bt.keys.R && bt.keys.R.isDown) return;
       this._goReturning = true;
       this.gameOver = null;
       this.scene.stop('Battle'); this.scene.stop('Hud'); this.scene.start('Title');
@@ -969,10 +974,55 @@ export class HudScene extends Phaser.Scene {
     if (on) {
       this.pauseText.setText('  PAUSED  ·  issue orders, SPACE to resume  ');
       this.pauseText.setVisible(true);
+      this.buildAudioPanel(true);
       if (this._pauseTwn) this._pauseTwn.stop();
       this._pauseTwn = this.tweens.add({ targets: this.pauseText, alpha: { from: 1, to: 0.55 }, duration: 700, yoyo: true, repeat: -1 });
     } else {
       this.pauseText.setVisible(false);
+      if (this._audPanel) this._audPanel.setVisible(false);
+    }
+  }
+
+  // v2.70 (#3): pause-menu audio mixer — click a bar to set SFX/MUSIC/VOICE;
+  // comma = mute all; values persist (localStorage scc.mix via Audio2).
+  buildAudioPanel(show) {
+    const battle = this.scene.get('Battle');
+    const A = battle && battle.audio;
+    if (!A || !A.mix) return;
+    if (!this._audPanel) {
+      const px = this.W / 2 - 110, py = this.H * 0.245 + 26;
+      this._audPanel = this.add.container(px, py).setScrollFactor(0).setDepth(31).setVisible(false);
+      const rows = [['sfx', 'SFX '], ['music', 'MUSIC'], ['voice', 'VOICE'], ['shake', 'SHAKE']];
+      this._audRows = [];
+      rows.forEach(([k, label], i) => {
+        const y = i * 26;
+        const bg = this.add.rectangle(0, y, 200, 16, 0x050a14, 0.9).setStrokeStyle(1, 0x2c4a66);
+        const fill = this.add.rectangle(-100, y, 100, 10, 0x2c80c8, 0.9);
+        const cap = this.add.text(-100, y - 5, label + ' ', { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#9fc8e8' });
+        const hit = this.add.rectangle(0, y, 200, 20, 0xffffff, 0.001).setInteractive();
+        hit.on('pointerdown', (p) => {
+          const lx = p.x - (this._audPanel.x - 100);
+          const v = Phaser.Math.Clamp(lx / 200, 0, 1.5);
+          A.setBand(k, Math.round(v * 20) / 20);
+          this.refreshAudioPanel();
+        });
+        this._audPanel.add([bg, fill, cap, hit]);
+        this._audRows.push({ k, fill, cap });
+      });
+      this.add.text(px - 100, py - 34, 'AUDIO — click bars to set · , = mute · SPACE resume', { fontFamily: 'Menlo, monospace', fontSize: '9px', color: '#5f7f9f' }).setScrollFactor(0).setDepth(31);
+    }
+    this._audPanel.x = this.W / 2 - 110;
+    this.refreshAudioPanel();
+    this._audPanel.setVisible(show);
+  }
+  refreshAudioPanel() {
+    if (!this._audRows) return;
+    const battle = this.scene.get('Battle');
+    const A = battle && battle.audio; if (!A || !A.mix) return;
+    for (const r of this._audRows) {
+      const v = A.mix[r.k] ?? 1;
+      r.fill.width = Math.max(0.01, Math.min(1.5, v) / 1.5 * 200);
+      r.cap.setText(r.k.toUpperCase() + ' ' + Math.round(v * 100) + (A.mix.muted ? '% MUTED' : '%'));
     }
   }
 
@@ -990,7 +1040,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   showHelp() {
-    this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-8=select group  Shift/Ctrl+1-8=assign  wheel=zoom').setAlpha(1);
+    this.alert.setText('LMB drag=select  RMB=order  A=attack-move  ESC=cancel  1-8=select group  Shift/Ctrl+1-8=assign  wheel=zoom  ,=mute  SPACE=pause: audio+shake sliders').setAlpha(1);
     this.tweens.add({ targets: this.alert, alpha: 0, delay: 3200, duration: 400 });
   }
 
@@ -1068,6 +1118,10 @@ export class HudScene extends Phaser.Scene {
       this.goStats.setText(`TIME ${((b.gameTime / 60) | 0)}:${String(b.gameTime % 60 | 0).padStart(2, '0')}   APM ${apm}   ARMY ${b.units.filter(u => !u.dead && u.team === 0).length}   KILLS ${kills}${reward ? `   +${reward} CR` : ''}`);
     }
     this._goLayout(r); // v2.62 single layout source
+    if (!this._goHint) {
+      this._goHint = this.add.text(this.W / 2, this.H / 2 + 56, '', { fontFamily: 'Menlo, monospace', fontSize: '10px', color: '#5f7f9f' }).setOrigin(0.5).setScrollFactor(0).setDepth(88);
+    }
+    this._goHint.setText('R = REPLAY MISSION · CLICK = CONTINUE').setVisible(true).setAlpha(0.9);
     if (this.goSub) {
       const dl = b.debriefLine || '';
       const go = this.goSub;

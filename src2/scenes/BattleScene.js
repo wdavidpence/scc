@@ -51,6 +51,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   init(data) {
+    this.__initData = { ...data }; // v2.70: RETRY (R on debrief) replays this mission
     this.race = data.race || 'terran';
     this.enemyRace = data.enemyRace || 'skarn';
     this.difficulty = data.difficulty || 'normal';
@@ -1032,7 +1033,11 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------------- camera shake (F6/F1) ----------------
   shake(mag, dur) {
-    this._shake.mag = Math.max(this._shake.mag, mag);
+    // v2.70 (#19): single choke point — camera shake amount (pause-menu bar,
+    // persisted in scc.mix; 0 = fully off for motion sensitivity)
+    const k = (this.audio && this.audio.mix && typeof this.audio.mix.shake === 'number') ? this.audio.mix.shake : 1;
+    if (k <= 0) return;
+    this._shake.mag = Math.max(this._shake.mag, mag * k);
     this._shake.t = Math.max(this._shake.t, dur);
   }
 
@@ -3080,6 +3085,13 @@ export class BattleScene extends Phaser.Scene {
       // AAA hot-seat: TAB passes controls to the other commander
       this.input.keyboard.on('keydown-TAB', (e) => { if (e.preventDefault) e.preventDefault(); this.switchActiveTeam(); });
     }
+    this.input.keyboard.on('keydown-COMMA', () => { const m = this.audio?.toggleMute?.(); if (m !== undefined) this.events.emit('hud:alert', m ? 'AUDIO MUTED — , TO UNMUTE' : 'AUDIO ON'); });
+    this.input.keyboard.on('keydown-R', () => {
+      if (!this.gameOver) return; // R stays battle-only during play
+      const hud = this.scene.get('Hud'); if (hud) hud._goReturning = true;
+      this.scene.stop('Hud'); this.scene.stop('Cut');
+      this.scene.restart(this.__initData);
+    });
     this.input.keyboard.on('keydown-M', () => this.summonRadiant(this.keys.SHIFT?.isDown ? 'umbral' : 'radiant'));
     this.input.keyboard.on('keydown-O', () => this.morphSelected('sporecaster'));
     this.input.keyboard.on('keydown-L', () => this.morphSelected('corroder'));
@@ -4240,6 +4252,12 @@ export class BattleScene extends Phaser.Scene {
     // hold-the-line objective countdown
     if (this._holdUntil != null && !this.gameOver) {
       const remain = Math.ceil(this._holdUntil - this.gameTime);
+      // v2.70 (#9): live countdown — the static "HOLD 240s" line gave no urgency read
+      const ho = this.objectives && this.objectives.find(o => o.id === 'hold');
+      if (ho && remain > 0 && remain % 5 === 0 && ho._lastT !== remain) {
+        ho._lastT = remain; ho.text = 'HOLD THE LINE ' + remain + 's';
+        this.events.emit('hud:objectives', this.objectives);
+      }
       if (remain <= 0 && !this._holdDone) {
         this._holdDone = true;
         const k = this.objectives.find(o => o.id === 'hold'); if (k) k.done = true;
