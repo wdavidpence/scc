@@ -305,7 +305,7 @@ export class Audio2 {
     }
   }
 
-  voPlay(action, pitch = 1.0, vol = 0.95, force = false, raceOver = null) {
+  voPlay(action, pitch = 1.0, vol = 0.95, force = false, raceOver = null, fixedIdx = 0) {
     const v = this.voSrc();
     if (!v || !v.ready) return false;
     const race = raceOver || this.race || 'terran';
@@ -314,7 +314,7 @@ export class Audio2 {
     const now = Date.now();
     if (!force && this._lastBark && now - this._lastBark < 700) return true; // rate-limit (already voiced)
     const k = `${race}_${action}`;
-    v.idx[k] = ((v.idx[k] ?? -1) + 1) % n;
+    v.idx[k] = fixedIdx ? (fixedIdx - 1) % n : ((v.idx[k] ?? -1) + 1) % n;
     const url = `${v.base}vo/${race}/${action}_${v.idx[k] + 1}.m4a`;
     try {
       const pooled = v.pools && v.pools[`${action}_${v.idx[k] + 1}`];
@@ -333,9 +333,10 @@ export class Audio2 {
   // came out as "Attack exclamation point". Subtitles keep the punctuation;
   // only the utterance is sanitized.
   _vt(t) { return t.replace(/[!?…⚠⌬★☆✦'"“”]+/g, ' ').replace(/\s{2,}/g, ' ').trim(); }
-  bark(text, pitch = 0.8, rate = 1.05) {
+  bark(text, pitch = 0.8, rate = 1.05, voiced = false) {
     // v2.27: voiced barks mirror as styled subtitle cards in the HUD
     if (this.scene && this.scene.events) this.scene.events.emit('hud:bark', text);
+    if (voiced) return; // v2.70: pack VO already carried the audio — caption only
     if (!('speechSynthesis' in window)) return;
     try {
       // rate-limit: never overlap; v2.70 batch1 (#2): if busy, QUEUE the line
@@ -409,14 +410,16 @@ export class Audio2 {
   buildingBark(buildId) {
     if (this._lastBarkSel && buildId === this._lastBarkSel.buildId && Date.now() - this._lastBarkSel.t < 4000) return;
     this._lastBarkSel = { buildId, t: Date.now() };
-    if (this.voPlay('bselect', 0.78, 0.98)) return; // v2.70: pack VO first
     const L = {
       terran: ['Systems online.', 'Structural. Functional.', 'Command post reporting.', 'Facility standing by.'],
       skarn: ['The hive pulsed.', 'It breathes.', 'Flesh binds stone.', 'Brood structure awake.'],
       auraxis: ['The spire listens.', 'Light held in lattice.', 'Sanctum answers.', 'Warp steady.']
     };
     const a = L[this.race] || L.terran;
-    this.bark(a[Math.floor(Math.random() * a.length)], 0.78, 0.98);
+    // v2.70: caption always shows; audio = matching pack file (bselect_<i+1>
+    // was recorded from these exact lines), TTS fallback when pack unavailable.
+    const i = Math.floor(Math.random() * a.length);
+    this.bark(a[i], 0.78, 0.98, this.voPlay('bselect', 0.78, 0.98, false, null, i + 1));
   }
   adminBark() { if (this.voPlay('admin', 1.0)) return; const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
   nukeBark() { if (this.voPlay('nuke', 0.6, 0.9)) return; this.bark('Nuclear launch detected.', 0.6, 0.9); }

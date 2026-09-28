@@ -522,6 +522,12 @@ export class BattleScene extends Phaser.Scene {
 
   showBriefingCard() {
     if (!this.mission) return;
+    // v2.70 (#13): briefing card persists boss scheduling + gameplay even when
+    // the player has seen this brief before (replay) or hits ESC — the card is
+    // pure presentation, the boss timer is sim truth.
+    const seen = (() => { try { return localStorage.getItem('scc.brief.' + this.mission.n) === '1'; } catch (e) { return false; } })();
+    if (this.mods.boss) scheduleMs(this.simTimers, this.simTickIndex, 1500, 'boss_spawn');
+    if (seen && !this.__manual) return;
     const cam = this.cameras.main;
     const W = this.scale.width, H = this.scale.height;
     const cont = this.add.container(W / 2, H / 2).setDepth(900).setScrollFactor(0).setAlpha(0);
@@ -532,10 +538,11 @@ export class BattleScene extends Phaser.Scene {
     const objLine = this.mods.cratesWin ? `RECLAIM ${this.mods.cratesWin} SUPPLY CRATES` : this.mods.convoy ? 'ESCORT THE CONVOY TO EXTRACTION' : this.mods.blitz ? 'DESTROY THE SHIELD CONDUIT AEGIS ⌬' : this.mods.holdTime ? `HOLD ${this.mods.holdTime}s` : this.mods.boss ? 'HUNT THE CHAMPION' : 'DESTROY THE ENEMY BASE';
     const obj = this.add.text(0, 56, objLine + '   ·   G = ULTIMATE', { fontFamily: 'Menlo, monospace', fontSize: '11px', color: '#6ee7a0' }).setOrigin(0.5);
     cont.add([bg, num, ttl, brf, obj]);
+    this.__briefCont = cont;
+    try { localStorage.setItem('scc.brief.' + this.mission.n, '1'); } catch (e) {}
     this.tweens.add({ targets: cont, alpha: 1, duration: 500, onComplete: () => {
-      this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => cont.destroy() });
+      this.tweens.add({ targets: cont, alpha: 0, delay: 2600, duration: 700, onComplete: () => { if (this.__briefCont === cont) this.__briefCont = null; cont.destroy(); } });
     } });
-    if (this.mods.boss) scheduleMs(this.simTimers, this.simTickIndex, 1500, 'boss_spawn');
   }
 
   // ---------------- P1.027-i3 command queue plumbing ----------------
@@ -596,10 +603,10 @@ export class BattleScene extends Phaser.Scene {
       const cx = g[0].x, cy = g[0].y;
       if (cx > vw.x && cx < vw.x + vw.width && cy > vw.y && cy < vw.y + vw.height) continue; // on screen already
       if (base && Math.hypot(cx - base.x, cy - base.y) > TILE * 40) continue; // too far to threaten
-      this.threats.push({ x: cx, y: cy, t: 5 });
+      this.threats.push({ x: cx, y: cy, t: 16 }); // v2.70: ~4 s of minimap blink (was ~1 s)
       this.audio?.underAttackBark();
       this.events.emit('hud:alert', 'INCOMING — ' + g.length + ' HOSTILES');
-      break;
+      if (this.threats.length >= 3) break; // v2.70: ping up to 3 threat clusters, not just the first
     }
     this.threats = this.threats.filter(t => (t.t -= 4) > 0);
   }
@@ -3041,7 +3048,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-U', () => {
       this.__cmd('unload', { sel: this.selIds(), point: this.pointerPos ? { x: this.pointerPos.x, y: this.pointerPos.y } : null, b: this.selectedBuilding?.id ?? -1 });
     });
-    this.input.keyboard.on('keydown-ESC', () => { if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.__briefCont) { this.__briefCont.destroy(true); this.__briefCont = null; return; } if (this.ultMode) { this.cancelUltimate(); return; } if (this.scanMode) { this.cancelScan(); return; } if (this.castMode) { this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost(); return; } if (this.patrolMode) { this.patrolMode = false; this._patrolAnchor = null; this.input.setDefaultCursor('default'); return; } this.cancelPlacing(); this.selectBuilding(null); this.audio?.deselect(); });
     this.input.keyboard.on('keydown-A', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.input.keyboard.on('keydown-Q', () => { this.attackMoveMode = false; this.input.setDefaultCursor('default'); });
     this.input.keyboard.on('keydown-G', () => { this.armUltimate(); });

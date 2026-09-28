@@ -36,5 +36,9 @@ out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-audio-mi
 if echo "$out" | grep -q 'pageerrors: 0'; then echo "OK   audio-mixer :: pause panel"; else echo "FAIL audio-mixer :: $out"; FAIL=1; fi
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-replay.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q 'pageerrors: 0'; then echo "OK   replay-r :: debrief retry"; else echo "FAIL replay-r :: $out"; FAIL=1; fi
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-brief-skip.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q 'BRIEF-SKIP PASS'; then echo "OK   brief-skip :: replay briefing skip"; else echo "FAIL brief-skip :: $out"; FAIL=1; fi
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-voice-pack.cjs 2>&1 | tail -2)
+if echo "$out" | grep -q 'non-200: NONE'; then echo "OK   voice-pack :: VO lanes"; else echo "FAIL voice-pack :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"
 exit $FAIL
