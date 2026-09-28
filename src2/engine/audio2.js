@@ -227,7 +227,9 @@ export class Audio2 {
   bossTheme(on) { // switch groove under boss fight
     if (this.bossMode === on || !this.ctx) return;
     this.bossMode = on;
-    this.bark(on ? 'Massive biosignature detected.' : 'Threat eliminated.', 0.55, 0.95);
+    // v2.70: real VO from pack first (deterministic file, not rotating pool)
+    const _bo = on ? this.voPlay('boss_on', 0.55, 0.95, true) : this.voPlay('boss_off', 0.55, 0.95, true);
+    if (!_bo) this.bark(on ? 'Massive biosignature detected.' : 'Threat eliminated.', 0.55, 0.95);
     if (on) { // descending minor stinger
       const t = this.ctx.currentTime;
       [0, 1, 6, 5].forEach((dg, k) => this.tone(this.freqAt(dg) * (k === 3 ? 0.5 : 1), 0.5, 'sawtooth', 0.05));
@@ -303,10 +305,10 @@ export class Audio2 {
     }
   }
 
-  voPlay(action, pitch = 1.0, vol = 0.95, force = false) {
+  voPlay(action, pitch = 1.0, vol = 0.95, force = false, raceOver = null) {
     const v = this.voSrc();
     if (!v || !v.ready) return false;
-    const race = this.race || 'terran';
+    const race = raceOver || this.race || 'terran';
     const n = (v.manifest[race] || {})[action];
     if (!n) return false;
     const now = Date.now();
@@ -407,6 +409,7 @@ export class Audio2 {
   buildingBark(buildId) {
     if (this._lastBarkSel && buildId === this._lastBarkSel.buildId && Date.now() - this._lastBarkSel.t < 4000) return;
     this._lastBarkSel = { buildId, t: Date.now() };
+    if (this.voPlay('bselect', 0.78, 0.98)) return; // v2.70: pack VO first
     const L = {
       terran: ['Systems online.', 'Structural. Functional.', 'Command post reporting.', 'Facility standing by.'],
       skarn: ['The hive pulsed.', 'It breathes.', 'Flesh binds stone.', 'Brood structure awake.'],
@@ -415,10 +418,10 @@ export class Audio2 {
     const a = L[this.race] || L.terran;
     this.bark(a[Math.floor(Math.random() * a.length)], 0.78, 0.98);
   }
-  adminBark() { const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
-  nukeBark() { this.bark('Nuclear launch detected.', 0.6, 0.9); }
+  adminBark() { if (this.voPlay('admin', 1.0)) return; const L = ['All workers are busy.', 'You must build more supply.', 'Cannot comply.']; this.bark(L[Math.floor(Math.random() * L.length)], 1.0); }
+  nukeBark() { if (this.voPlay('nuke', 0.6, 0.9)) return; this.bark('Nuclear launch detected.', 0.6, 0.9); }
   groupBark(n) { this.bark('Group ' + n, 0.95, 1.15); }
-  ultimateBark() { const L = { terran: ['Nuclear strike inbound.', 'Keystone lance, free!'], skarn: ['The swarm descends!', 'Surge!'], auraxis: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
+  ultimateBark() { if (this.voPlay('ultimate', 0.7)) return; const L = { terran: ['Nuclear strike inbound.', 'Keystone lance, free!'], skarn: ['The swarm descends!', 'Surge!'], auraxis: ['Psionic storm!', 'Storm them!'] }; const a = L[this.race] || L.terran; this.bark(a[Math.floor(Math.random() * a.length)], 0.7); }
 
   selectBark(unitKinds) {
     // v2.35 SC1-gap 63: escalating annoyed repeat-select. Re-selecting the

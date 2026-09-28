@@ -173,7 +173,11 @@ export class BattleScene extends Phaser.Scene {
     if (this.aiCommander && !this.hotseat) {
       this.time.delayedCall(2200, () => {
         this.events.emit('hud:radio', this.aiCommander.radio, this.aiCommander.name.toUpperCase());
-        this.audio.bark(this.aiCommander.radio, this.enemyRace === 'skarn' ? 0.55 : this.enemyRace === 'auraxis' ? 1.25 : 0.7, 1.0);
+        // v2.70: commander taunt voiced from the pack (enemy-race voice), TTS fallback kept
+        const _ri = this.aiCommander.tier === 'hard' ? 3 : this.aiCommander.tier === 'easy' ? 1 : 2;
+        const _rp = this.enemyRace === 'skarn' ? 0.55 : this.enemyRace === 'auraxis' ? 1.25 : 0.7;
+        if (!this.audio.voPlay('radio' + _ri, _rp, 1.0, true, this.enemyRace))
+          this.audio.bark(this.aiCommander.radio, _rp, 1.0);
       });
     }
     try { window.__SCC2.audio2 = this.audio; } catch (e) { /* noop */ }
