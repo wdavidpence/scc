@@ -1,3 +1,4 @@
+v2.70.0 SHIPPED fe3629b: improvements batch A (chase leash, audio mixer + mute + persisted sliders, shake OFF option, bark queue, live hold countdown, R-replay debrief). Suite 33/33.
 # BACKLOG
 
 Noticed work is recorded here and abandoned until promoted to an authorized PLAN bullet.
