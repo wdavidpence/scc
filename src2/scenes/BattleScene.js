@@ -4084,7 +4084,14 @@ export class BattleScene extends Phaser.Scene {
   // drain in update(). Keys are data (serializable), never closures.
   execSimTimer(e) {
     switch (e.key) {
-      case 'boss_spawn': this.spawnMissionBoss(); break;
+      // v2.70.2: at +1.5 s the enemy may not have a base yet (normal AI build
+      // order completes the primary later) — retry every 3 s, cap 20. Without
+      // this, boss missions silently spawned NO champion (old code bailed once).
+      case 'boss_spawn': {
+        if (this.buildings.some(x => x.team === 1 && x.def.primary && !x.dead)) this.spawnMissionBoss();
+        else if ((this._bossTries = (this._bossTries || 0) + 1) <= 20) scheduleMs(this.simTimers, this.simTickIndex, 3000, 'boss_spawn');
+        break;
+      }
       case 'surge_revert': for (const u of (e.payload?.refs || [])) if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } break;
       case 'hatch': { const p = e.payload || {}; const u = this.spawnUnit(0, 'skarnling', p.sx, p.sy, { arriveReady: true }); if (u) u.issueMove(p.mx, p.my, true); break; }
       case 'endgame_victory': if (!this.gameOver) this.endGame('victory'); break;

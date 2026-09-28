@@ -126,6 +126,9 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-T', () => this.launchTutorial());
     this.buildButton(this.W / 2, ly + 104, 250, 34, 'HOT-SEAT 1v1 (H)', { fill: 0x181022, stroke: 0xa06bff, color: '#c9a0ff', onDown: () => this.launchHotseat() });
     this.input.keyboard.on('keydown-H', () => this.launchHotseat());
+    // v2.70.2 (#20): custom match — engine-only mods exposed as toggles
+    this.buildButton(this.W / 2 + 262, ly + 85, 196, 34, 'CUSTOM MATCH (C)', { fill: 0x141b28, stroke: 0x8a6bd8, color: '#cbb8ff', small: true, onDown: () => this.openCustomPanel() });
+    this.input.keyboard.on('keydown-C', () => this.openCustomPanel());
 
     this.add.text(this.W / 2, ly + 130, `upkeep −${UPKEEP}cr on launch · click cards & buttons · ENTER=launch`, { fontFamily: MONO, fontSize: '11px', color: '#54688a' }).setOrigin(0.5).setDepth(5);
     this.subtitle = this.add.text(this.W / 2, ly + 148, '', { fontFamily: BODY, fontSize: '13px', color: '#9fb3d8', fontWeight: '600' }).setOrigin(0.5).setDepth(5);
@@ -459,6 +462,55 @@ export class TitleScene extends Phaser.Scene {
     if (!this._msel) return;
     this._msel.destroy();
     this._msel = null;
+  }
+
+  // v2.70.2: CUSTOM MATCH — panel + launch (stackable engine mods)
+  openCustomPanel() {
+    if (this._cmod) { this.closeCustomPanel(); return; }
+    const c = this._cmod = this.add.container(0, 0).setDepth(121);
+    const dim = this.add.rectangle(0, 0, this.W, this.H, 0x000000, 0.78).setInteractive();
+    dim.on('pointerdown', () => this.closeCustomPanel());
+    c.add(dim);
+    const W = Math.min(560, this.W - 60), H = Math.min(380, this.H - 36);
+    c.add(this.add.rectangle(this.W / 2, this.H / 2, W, H, 0x0c1420, 0.98).setStrokeStyle(2, 0xa06bff));
+    c.add(this.add.text(this.W / 2, this.H / 2 - H / 2 + 20, 'CUSTOM MATCH · STACKABLE MODS', { fontFamily: DISPLAY, fontSize: '14px', color: '#cbb8ff', fontWeight: '700', letterSpacing: 2 }).setOrigin(0.5));
+    const mods = this._cmSelect = { Blitz: false, 'Hold 120s': false, 'Crates win x5': false, 'Convoy escort': false, 'Enemy champion': false };
+    const descs = { Blitz: 'WIN: destroy the AEGIS conduit', 'Hold 120s': 'survive 120s, then raze the base', 'Crates win x5': 'WIN: reclaim 5 supply crates', 'Convoy escort': 'escort our transports to extraction', 'Enemy champion': '2.5x champion spawns at enemy base' };
+    let y = this.H / 2 - H / 2 + 60;
+    for (const k of Object.keys(mods)) {
+      const r = this.add.rectangle(this.W / 2, y, W - 36, 34, 0x0a0f18, 1).setStrokeStyle(1, 0x2a3240, 1).setInteractive({ useHandCursor: true });
+      const lbl = this.add.text(this.W / 2 - (W - 48) / 2, y, '', { fontFamily: BODY, fontSize: '11px', fontWeight: '600', color: '#dbe7ff' }).setOrigin(0, 0.5);
+      const paint = (on) => { r.setFillStyle(on ? 0x1d2a4f : 0x0a0f18, 1); r.setStrokeStyle(1, on ? 0x8a6bd8 : 0x2a3240, 1); lbl.setText((on ? '[ON]  ' : '[OFF] ') + k + '   ·   ' + descs[k]); };
+      paint(false);
+      r.on('pointerdown', () => { mods[k] = !mods[k]; paint(mods[k]); cin.click(0.4); });
+      c.add([r, lbl]);
+      y += 42;
+    }
+    const go = this.add.rectangle(this.W / 2, y + 12, 210, 42, 0x2a1a3f, 1).setStrokeStyle(2, 0xa06bff, 1).setInteractive({ useHandCursor: true });
+    c.add(go);
+    c.add(this.add.text(this.W / 2, y + 12, 'LAUNCH CUSTOM', { fontFamily: DISPLAY, fontSize: '14px', color: '#e2ccff', fontWeight: '700', letterSpacing: 2 }).setOrigin(0.5));
+    go.on('pointerdown', () => this.launchCustom());
+    c.add(this.add.text(this.W / 2, this.H / 2 + H / 2 - 12, 'outside campaign · enemy uses chosen difficulty · Esc/C/click-out closes', { fontFamily: MONO, fontSize: '9px', color: '#54688a' }).setOrigin(0.5));
+  }
+
+  closeCustomPanel() { if (this._cmod) { this._cmod.destroy(); this._cmod = null; } }
+
+  launchCustom() {
+    if (this.pick.race === this.pick.enemy) this.pick.enemy = this.pick.race === 'skarn' ? 'terran' : 'skarn';
+    const s = this._cmSelect || {};
+    const mods = {};
+    if (s.Blitz) mods.blitz = true;
+    if (s['Hold 120s']) mods.holdTime = 120;
+    if (s['Crates win x5']) mods.cratesWin = 5;
+    if (s['Convoy escort']) mods.convoy = true;
+    if (s['Enemy champion']) mods.boss = 'custom';
+    this.closeCustomPanel();
+    this.endAttract();
+    cin.whoosh(0.6);
+    this.scene.start('Battle', {
+      race: this.pick.race, enemyRace: this.pick.enemy, difficulty: this.pick.difficulty,
+      mission: { n: 0, name: 'CUSTOM MATCH', brief: 'Hot-configured engagement. Choose your chaos.', mods },
+    });
   }
 
   launchMissionNum(n) {

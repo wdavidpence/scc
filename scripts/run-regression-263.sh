@@ -38,6 +38,8 @@ out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-replay.c
 if echo "$out" | grep -q 'pageerrors: 0'; then echo "OK   replay-r :: debrief retry"; else echo "FAIL replay-r :: $out"; FAIL=1; fi
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-brief-skip.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q 'BRIEF-SKIP PASS'; then echo "OK   brief-skip :: replay briefing skip"; else echo "FAIL brief-skip :: $out"; FAIL=1; fi
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-custom.cjs 2>&1 | tail -2)
+if echo "$out" | grep -q 'CUSTOM-MATCH PASS'; then echo "OK   custom-match :: C panel + stacked mods + boss"; else echo "FAIL custom-match :: $out"; FAIL=1; fi
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/smoke-voice-pack.cjs 2>&1 | tail -2)
 if echo "$out" | grep -q 'non-200: NONE'; then echo "OK   voice-pack :: VO lanes"; else echo "FAIL voice-pack :: $out"; FAIL=1; fi
 [ $FAIL -eq 0 ] && echo "SUITE GREEN" || echo "SUITE RED"
