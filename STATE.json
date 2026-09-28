@@ -5049,7 +5049,7 @@
       "task": "Gate and release the vertical slice [P1][P2][P3]"
     }
   ],
-  "active_release": "v2.70.0",
+  "active_release": "v2.70.2",
   "releases": [
     {
       "v": "v2.70.0",

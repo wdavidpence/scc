@@ -3,6 +3,8 @@ v2.70.0 SHIPPED fe3629b: improvements batch A (chase leash, audio mixer + mute +
 
 Noticed work is recorded here and abandoned until promoted to an authorized PLAN bullet.
 
+v2.70.1 SHIPPED: threat pings 4s x3 clusters, briefing skip-on-replay + ESC, buildingBark caption restored (index-matched pack VO, subtitle and audio now say the same line). v2.70.2 SHIPPED (4321c26): Custom Match panel — C key on title, five stackable mods (Blitz/Hold 120s/Crates x5/Convoy escort/Enemy champion) + seed box, host=you, enemy uses chosen difficulty; fixed REAL bug found building it: boss_spawn fired once at +1.5s before the enemy base existed and silently spawned no champion (campaign m5 was affected too — now 3s-retry chain, live-verified boss spawns). Suite 36/36 (added smoke-custom + probe-cm-clicks). Improvement list closed: #6/#8 rally+last-known already existed since v2.55 (rally flag + right-click relocate + minimap pings + per-tile lastSeen intel); #16/17 the 3200 decoration objects did not exist (26-dot camera-local layer); #7 named commanders with doctrine mods already shipped in commanders.js. Remaining honest open ideas, none blocking: colorblind-safe team palette (current blue/orange is deuteranopia-safe already), hotseat second-player palette differentiation, control-group audio (P2.082 covers).
+
 - Victory/defeat presentation polish from v2.64 backlog.
 - Title-screen visual-impact pass beyond 7/10.
 - Production bundle code splitting.
