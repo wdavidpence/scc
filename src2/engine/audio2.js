@@ -317,11 +317,20 @@ export class Audio2 {
     if (this.scene && this.scene.events) this.scene.events.emit('hud:bark', text);
     if (!('speechSynthesis' in window)) return;
     try {
-      // rate-limit: never overlap, min gap between barks
+      // rate-limit: never overlap; v2.70 batch1 (#2): if busy, QUEUE the line
+      // (dedupe vs the pending queue, cap 2) instead of silently dropping it —
+      // previously the subtitle showed while no voice ever played it.
       const now = Date.now();
-      if (this._lastBark && now - this._lastBark < 1400) return;
+      if (this._lastBark && now - this._lastBark < 1400) {
+        this._bq = this._bq || [];
+        const p = { t: text, pitch, rate, ttl: now + 5000 };
+        if (!this._bq.some(q => q.t === text) && this._bq.length < 2) this._bq.push(p);
+        return;
+      }
+      const qb = (this._bq || []).filter(q => q.ttl > now && q.t !== text);
       this._lastBark = now;
       window.speechSynthesis.cancel();
+      if (qb.length) { for (const q of qb) { const q2 = new SpeechSynthesisUtterance(this._vt(q.t)); q2.pitch = (q.pitch || 0.8) * (this.racePitch || 0.8); q2.rate = q.rate || 1.05; q2.volume = 0.9; window.speechSynthesis.speak(q2); } this._bq = []; }
       const u = new SpeechSynthesisUtterance(this._vt(text));
       const rp = this.racePitch || 0.8;
       u.pitch = pitch * rp; u.rate = rate; u.volume = 0.9;

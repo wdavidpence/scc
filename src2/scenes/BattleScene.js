@@ -2729,15 +2729,23 @@ export class BattleScene extends Phaser.Scene {
     for (const w of this.units) {
       if (!w.dead && w !== u && w.harvestTarget) load.set(w.harvestTarget, (load.get(w.harvestTarget) || 0) + 1);
     }
+    // v2.70 batch1 (#4): HARD occupancy cap. Soft 28-pt load penalty only made
+    // crowds expensive, not impossible — 8+ workers still stacked one patch and
+    // ground on the mine ring. Cap: never ACQUIRE a patch already at 4 workers
+    // (counting u's existing target); if every candidate is capped, fall back
+    // to best-scored (crowded-but-mining beats idling next to minerals).
+    let capped = null, cs = Infinity;
     for (const m of this.minerals) {
       if (m.amount <= 0) continue;
       const d = Math.hypot(m.x - u.x, m.y - u.y);
       if (d > 40 * TILE) continue;
-      const s = d + (load.get(m) || 0) * 28;
+      const l = load.get(m) || 0;
+      const s = d + l * 40;
       if (avoid && avoid.includes(m)) { if (s < fbs) { fbs = s; fb = m; } continue; }
+      if (l >= 4) { if (s < cs) { cs = s; capped = m; } continue; }
       if (s < bs) { bs = s; best = m; }
     }
-    return best || fb;
+    return best || capped || fb;
   }
 
   nearestMineralPatch(u, maxD) {
