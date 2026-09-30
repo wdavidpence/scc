@@ -548,7 +548,8 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- P1.027-i3 command queue plumbing ----------------
   selIds() { return [...(this.selection || [])].map(u => u.id); }
   selFromIds(ids) { const m = new Map(this.units.map(u => [u.id, u])); return ids.map(id => m.get(id)).filter(u => u && !u.dead); }
-  __cmd(type, payload, player) { pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: type, type, payload }); }
+  __cmd(type, payload, player, subject) { pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: subject ?? type, type, payload }); }
+  unitById(id) { return this.units.find(u => u.id === id && !u.dead); }
   execCmd(c) {
     const pl = c.payload || {};
     const sel = pl.sel !== undefined ? this.selFromIds(pl.sel) : null;
@@ -568,6 +569,32 @@ export class BattleScene extends Phaser.Scene {
         break;
       }
       case 'automine': this.toggleAutoMine(); break;
+      // P1.027-i3b: placement/cast/merge/morph/deploy/queue sites. All sim
+      // state writes execute HERE (tick-boundary), never in input callbacks.
+      case 'patrol': {
+        if (!sel || !sel.length || !pl.a || !pl.b) break;
+        for (const u of sel) { u.patrolPoints = [{ x: pl.a.x, y: pl.a.y }, { x: pl.b.x, y: pl.b.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); }
+        break;
+      }
+      case 'ult': this.castUltimate(pl.x, pl.y, pl.kind); break;
+      case 'scan': this.scannerSweep(pl.x, pl.y); break;
+      case 'ucast': {
+        const caster = this.unitById(pl.by);
+        if (!caster) break;
+        const cost = pl.mode === 'maelstrom' ? 100 : 75;
+        if ((caster.energy || 0) < cost) break; // re-validated at EXEC (press-time check only armed)
+        if (pl.mode === 'cloud') this.castCausticCloud(caster, pl.x, pl.y);
+        else if (pl.mode === 'storm') this.castUnitPsiStorm(caster, pl.x, pl.y);
+        else this.castMaelstrom(caster, pl.x, pl.y);
+        break;
+      }
+      case 'place': this.tryPlace(pl.bid, pl.x, pl.y, sel); break;
+      case 'deploy': { const u = this.unitById(pl.uid); if (u && u.def.mcv) this.deployMCV(u); break; }
+      case 'merge': this.summonRadiant(pl.dark ? 'umbral' : 'radiant', sel); break;
+      case 'morph': this.morphSelected(pl.toKind, sel); break;
+      case 'queue': this.queueFromHud(pl.bid, pl.kind); break;
+      case 'research': this.queueResearchFromHud(pl.bid, pl.techId); break;
+      case 'hold': if (sel && sel.length) { for (const u of sel) { u.state = 'idle'; u.order = null; } } break;
     }
   }
 
@@ -899,8 +926,11 @@ export class BattleScene extends Phaser.Scene {
     this.input.setDefaultCursor('default');
   }
 
-  castUltimate(wx, wy) {
-    const kind = this.ultMode;
+  // P1.027-i3b: ult FX are presentation; the DAMAGE WINDOWS are simTimers now
+  // (was time.addEvent/delayedCall on the render clock — render-paced damage).
+  // All state resolution happens in execSimTimer at fixed 24Hz boundaries.
+  castUltimate(wx, wy, kind = this.ultMode) {
+    kind = kind || this.ultMode;
     this.ultMode = null;
     if (this.ultGhost) { this.ultGhost.destroy(); this.ultGhost = null; }
     this.input.setDefaultCursor('default');
@@ -909,6 +939,7 @@ export class BattleScene extends Phaser.Scene {
     if (kind === 'nuke') {
       this.audio?.nukeLaunch();
       this.events.emit('hud:alert', 'NUCLEAR STRIKE INBOUND — 3s');
+      scheduleMs(this.simTimers, this.simTickIndex, 2900, 'nuke_detonate', { x: wx, y: wy });
       // incoming re-entry streak: hot core + ablation sparks + contrail
       const trail = this.add.graphics().setDepth(505);
       const streak = this.add.rectangle(wx, wy - 500, 5, 500, 0xffd27a, 0.5).setDepth(506);
@@ -923,39 +954,7 @@ export class BattleScene extends Phaser.Scene {
       // growing target glow so the player can see the death zone
       const tgt = this.add.circle(wx, wy, 60, 0xff4020, 0).setStrokeStyle(3, 0xff6030, 0.8).setDepth(48);
       this.tweens.add({ targets: tgt, scale: 2.1, alpha: 0.9, duration: 2800, ease: 'Sine.easeIn' });
-      this.time.delayedCall(2900, () => {
-        streak.destroy(); core.destroy(); tgt.destroy(); if (ablate) ablate.remove(); trail.destroy();
-        this.audio?.nukeImpact();
-        this.shake(18, 0.9);
-        // WHITE FLASH across whole screen
-        const flash = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0xffffff, 0.95).setDepth(900).setScrollFactor(0);
-        this.tweens.add({ targets: flash, alpha: 0, duration: 700, onComplete: () => flash.destroy() });
-        const r = 130;
-        // triple shockwave rings
-        for (let k = 0; k < 3; k++) {
-          const ring = this.add.circle(wx, wy, r * 0.6, 0x000000, 0).setStrokeStyle(6 - k, [0xfff4d0, 0xff9c3c, 0xff5c2e][k], 0.9).setDepth(500 + k);
-          this.tweens.add({ targets: ring, scale: 2 + k * 0.9, alpha: 0, duration: 900 + k * 250, delay: k * 90, onComplete: () => ring.destroy() });
-        }
-        const boom = this.add.image(wx, wy, 'glow-soft').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setDepth(501).setScale(3.4);
-        this.tweens.add({ targets: boom, scale: 1.2, alpha: 0, duration: 800, onComplete: () => boom.destroy() });
-        // MUSHROOM: rising stem + billowing cap puffs
-        const stem = this.add.rectangle(wx, wy - 50, 26, 120, 0xd8c8a8, 0.55).setDepth(499);
-        this.tweens.add({ targets: stem, height: 220, y: wy - 110, alpha: 0, duration: 1400 });
-        for (let k = 0; k < 7; k++) {
-          const puff = this.add.circle(wx + (Math.random() * 90 - 45), wy - 150 - Math.random() * 50, 16 + Math.random() * 18, k % 2 ? 0xe8d8b8 : 0xc8a888, 0.5).setDepth(498);
-          this.tweens.add({ targets: puff, scale: 1.8 + Math.random(), y: puff.y - 60 - Math.random() * 40, alpha: 0, duration: 1800 + Math.random() * 800, onComplete: () => puff.destroy() });
-        }
-        // ring of fallout fire
-        for (let k = 0; k < 10; k++) {
-          const a = (k / 10) * Math.PI * 2;
-          const fx = wx + Math.cos(a) * (r * 0.8), fy = wy + Math.sin(a) * (r * 0.8);
-          this.time.delayedCall(100 + k * 60, () => this.spawnPersistentFire(fx, fy));
-        }
-        this.add.image(wx, wy, 'scorch').setDepth(6).setAlpha(0.85).setScale(4.5);
-        this.flash(wx, wy, 0xffffff, 5, 500);
-        for (const u of this.units) { if (!u.dead && Math.hypot(u.x - wx, u.y - wy) <= r + u.radius) u.takeDamage(400); }
-        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 24) b.takeDamage(350); }
-      });
+      this._nukeFx = [trail, streak, core, tgt, ablate];
     } else if (kind === 'storm') {
       this.audio?.psiCast();
       const r = 95;
@@ -966,38 +965,10 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: storm, alpha: 0, duration: 4200, onComplete: () => storm.destroy() });
       // screen distortion: rolling camera micro-shake for the duration
       this._stormWarp = { t: 4.6 };
-      const bolt = (x1, y1, x2, y2, wid, col) => {
-        const g = this.add.graphics().setDepth(50);
-        g.lineStyle(wid, col, 0.95);
-        g.beginPath(); g.moveTo(x1, y1);
-        const segs = 5;
-        for (let s = 1; s <= segs; s++) {
-          const tt = s / segs;
-          g.lineTo(x1 + (x2 - x1) * tt + (s < segs ? Math.random() * 22 - 11 : 0), y1 + (y2 - y1) * tt + (s < segs ? Math.random() * 10 - 5 : 0));
-        }
-        g.strokePath();
-        this.tweens.add({ targets: g, alpha: 0, duration: 200, onComplete: () => g.destroy() });
-        return g;
-      };
-      let ticks = 0;
-      const iv = this.time.addEvent({ delay: 450, repeat: 9, callback: () => {
-        ticks++;
-        this.audio?.zap();
-        // 3 lightning TENTACLES: ground strike with upward branching
-        for (let i = 0; i < 3; i++) {
-          const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * r;
-          const bx = wx + Math.cos(a) * rr, by = wy + Math.sin(a) * rr;
-          bolt(bx, by - 130 - Math.random() * 60, bx, by, 3, 0xe0a0ff);
-          bolt(bx - 10, by - 60, bx + Math.random() * 40 - 20, by - 8, 2, 0xc060ff);
-          bolt(bx + 8, by - 90, bx + Math.random() * 50 - 25, by - 20, 1.5, 0xffffff);
-          const impact = this.add.image(bx, by, 'glow').setTint(0xc060ff).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.1);
-          this.tweens.add({ targets: impact, scale: 0.2, alpha: 0, duration: 260, onComplete: () => impact.destroy() });
-        }
-        this.flash(wx, wy, 0xb060ff, 2.5, 200);
-        for (const u of this.units) { if (!u.dead && u.team !== 0 && Math.hypot(u.x - wx, u.y - wy) <= r) u.takeDamage(22); }
-        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 16) b.takeDamage(14); }
-      } });
-      this.time.delayedCall(4600, () => iv.remove());
+      // P1.027-i3b: 10 damage waves on the sim clock (were render-clock
+      // addEvent 450ms — render-paced). Bolts spawn tick-side in
+      // execSimTimer('ult_storm'), closer to their deterministic damage.
+      scheduleMs(this.simTimers, this.simTickIndex, 450, 'ult_storm', { x: wx, y: wy, r, n: 10 });
       this.events.emit('hud:alert', 'PSIONIC STORM');
     } else if (kind === 'surge') {
       // skarn: brood surge — spawn extra skarnlings at target + speed/attack buff to nearby swarm
@@ -2369,18 +2340,9 @@ export class BattleScene extends Phaser.Scene {
     const r = 55;
     const storm = this.add.circle(x, y, r, 0xc060ff, 0.16).setStrokeStyle(2, 0xe0a0ff, 0.8).setDepth(49);
     this.tweens.add({ targets: storm, alpha: 0, duration: 3800, onComplete: () => storm.destroy() });
-    const iv = this.time.addEvent({ delay: 500, repeat: 6, callback: () => {
-      for (let i = 0; i < 4; i++) {
-        const a = Math.random() * Math.PI * 2, rr = Math.random() * r;
-        const bx = x + Math.cos(a) * rr, by = y + Math.sin(a) * rr;
-        const zap = this.add.graphics().setDepth(50);
-        zap.lineStyle(2, 0xe0a0ff, 0.9);
-        zap.lineBetween(bx, by - 20, bx + (Math.random() * 12 - 6), by + (Math.random() * 12 - 6));
-        this.tweens.add({ targets: zap, alpha: 0, duration: 170, onComplete: () => zap.destroy() });
-      }
-      for (const u of this.units) { if (!u.dead && u.team !== caster.team && Math.hypot(u.x - x, u.y - y) <= r) u.takeDamage(18, caster); }
-    } });
-    this.time.delayedCall(4000, () => iv.remove());
+    // P1.027-i3b: 7 damage ticks on the sim clock (was render-clock addEvent).
+    // Dies with the caster: the chain checks the caster is alive at exec.
+    scheduleMs(this.simTimers, this.simTickIndex, 500, 'ucast_storm_tick', { x, y, r, by: caster.id, n: 7 });
     this.events.emit('hud:alert', 'PSIONIC STORM');
   }
 
@@ -2895,25 +2857,30 @@ export class BattleScene extends Phaser.Scene {
       const wp = this.worldFor(p);
       // v2.65 forced-click coach gate: swallow off-target gestures before any selection bookkeeping
       if (this.coach && this.coach.active && this.coach.onDown(p)) return;
-      if (this.ultMode) { this.castUltimate(wp.x, wp.y); return; }
-      if (this.scanMode) { this.scannerSweep(wp.x, wp.y); this.cancelScan(); return; }
+      // P1.027-i3b: pointer completions ENQUEUE; sim effects run at the tick
+      // head (execCmd). Cursor/modes/ghosts clear here (presentation only).
+      const _tp = this.teamForPointer(p) ?? (this.activeTeam ?? 0);
+      if (this.ultMode) { this.__cmd('ult', { kind: this.ultMode, x: wp.x, y: wp.y }, _tp); this.cancelUltimate(); return; }
+      if (this.scanMode) { this.__cmd('scan', { x: wp.x, y: wp.y }, _tp); this.cancelScan(); return; }
       if (this.castMode) {
         const caster = [...this.selection].filter(u => !u.dead && (this.castMode === 'cloud' ? (u.kind === 'corroder' && u.energy >= 75) : (this.castMode === 'storm' ? (u.def.castAbility === 'storm' && u.energy >= 75) : ((u.kind === 'voidlance' || u.kind === 'umbral') && u.energy >= 100))))[0];
-        if (caster) { if (this.castMode === 'cloud') this.castCausticCloud(caster, wp.x, wp.y); else if (this.castMode === 'storm') this.castUnitPsiStorm(caster, wp.x, wp.y); else this.castMaelstrom(caster, wp.x, wp.y); }
+        if (caster) this.__cmd('ucast', { mode: this.castMode, by: caster.id, x: wp.x, y: wp.y }, _tp, 'ucast:' + caster.id);
         this.castMode = null; this.input.setDefaultCursor('default'); this.clearCastGhost();
         return;
       }
       if (this.hotseat && this.cam2) this.autoTeamByPointer(p);
       if (this.patrolMode) {
         if (!this._patrolAnchor) { this._patrolAnchor = { x: wp.x, y: wp.y }; this.events.emit('hud:alert', 'PATROL: SET END POINT'); this._patrolPingAt = this.gameTime; }
-        else { for (const u of this.selection) { u.patrolPoints = [this._patrolAnchor, { x: wp.x, y: wp.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); } this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); this._patrolPingAt = this.gameTime; }
+        else { this.__cmd('patrol', { a: this._patrolAnchor, b: { x: wp.x, y: wp.y }, sel: this.selIds() }, _tp); this._patrolAnchor = null; this.patrolMode = false; this.input.setDefaultCursor('default'); this.audio?.move(); this._patrolPingAt = this.gameTime; }
         return;
       }
       if (p.button === 2) return;
       // never start a drag on the command card / minimap panels
       if ((p.y > this.scale.height - 100 && p.x < 350) || (p.x > this.scale.width - 200 && p.y < 250)) { return; }
       if (this.placing) {
-        this.tryPlace(wp.x, wp.y);
+        // P1.027-i3b: placement enqueues; execCmd re-validates + places at the tick head
+        this.__cmd('place', { bid: this.placing.buildId, x: wp.x, y: wp.y, sel: this.selIds() }, _tp);
+        this.cancelPlacing();
         return;
       }
       const wp0 = wp;
@@ -3077,7 +3044,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-D', () => {
       if (this.coach && this.coach.active) return; // v2.65: forced-click coach owns the deploy lesson
       const u = [...this.selection].find(x => x.def.mcv && !x.dead && x.team === (this.activeTeam ?? 0));
-      if (u) this.deployMCV(u);
+      if (u) this.__cmd('deploy', { uid: u.id }); // P1.027-i3b: exec resolves + deploys at tick head
     });
     this.input.keyboard.on('keydown-F', () => { if (this.selection.size) this.__cmd('stim', { sel: this.selIds() }); });
     // v2.27: camera follow lock (X) — cam tracks the selected unit until re-press
@@ -3103,9 +3070,9 @@ export class BattleScene extends Phaser.Scene {
       this.scene.stop('Hud'); this.scene.stop('Cut');
       this.scene.restart(this.__initData);
     });
-    this.input.keyboard.on('keydown-M', () => this.summonRadiant(this.keys.SHIFT?.isDown ? 'umbral' : 'radiant'));
-    this.input.keyboard.on('keydown-O', () => this.morphSelected('sporecaster'));
-    this.input.keyboard.on('keydown-L', () => this.morphSelected('corroder'));
+    this.input.keyboard.on('keydown-M', () => { if (this.selection.size) this.__cmd('merge', { dark: !!this.keys.SHIFT?.isDown, sel: this.selIds() }); });
+    this.input.keyboard.on('keydown-O', () => { if (this.selection.size) this.__cmd('morph', { toKind: 'sporecaster', sel: this.selIds() }); });
+    this.input.keyboard.on('keydown-L', () => { if (this.selection.size) this.__cmd('morph', { toKind: 'corroder', sel: this.selIds() }); });
     this.input.keyboard.on('keydown-I', () => this.cycleIdleWorker());
     this._groupSelectH = (e) => { if (/^Digit[1-8]$/.test(e.code) && !e.shiftKey && !e.ctrlKey && !e.metaKey) this.selectGroup(parseInt(e.code.slice(5), 10)); };
     this._groupAssignH = (e) => { if (/^Digit[1-8]$/.test(e.code) && (e.shiftKey || e.ctrlKey || e.metaKey)) this.assignGroup(parseInt(e.code.slice(5), 10)); };
@@ -3113,11 +3080,16 @@ export class BattleScene extends Phaser.Scene {
     window.addEventListener('keyup', this._groupAssignH);
     this.events.once('shutdown', () => { window.removeEventListener('keyup', this._groupSelectH); window.removeEventListener('keyup', this._groupAssignH); });
 
-    // events from HUD
-    this.events.on('hud:command', (action) => this.handleHudCommand(action));
+    // events from HUD (P1.027-i3b: HUD clicks are OUTSIDE the tick too —
+    // every state-effecting action snapshots selection + enqueues)
+    this.events.on('hud:command', (action) => {
+      if (!this.selection.size) return;
+      if (action === 'stop') this.__cmd('stop', { sel: this.selIds() });
+      if (action === 'hold') this.__cmd('hold', { sel: this.selIds() });
+    });
     this.events.on('hud:place', (buildId) => this.startPlacing(buildId));
-    this.events.on('hud:queueUnit', ({ buildingId, kind }) => this.queueFromHud(buildingId, kind));
-    this.events.on('hud:queueResearch', ({ buildingId, techId }) => this.queueResearchFromHud(buildingId, techId));
+    this.events.on('hud:queueUnit', ({ buildingId, kind }) => this.__cmd('queue', { bid: buildingId, kind }, this.activeTeam ?? 0, 'queue:' + buildingId));
+    this.events.on('hud:queueResearch', ({ buildingId, techId }) => this.__cmd('research', { bid: buildingId, techId }, this.activeTeam ?? 0, 'research:' + buildingId));
     this.events.on('hud:camera', ({ x, y }) => { this.polish?.stopFollow(); if (this.polish) this.polish.smoothCenter(x, y); else this.cameras.main.centerOn(x, y); });
     this.events.on('hud:attackMode', () => { this.attackMoveMode = true; this.input.setDefaultCursor('crosshair'); });
     this.events.on('hud:cancelPlace', () => this.cancelPlacing());
@@ -3127,10 +3099,11 @@ export class BattleScene extends Phaser.Scene {
     this.events.on('hud:patrol', () => this.armPatrol());
     this.events.on('hud:scan', () => this.armScan());
     this.events.on('hud:cloak', () => { if (this.selection.size) this.__cmd('cloak', { sel: this.selIds() }); });
-    this.events.on('hud:mergeRadiant', () => this.summonRadiant('radiant'));
-    this.events.on('hud:mergeDarkRadiant', () => this.summonRadiant('umbral'));
-    this.events.on('hud:morphSporecaster', () => this.morphSelected('sporecaster'));
-    this.events.on('hud:morphCorroder', () => this.morphSelected('corroder'));
+    this.events.on('hud:mergeRadiant', () => { if (this.selection.size) this.__cmd('merge', { dark: false, sel: this.selIds() }); });
+    this.events.on('hud:mergeDarkRadiant', () => { if (this.selection.size) this.__cmd('merge', { dark: true, sel: this.selIds() }); });
+    this.events.on('hud:morphSporecaster', () => { if (this.selection.size) this.__cmd('morph', { toKind: 'sporecaster', sel: this.selIds() }); });
+    this.events.on('hud:morphCorroder', () => { if (this.selection.size) this.__cmd('morph', { toKind: 'corroder', sel: this.selIds() }); });
+    this.events.on('hud:deploy', (uid) => this.__cmd('deploy', { uid }));
     this.events.on('hud:maelstrom', () => this.armVoidCast());
     this.events.on('hud:caustic', () => this.armCausticCast());
     this.events.on('hud:castStorm', () => {
@@ -3614,10 +3587,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- SC1: radiant convergence, aerie morphs, void/caustic casts ----------------
-  summonRadiant(darkKind = 'radiant') {
+  summonRadiant(darkKind = 'radiant', sel) {
     const techGate = darkKind === 'umbral' ? 'umbralConvergence' : null;
     if (techGate && !this.techResearched(0, techGate)) { this.events.emit('hud:alert', 'REQUIRES CONVERGENCE RESEARCH'); this.audio?.announcer?.('tech'); return; }
-    const dts = [...this.selection].filter(u => u.kind === 'nightblade' && !u.dead);
+    const dts = (sel || [...this.selection]).filter(u => u.kind === 'nightblade' && !u.dead);
     if (dts.length < 2) { this.events.emit('hud:alert', darkKind === 'radiant' ? 'CONVERGENCE: SELECT 2+ NIGHTBLADES' : 'DARK CONVERGENCE: SELECT 2+ NIGHTBLADES'); this.audio?.announcer?.('nocrew'); return; }
     let merged = 0;
     const pool = [...dts];
@@ -3643,8 +3616,8 @@ export class BattleScene extends Phaser.Scene {
     if (merged) { this.cmdCount++; this.events.emit('hud:alert', darkKind === 'radiant' ? 'RADIANT CONVERGENCE' : 'UMBRAL CONVERGENCE'); this.events.emit('hud:selection', this.selectionInfo()); }
   }
 
-  morphSelected(toKind) {
-    const list = [...this.selection].filter(u => u.kind === 'vexwing' && !u.dead);
+  morphSelected(toKind, sel) {
+    const list = (sel || [...this.selection]).filter(u => u.kind === 'vexwing' && !u.dead);
     if (!list.length) { this.events.emit('hud:alert', `MORPH: SELECT VEXWINGS`); this.audio?.announcer?.('nocrew'); return; }
     const t = TECHS[toKind];
     if (!this.techResearched(0, toKind)) { this.events.emit('hud:alert', `REQUIRES ${t?.name?.toUpperCase() || toKind.toUpperCase()} RESEARCH`); this.audio?.announcer?.('tech'); return; }
@@ -3757,11 +3730,12 @@ export class BattleScene extends Phaser.Scene {
       puffs.push(pf);
       this.tweens.add({ targets: pf, x: pf.x + (Math.random() * 24 - 12), y: pf.y + (Math.random() * 24 - 12), alpha: 0.05, duration: 2000, yoyo: true, repeat: 3 });
     }
-    const iv = this.time.addEvent({ delay: 600, repeat: 9, callback: () => {
-      for (const u of this.units) { if (!u.dead && u.team !== caster.team && !u.flying && Math.hypot(u.x - x, u.y - y) <= 52) u.takeDamage(6, caster); }
-    } });
+    // P1.027-i3b: 10 damage ticks on the sim clock (was render-clock
+    // addEvent 600ms). Chain ends if the caster dies (intentional, unlike
+    // the old render timer which kept firing after the cloud owner died).
+    scheduleMs(this.simTimers, this.simTickIndex, 600, 'caustic_tick', { x, y, by: caster.id, n: 10 });
     this.tweens.add({ targets: cloud, alpha: 0, scale: 1.4, duration: 6000, onComplete: () => cloud.destroy() });
-    this.time.delayedCall(6200, () => { iv.remove(); for (const pf of puffs) pf.destroy(); });
+    this.time.delayedCall(6200, () => { for (const pf of puffs) pf.destroy(); }); // presentation cleanup only
     this.events.emit('hud:alert', 'CAUSTIC MIST DEPLOYED');
   }
 
@@ -4015,19 +3989,22 @@ export class BattleScene extends Phaser.Scene {
 
   placementValid(buildId, x, y) { return !this.placementReason(buildId, x, y); }
 
-  tryPlace(x, y) {
-    if (!this.placing) return;
-    if (!this.isValid) { this.audio?.announcer?.('place'); this.events.emit('hud:alert', this.placementReason(this.placing.buildId, x, y) || 'INVALID POSITION'); return; }
+  // P1.027-i3b: EXEC-side. Signature changed to (bid,x,y,sel): validity is
+  // RE-CHECKED at the tick head (fresh placementReason), not from the stale
+  // ghost isValid; the press-time selection snapshot arrives in `sel`.
+  tryPlace(bid, x, y, sel) {
+    const reason = this.placementReason(bid, x, y);
+    if (reason) { this.audio?.announcer?.('place'); this.events.emit('hud:alert', reason); this.cancelPlacing(); return; }
     this.cmdCount++;
     const T = this.activeTeam ?? 0;
-    const def = BUILDINGS[this.placing.buildId];
+    const def = BUILDINGS[bid];
     if (!this.canAfford(T, def.minerals, def.gas)) { this.audio?.announcer?.('supply'); this.cancelPlacing(); return; }
     this.spend(T, def.minerals, def.gas);
-    const b = new Building(this, T, this.placing.buildId, x, y, {});
+    const b = new Building(this, T, bid, x, y, {});
     this.buildings.push(b);
     const race = this.players[T].race;
     if (race === 'terran') {
-      let builders = [...this.selection].filter(u => u.def.worker && !u.dead);
+      let builders = (sel || []).filter(u => u.def.worker && !u.dead);
       // Playability: placement must never dead-end — if the player placed
       // with no worker selected, auto-send the nearest idle worker so the
       // building always gets built (SC1 carrier-worker behavior).
@@ -4035,7 +4012,7 @@ export class BattleScene extends Phaser.Scene {
         const cands = this.units.filter(u => u.team === T && !u.dead && u.def.worker);
         builders = cands.filter(u => !u.order || u.state === 'idle')
           .sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y));
-        if (builders.length === 0) builders = cands.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y)).slice(0, 1);
+        if (builders.length === 0) builders = cands.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, a.y - y)).slice(0, 1);
       }
       builders.forEach(w => w.setOrder({ type: 'build', building: b }));
     }
@@ -4070,10 +4047,8 @@ export class BattleScene extends Phaser.Scene {
     if (b.queueResearch(techId)) this.audio?.queue(); else { this.audio?.announcer?.('supply'); this.events.emit('hud:unaffordable'); }
   }
 
-  handleHudCommand(action) {
-    if (action === 'stop') { for (const u of this.selection) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; } }
-    if (action === 'hold') { for (const u of this.selection) { u.state = 'idle'; u.order = null; } }
-  }
+  // P1.027-i3b: handleHudCommand DELETED — stop/hold route through __cmd +
+  // execCmd now that HUD clicks must not write sim state outside the tick.
 
   createEvents() {
     // camera bounds check on resize handled by RESIZE mode
@@ -4095,6 +4070,83 @@ export class BattleScene extends Phaser.Scene {
       case 'surge_revert': for (const u of (e.payload?.refs || [])) if (!u.dead) { u.bonusDamage -= 4; u.speed /= 1.25; } break;
       case 'hatch': { const p = e.payload || {}; const u = this.spawnUnit(0, 'skarnling', p.sx, p.sy, { arriveReady: true }); if (u) u.issueMove(p.mx, p.my, true); break; }
       case 'endgame_victory': if (!this.gameOver) this.endGame('victory'); break;
+      // P1.027-i3b: render-clock damage chains DELETED, recreated tick-side.
+      // Deterministic at any render pace; pause freezes them with the world.
+      case 'nuke_detonate': {
+        const { x: wx, y: wy } = e.payload || {};
+        for (const fx of (this._nukeFx || [])) { if (fx && fx.remove) fx.remove(); else if (fx && fx.destroy) fx.destroy(); }
+        this._nukeFx = null;
+        this.audio?.nukeImpact();
+        this.shake(18, 0.9);
+        const flash = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0xffffff, 0.95).setDepth(900).setScrollFactor(0);
+        this.tweens.add({ targets: flash, alpha: 0, duration: 700, onComplete: () => flash.destroy() });
+        const r = 130;
+        for (let k = 0; k < 3; k++) {
+          const ring = this.add.circle(wx, wy, r * 0.6, 0x000000, 0).setStrokeStyle(6 - k, [0xfff4d0, 0xff9c3c, 0xff5c2e][k], 0.9).setDepth(500 + k);
+          this.tweens.add({ targets: ring, scale: 2 + k * 0.9, alpha: 0, duration: 900 + k * 250, delay: k * 90, onComplete: () => ring.destroy() });
+        }
+        const boom = this.add.image(wx, wy, 'glow-soft').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setDepth(501).setScale(3.4);
+        this.tweens.add({ targets: boom, scale: 1.2, alpha: 0, duration: 800, onComplete: () => boom.destroy() });
+        const stem = this.add.rectangle(wx, wy - 50, 26, 120, 0xd8c8a8, 0.55).setDepth(499);
+        this.tweens.add({ targets: stem, height: 220, y: wy - 110, alpha: 0, duration: 1400 });
+        for (let k = 0; k < 7; k++) {
+          const puff = this.add.circle(wx + (this.simRng.range(-45, 45)), wy - 150 - this.simRng.range(0, 50), 16 + this.simRng.range(0, 18), k % 2 ? 0xe8d8b8 : 0xc8a888, 0.5).setDepth(498);
+          this.tweens.add({ targets: puff, scale: 1.8 + this.simRng.range(0, 1), y: puff.y - 60 - this.simRng.range(0, 40), alpha: 0, duration: 1800 + this.simRng.range(0, 800), onComplete: () => puff.destroy() });
+        }
+        for (let k = 0; k < 10; k++) {
+          const a = (k / 10) * Math.PI * 2;
+          const fx = wx + Math.cos(a) * (r * 0.8), fy = wy + Math.sin(a) * (r * 0.8);
+          this.spawnPersistentFire(fx, fy);
+        }
+        this.add.image(wx, wy, 'scorch').setDepth(6).setAlpha(0.85).setScale(4.5);
+        this.flash(wx, wy, 0xffffff, 5, 500);
+        for (const u of this.units) { if (!u.dead && Math.hypot(u.x - wx, u.y - wy) <= r + u.radius) u.takeDamage(400); }
+        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 24) b.takeDamage(350); }
+        break;
+      }
+      case 'ult_storm': {
+        const p = e.payload || {}; const wx = p.x, wy = p.y, r = p.r;
+        this.audio?.zap();
+        // 3 lightning TENTACLES: ground strike with upward branching (FX only)
+        for (let i = 0; i < 3; i++) {
+          const a = this.simRng.range(0, Math.PI * 2), rr = Math.sqrt(this.simRng.range(0, 1)) * r;
+          const bx = wx + Math.cos(a) * rr, by = wy + Math.sin(a) * rr;
+          const g1 = this.add.graphics().setDepth(50);
+          g1.lineStyle(3, 0xe0a0ff, 0.95); g1.lineBetween(bx, by - 130, bx, by); g1.strokePath();
+          this.tweens.add({ targets: g1, alpha: 0, duration: 200, onComplete: () => g1.destroy() });
+          const impact = this.add.image(bx, by, 'glow').setTint(0xc060ff).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setScale(1.1);
+          this.tweens.add({ targets: impact, scale: 0.2, alpha: 0, duration: 260, onComplete: () => impact.destroy() });
+        }
+        this.flash(wx, wy, 0xb060ff, 2.5, 200);
+        for (const u of this.units) { if (!u.dead && u.team !== 0 && Math.hypot(u.x - wx, u.y - wy) <= r) u.takeDamage(22); }
+        for (const b of this.buildings) { if (!b.dead && b.team !== 0 && Math.hypot(b.x - wx, b.y - wy) <= r + 16) b.takeDamage(14); }
+        if (p.n > 1) scheduleMs(this.simTimers, this.simTickIndex, 450, 'ult_storm', { x: wx, y: wy, r, n: p.n - 1 });
+        break;
+      }
+      case 'ucast_storm_tick': {
+        const p = e.payload || {};
+        const caster = this.units.find(u => u.id === p.by && !u.dead);
+        if (!caster) break; // chain dies with the caster (was: render timer kept firing)
+        for (let i = 0; i < 4; i++) {
+          const a = this.simRng.range(0, Math.PI * 2), rr = this.simRng.range(0, p.r);
+          const bx = p.x + Math.cos(a) * rr, by = p.y + Math.sin(a) * rr;
+          const zap = this.add.graphics().setDepth(50);
+          zap.lineStyle(2, 0xe0a0ff, 0.9);
+          zap.lineBetween(bx, by - 20, bx + this.simRng.range(-6, 6), by + this.simRng.range(-6, 6));
+          this.tweens.add({ targets: zap, alpha: 0, duration: 170, onComplete: () => zap.destroy() });
+        }
+        for (const u of this.units) { if (!u.dead && u.team !== caster.team && Math.hypot(u.x - p.x, u.y - p.y) <= p.r) u.takeDamage(18, caster); }
+        if (p.n > 1) scheduleMs(this.simTimers, this.simTickIndex, 500, 'ucast_storm_tick', { x: p.x, y: p.y, r: p.r, by: p.by, n: p.n - 1 });
+        break;
+      }
+      case 'caustic_tick': {
+        const p = e.payload || {};
+        const caster = this.units.find(u => u.id === p.by && !u.dead);
+        if (!caster) break;
+        for (const u of this.units) { if (!u.dead && u.team !== caster.team && !u.flying && Math.hypot(u.x - p.x, u.y - p.y) <= 52) u.takeDamage(6, caster); }
+        if (p.n > 1) scheduleMs(this.simTimers, this.simTickIndex, 600, 'caustic_tick', { x: p.x, y: p.y, by: p.by, n: p.n - 1 });
+        break;
+      }
       default: break;
     }
   }

@@ -300,7 +300,9 @@ export class Coach {
         const wp2 = b.worldFor(p);
         if (t && Math.hypot(t.x - wp2.x, t.y - wp2.y) < (s2.radius || 40)) {
           b.snapGhost({ x: t.x, y: t.y });
-          if (b.isValid) { b.tryPlace(t.x, t.y); return true; } // consumed — placed on spot
+          // P1.027-i3b: enqueue like a real click — lesson `done` re-checks
+          // buildings each tick, so the 1-tick exec lag never breaks the gate.
+          if (b.isValid) { b.__cmd('place', { bid: b.placing.buildId, x: t.x, y: t.y, sel: [] }); return true; } // consumed — queued for the tick head
         }
       }
       return false;

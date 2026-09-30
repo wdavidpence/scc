@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/.."
 FAIL=0
 # Phase-1 kernel gates (pure Node, no browser)
-for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report verify-replay-runner verify-worker-flow; do
+for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report verify-replay-runner verify-worker-flow verify-input-purity; do
   out=$(node scripts/$g.cjs 2>&1 | tail -1)
   if echo "$out" | grep -q "PASS"; then echo "OK   $g :: $out"; else echo "FAIL $g :: $out"; FAIL=1; fi
 done
@@ -18,6 +18,9 @@ if echo "$out" | grep -q "fail=0"; then echo "OK   routing-seeded :: $out"; else
 # P1.027-i3 command-queue live wiring (browser, manual-clock harness)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cmd-live.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "PASS 8/8"; then echo "OK   cmd-live :: $out"; else echo "FAIL cmd-live :: $out"; FAIL=1; fi
+# P1.027-i3b new-command live gate (patrol/place/deploy/merge/morph/queue/scan/ult/ucast + pause purge)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cmd-live2.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "CMD-LIVE2 PASS 17/17"; then echo "OK   cmd-live2 :: $out"; else echo "FAIL cmd-live2 :: $out"; FAIL=1; fi
 # P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
 # P1.036 per-tick hash ring (browser, manual-clock harness)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-hash-ring.cjs 2>&1 | tail -1)

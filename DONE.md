@@ -56,3 +56,10 @@
 - src2/engine/desyncReport.js: ring scan -> first divergent tick, then leaf-level field diff (dotted paths, cap 64, truncation flag).
 - verify-desync-report.cjs 9/9 headless: tick-500 pos/hp/rng mutations each report tick 500 + exact field; control + insertion-order twins clean; 78ms.
 - Suite 27/27 GREEN (gate runs in kernel loop).
+
+## P1.027 i3b — input-callback purity, live scope (2026-09-30)
+- All remaining state-mutating input sites moved to the tick head: patrol/attack-move/casts (ult nuke+storm, scan, voidlance, caustic, unit psiStorm), build placement (pointer + coach auto-place), deploy (D key + HUD button), merge/morph (keys + HUD), production/research queues, stop/hold HUD. handleHudCommand deleted (deletion quota 1/2). Input callbacks are enqueue-only (__cmd) + presentation/UI; execCmd resolves state at the fixed-tick boundary with press-time selection snapshots.
+- Render-clock damage chains deleted, recreated as simTimers entries (nuke_detonate 2900ms, ult_storm 450ms x10, ucast_storm_tick 500ms x7, caustic_tick 600ms x10): pause now freezes them, chains die with the caster, render pace cannot shift the applyHit tick (deletion quota 2/2).
+- tryPlace re-validates placementReason at EXEC (stale ghost validity cannot place); cast energy + scan CD re-checked at EXEC (verified live: second storm at 25 energy rejected).
+- Gates: scripts/verify-input-purity.cjs 8/8 (source-purity scan, live scope) + scripts/verify-cmd-live2.cjs 17/17 (behavior, manual-clock). Both wired into run-regression-263 + scripts/build-qa.sh one-shot rebuild helper.
+- Full suite 38/38 GREEN on rebuilt bundle (dist/assets/index-CHMertWJ.js), incl economy-live hands-off chain, tick-parity 0.5x/0.25x digest identity, hash-ring mutation-at-500.

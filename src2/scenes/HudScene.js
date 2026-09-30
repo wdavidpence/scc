@@ -755,7 +755,7 @@ export class HudScene extends Phaser.Scene {
         __hold: ['HOLD [H]', () => b.events.emit('hud:command', 'hold')],
         __scan: ['SCAN [T]', () => b.events.emit('hud:scan')],
         // v2.46 backlog: MCV deploy button in the command card (was D-key only)
-        __deploy: ['DEPLOY [D]', () => { const m = b.selection && [...b.selection].find(u => !u.dead && u.def.mcv); if (m) b.deployMCV(m); }]
+        __deploy: ['DEPLOY [D]', () => { const m = b.selection && [...b.selection].find(u => !u.dead && u.def.mcv); if (m) b.events.emit('hud:deploy', m.id); }]
       };
       // live grey-out conditions per ability (energy/tech gates read from selection each tick)
       const hasKind = (bt, ...ks) => bt.selection && [...bt.selection].some(u => !u.dead && ks.includes(u.kind));

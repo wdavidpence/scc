@@ -458,12 +458,14 @@
     },
     {
       "id": "P1.027",
-      "status": "in_progress",
+      "status": "done",
       "owner": "MSM5U-LOCAL",
       "preferred_owner": "ANTIGRAV",
       "files": [
         "src2/engine/cmdQueue.js",
         "scripts/verify-input-queue.cjs",
+        "scripts/verify-input-purity.cjs",
+        "scripts/verify-cmd-live2.cjs",
         "src2/scenes/BattleScene.js"
       ],
       "dependencies": [
@@ -472,10 +474,11 @@
       "attempts": 0,
       "context_pack": "context-packs/P1.027.md",
       "done_when": "inputs enqueue tick-stamped commands and deletion quota count=2",
+      "done_when_result": "DONE 2026-09-30 (i3+i3b). All input callbacks are enqueue-only; every sim write executes at the fixed-tick head (execCmd/execSimTimer). Deletion quota count=2 met: (1) handleHudCommand direct-mutation method deleted, (2) render-clock damage timers (nuke/storm/psiStorm/caustic addEvent chains) deleted and recreated tick-side. Live-scope scan gate verify-input-purity 8/8 guards both halves: no state-write tokens in createInput, full enqueue+dispatch coverage per cmd type, no render-clock state timers in migrated chains.",
       "estimate": "1d",
       "task": "Delete direct DOM-to-simulation mutation [P1][P3]",
       "started_at": "2026-09-23T14:55:00Z",
-      "note": "i1+i2+i3a done 2026-09-23. i3a: RMB/keyboard/HUD order+stance+toggle handlers now enqueue to matchCmds (tick+epoch stamped) and execute at the fixed-tick drain; pause purges pre-pause backlog. i3b keeps placement/hotkey/summon/morph/queue sites + live-scope scan gate. Gate: verify-cmd-live 8/8 in suite."
+      "note": "i1+i2+i3a done 2026-09-23; i3b DONE 2026-09-30 — placement/summon/deploy/morph/production-queue/cast sites migrated to __cmd+execCmd, render-clock damage chains recreated on simTimers, live-scope purity scan gate shipped (verify-input-purity 8/8) + behavior gate (verify-cmd-live2 17/17), full suite green. Selection-only hotkeys (F2-F4, autoTeam) audited out of sim scope. Deletion quota count=2 met: direct DOM->sim mutation pathway deleted at all input sites."
     },
     {
       "id": "P1.028",
