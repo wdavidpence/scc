@@ -519,7 +519,7 @@
     },
     {
       "id": "P1.030",
-      "status": "in_progress",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
       "files": [],
@@ -530,7 +530,9 @@
       "context_pack": null,
       "done_when": "a five-minute economy replay runs headlessly with expected exact totals",
       "estimate": "2d",
-      "task": "Extract building, production, resource, and supply execution into pure simulation [P3]"
+      "task": "Extract building, production, resource, and supply execution into pure simulation [P3]",
+      "finished_at": "2026-09-30T22:40:00Z",
+      "note": "i1 done 2026-09-30. src2/engine/simEconomy.js = pure ledger (canAfford/spend/income/depositCargo) + supply accounting (canSpawn/charge/release/computeSupplyCap) + harvest world-queries (nearestDropOff/pickMineralForWorker/nearestMineralPatch/nearestGeyser); BattleScene keeps one-line delegators, entity.js chain calls world.* -> single source live vs headless. Gate scripts/verify-economy-golden.cjs 11/11: 7200-tick 5-min replay (harvest+gas+returnCargo+production queue+supply) with dual-run identity, cross-V8 (--jitless), conservation reconciliation (mined==deposited+flight both ledgers), and PINNED exact totals (1200 M + 300 G mined, 30 queue successes, 38 spawns, ledger M 300->0, G 0->296). Wired into run-regression-263; suite 41/41 GREEN (economy-live browser chain unchanged behavior). Remaining for full ticket spirit (unassigned, note for P1.031+): updateAI build/train policy + auto-research still scene-side; that is decision logic, not execution math."
     },
     {
       "id": "P1.031",

@@ -7,6 +7,7 @@ import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
 import { Unit, Building, effectiveDamage } from '../engine/entity.js';
+import * as EC from '../engine/simEconomy.js';
 import { createAllTextures } from '../engine/art.js';
 import { createBuildingsAAA } from '../engine/art3d.js';
 import { createTerrainArt } from '../engine/terrainArt.js';
@@ -2115,13 +2116,12 @@ export class BattleScene extends Phaser.Scene {
     const def = UNITS[kind];
     if (!def) return null;
     if (!opts.arriveReady) {
-      if (p.supplyUsed + (def.supply || 0) > p.supplyCap) return null;
+      if (!EC.canSpawn(p, def)) return null; // P1.030: supply gate via simEconomy (single source)
     }
     const u = new Unit(this, team, kind, x, y);
     this.units.push(u);
     this.polish?.spawnFlash(x, y, team);
-    p.supplyUsed += def.supply || 0;
-    if (def.supplyBonus) p.supplyCap += def.supplyBonus;
+    EC.chargeSupply(p, def);
     // apply weapon upgrades
     u.bonusDamage = this.getWeaponLevel(team) * (def.targets !== 'air' ? 2 : 0);
     u.bonusArmor = this.getArmorLevel(team);
@@ -2454,8 +2454,7 @@ export class BattleScene extends Phaser.Scene {
 
   onUnitDeath(u) {
     const p = this.players[u.team];
-    p.supplyUsed -= u.def.supply || 0;
-    if (u.def.supplyBonus) p.supplyCap -= u.def.supplyBonus;
+    EC.releaseSupply(p, u.def);
     this.units = this.units.filter(x => x !== u);
     this.selection.delete(u);
     this.harvestTargetReset(u);
@@ -2586,17 +2585,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   computeSupplyCap(team) {
-    const info = RACE_INFO[this.players[team].race];
-    let cap = 0;
-    for (const b of this.buildings) {
-      if (b.team !== team || b.dead || !b.built) continue;
-      if (b.def.supply) cap += b.def.supply;
-      if (b.buildId === 'supplyDepot') cap += 8;
-    }
-    if (this.players[team].race === 'skarn') {
-      for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'skywarden') cap += 8;
-    }
-    return cap;
+    // P1.030: full recount lives in simEconomy (headless golden shares it)
+    return EC.computeSupplyCap(this.players[team].race, team, this.buildings, this.units);
   }
 
   // ---------------- movement cohorts (flow fields) ----------------
@@ -2683,69 +2673,17 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------------- resources ----------------
-  canAfford(team, m, g = 0) { const p = this.players[team]; return p.minerals >= m && p.gas >= (g || 0); }
-  spend(team, m, g = 0) { const p = this.players[team]; p.minerals -= m; p.gas -= g || 0; }
-  addIncome(team, m, g = 0) { const p = this.players[team]; p.minerals += m; p.gas += g || 0; }
+  canAfford(team, m, g = 0) { return EC.canAfford(this.players[team], m, g); }
+  spend(team, m, g = 0) { EC.spend(this.players[team], m, g); }
+  addIncome(team, m, g = 0) { EC.income(this.players[team], m, g); }
 
-  nearestDropOff(u) {
-    let best = null, bd = Infinity;
-    for (const b of this.buildings) {
-      if (b.team !== u.team || b.dead || !b.built) continue;
-      if (b.def.produces?.includes(u.kind) || ['commandCenter', 'aegis', 'broodNest', 'refinery', 'gasSiphon', 'essenceTap'].includes(b.buildId)) {
-        const d = Math.hypot(b.x - u.x, b.y - u.y);
-        if (d < bd) { bd = d; best = b; }
-      }
-    }
-    return best;
-  }
+  nearestDropOff(u) { return EC.nearestDropOff(this, u); }
 
-  pickMineralForWorker(u, avoid) {
-    if (u.gasTarget && u.gasTarget.gas > 0 && u.team === 1) return null; // handled separately
-    // enemy AI gas assignment
-    const gey = this.geysers.find(g => g.workers.includes(u));
-    if (gey) { u.gasActive = true; return null; }
-    // P0.39: load-aware pick (see entity updateHarvest for the anti-jam pair).
-    // `avoid` is the worker's rotating blacklist of repeatedly-unreachable
-    // crystals; if every candidate is blacklisted we ignore it (better a
-    // retry than idling forever next to unmined minerals).
-    let best = null, bs = Infinity, fb = null, fbs = Infinity;
-    const load = new Map();
-    for (const w of this.units) {
-      if (!w.dead && w !== u && w.harvestTarget) load.set(w.harvestTarget, (load.get(w.harvestTarget) || 0) + 1);
-    }
-    // v2.70 batch1 (#4): HARD occupancy cap. Soft 28-pt load penalty only made
-    // crowds expensive, not impossible — 8+ workers still stacked one patch and
-    // ground on the mine ring. Cap: never ACQUIRE a patch already at 4 workers
-    // (counting u's existing target); if every candidate is capped, fall back
-    // to best-scored (crowded-but-mining beats idling next to minerals).
-    let capped = null, cs = Infinity;
-    for (const m of this.minerals) {
-      if (m.amount <= 0) continue;
-      const d = Math.hypot(m.x - u.x, m.y - u.y);
-      if (d > 40 * TILE) continue;
-      const l = load.get(m) || 0;
-      const s = d + l * 40;
-      if (avoid && avoid.includes(m)) { if (s < fbs) { fbs = s; fb = m; } continue; }
-      if (l >= 4) { if (s < cs) { cs = s; capped = m; } continue; }
-      if (s < bs) { bs = s; best = m; }
-    }
-    return best || capped || fb;
-  }
+  pickMineralForWorker(u, avoid) { return EC.pickMineralForWorker(this, u, avoid); }
 
-  nearestMineralPatch(u, maxD) {
-    let best = null, bd = maxD || Infinity;
-    for (const m of this.minerals) {
-      if (m.amount <= 0) continue;
-      const d = Math.hypot(m.x - u.x, m.y - u.y);
-      if (d < bd) { bd = d; best = m; }
-    }
-    return best;
-  }
+  nearestMineralPatch(u, maxD) { return EC.nearestMineralPatch(this, u, maxD); }
 
-  nearestGeyser(u) {
-    const assigned = this.geysers.find(g => g.workers.includes(u));
-    return assigned || null;
-  }
+  nearestGeyser(u) { return EC.nearestGeyser(this, u); }
 
   onMineralDug(u, m, amt) { this.audio?.harvest(); }
 
@@ -2768,7 +2706,7 @@ export class BattleScene extends Phaser.Scene {
 
   onCargoDeposited(u) {
     const isGas = u.cargoGas;
-    this.addIncome(u.team, isGas ? 0 : u.cargo, isGas ? u.cargo : 0);
+    EC.depositCargo(this.players[u.team], u);
     if (u.team === (this.activeTeam ?? 0)) this.polish?.floatGain(u.x, u.y, u.cargo, isGas);
     this.audio?.deposit();
   }
@@ -4535,7 +4473,7 @@ export class BattleScene extends Phaser.Scene {
     // v2.65 TRAINING SIM: crippled enemy — farms its own minerals, deploys its base, never attacks
     if (this.tutorialMode) {
       const p1 = this.players[1];
-      p1.minerals += dt * 0.12;
+      EC.income(p1, dt * 0.12);
       const aiMCV = this.units.find(u => !u.dead && u.team === 1 && u.def.mcv);
       if (aiMCV && this.gameTime > 14 && (!aiMCV.order || aiMCV.order.type !== 'move')) {
         let best = null, bd = 1e9;
@@ -4549,18 +4487,18 @@ export class BattleScene extends Phaser.Scene {
     if (this.hotseat) {
       const p = this.players[1];
       const prof = this.aiProfile || this.aiProfileFallback();
-      p.minerals += dt * (this.hotseat ? 1.0 : prof.income);
+      EC.income(p, dt * (this.hotseat ? 1.0 : prof.income));
       const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'gasSiphon' || b.buildId === 'essenceTap' || b.buildId === 'refinery'));
-      p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
+      EC.income(p, 0, dt * Math.min(2.5, gasRigs.length * prof.income * 0.35));
       return;
     }
     const s = this.aiState;
     const team = 1;
     const p = this.players[1];
     const prof = this.aiProfile || this.aiProfileFallback();
-    p.minerals += dt * prof.income;
+    EC.income(p, dt * prof.income);
     const gasRigs = this.buildings.filter(b => b.team === 1 && !b.dead && b.built && (b.buildId === 'gasSiphon' || b.buildId === 'essenceTap' || b.buildId === 'refinery'));
-    p.gas += dt * Math.min(2.5, gasRigs.length * prof.income * 0.35);
+    EC.income(p, 0, dt * Math.min(2.5, gasRigs.length * prof.income * 0.35));
 
     s.lastThink -= dt;
     if (s.lastThink > 0) return;
