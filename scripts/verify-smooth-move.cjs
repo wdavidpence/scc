@@ -62,19 +62,25 @@ async function scenario(page, jam) {
     const walk = (tx, ty) => b.nav.walkable(tx, ty, 0, -1);
     const marines = b.units.filter(u => u.kind === 'marine' && u.team === 0 && !u.dead);
     const c = marines.reduce((a, u) => ({ x: a.x + u.x / marines.length, y: a.y + u.y / marines.length }), { x: 0, y: 0 });
+    const cam = b.cameras.main;
+    const toScreen = (x, y) => ({ x: Math.round((x - cam.worldView.x) * cam.zoom), y: Math.round((y - cam.worldView.y) * cam.zoom) });
+    // Scan DOWN and RIGHT of the blob and require the waypoint to be inside
+    // the camera view: an off-view target cannot be right-clicked, and maps
+    // that spawn near the left edge used to yield unclickable waypoints
+    // (x < 0) — that was harness luck, not a passing test.
     let wp = null;
     outer:
-    for (let d = 10; d >= 6; d--) for (let dx = -2; dx <= 2; dx++) {
+    for (let d = 10; d >= 6; d--) for (let dx = 0; dx <= 6; dx++) {
       const tx = Math.floor(c.x / TILE) + dx, ty = Math.floor(c.y / TILE) + d;
-      if (walk(tx, ty) && walk(tx, ty - 1)) { wp = { x: tx * TILE + 8, y: ty * TILE + 8 }; break outer; }
+      if (!walk(tx, ty) || !walk(tx, ty - 1)) continue;
+      const s = toScreen(tx * TILE + 8, ty * TILE + 8);
+      if (s.x > 25 && s.x < 1055 && s.y > 25 && s.y < 685) { wp = { x: tx * TILE + 8, y: ty * TILE + 8 }; break outer; }
     }
     if (!wp) return { err: 'no wp' };
     b.__wp = wp;
     b.clearSelection();
     b.selectedBuilding = null;
     for (const u of marines) b.addToSelection(u);
-    const cam = b.cameras.main;
-    const toScreen = (x, y) => ({ x: Math.round((x - cam.worldView.x) * cam.zoom), y: Math.round((y - cam.worldView.y) * cam.zoom) });
     return { selN: b.selection.size, blob: toScreen(c.x, c.y), wps: toScreen(wp.x, wp.y) };
   });
   if (pick.err || pick.wps.x < 15 || pick.wps.x > 1060 || pick.wps.y > 690 || pick.wps.y < 15) return { err: 'geometry: ' + JSON.stringify(pick) };

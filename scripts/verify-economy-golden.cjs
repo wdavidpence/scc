@@ -34,13 +34,14 @@ async function loadModules() {
     Building: entity.Building,
     SimRng: (await import(path.resolve(__dirname, '../src2/engine/simRng.js'))).SimRng,
     EC: await import(path.resolve(__dirname, '../src2/engine/simEconomy.js')),
+    SC: await import(path.resolve(__dirname, '../src2/engine/simCombat.js')),
     sc1: await import(path.resolve(__dirname, '../src2/data/sc1.js')),
   };
   return LOADED;
 }
 
 async function runWorld({ seed, ticks }) {
-  const { Unit, Building, SimRng, EC, sc1 } = await loadModules();
+  const { Unit, Building, SimRng, EC, SC, sc1 } = await loadModules();
   const { UNITS, TILE } = sc1;
 
   // ---- fake world (no Phaser, no DOM) -------------------------------------
@@ -114,6 +115,9 @@ async function runWorld({ seed, ticks }) {
       const u = new Unit(this, team, kind, x, y);
       this.units.push(u);
       EC.chargeSupply(p, def);
+      // P1.031-i2: same spawn-bonus kernel as the live scene (upgrades are 0
+      // in this scenario → bonuses 0 → hash unchanged; wired for single source)
+      SC.applySpawnBonuses(u, p, id => this.techResearched(team, id));
       spawnTotal++;
       return u;
     },

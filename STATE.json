@@ -5099,7 +5099,7 @@
   },
   {
    "id": "P1.031-i2",
-   "status": "todo",
+   "status": "done",
    "owner": null,
    "preferred_owner": "MSM5U",
    "files": [
@@ -5109,9 +5109,23 @@
     "P1.031-i1"
    ],
    "note": "veterancy/upgrade damage bonuses into kernel path"
+  },
+  {
+   "id": "P1.032-i1",
+   "status": "todo",
+   "owner": null,
+   "preferred_owner": "MSM5U",
+   "files": [
+    "src2/engine/simTerrain.js",
+    "src2/scenes/BattleScene.js"
+   ],
+   "dependencies": [
+    "P1.031-i2"
+   ],
+   "note": "extract terrain/nav PURE state (elev/ramp/walkable gen + seeded placement) from buildTerrain render mass; golden: seeded map identity + ramp connectivity invariants; check this.rng() is seeded SimRng first"
   }
  ],
- "active_release": "v2.70.2",
+ "active_release": "v2.71.0",
  "releases": [
   {
    "v": "v2.70.0",
@@ -5126,6 +5140,19 @@
     "R = replay mission on debrief (fresh PRNG per retry)",
     "help line lists audio/shake keys",
     "suite 31->33 (audio-mixer + replay-r smokes)"
+   ]
+  },
+  {
+   "v": "v2.71.0",
+   "date": "2026-09-30",
+   "commit": "HEAD",
+   "items": [
+    "DEF-MOVE-2: flow-march accel ramp + heading low-pass (group march smoothness)",
+    "P1.031-i1: simCombat.js combat kernel (damage math, absorb, splash falloff, structure shots, projectile flight) single-sourced live+headless",
+    "P1.031-i2: veterancy + weapon/armor/plating upgrade math into kernel, counter quirk pinned by golden",
+    "verify-combat-golden gate 17/17 (5712-pair damage oracle + 64 shot combos + in-replay research)",
+    "smooth-move gate hardened (waypoint must be on-screen; was passing on camera luck)",
+    "suite runner aborts fast when QA server down; 43/43 GREEN"
    ]
   }
  ]

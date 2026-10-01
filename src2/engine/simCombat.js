@@ -82,6 +82,59 @@ export function secondaryDamage(dmg) {
   return Math.round(dmg * 0.8);
 }
 
+// ---- P1.031-i2: veterancy + upgrade math, single-sourced ------------------
+
+// vehicle branch list (vehiclePlating benefit set; spawn AND retro-apply use it)
+const VEHICLES = ['tank', 'duster', 'ballista', 'wraith', 'battlecruiser', 'ark', 'reaver', 'corroder'];
+// infantry branch list (tiered army-wide weapon/armor upgrades retro-apply here)
+const INFANTRY = ['marine', 'incinerator', 'ghost', 'skarnling', 'razorspine', 'vexwing', 'tremorclaw', 'bladeguard', 'nightblade', 'caller'];
+
+// per-shot damage = weapon math + veterancy aura (was entity.js fireAt:
+// effectiveDamage(...) then `dmg + lvl * 2`).
+export function shotDamage(attacker, target) {
+  return effectiveDamage(attacker, target) + (attacker.level || 0) * 2;
+}
+
+// spawn-time upgrade bonuses, verbatim from BattleScene.spawnUnit.
+// techResearched(id) is injected (live: world.techResearched; harness: Set).
+export function applySpawnBonuses(u, player, techResearched) {
+  u.bonusDamage = player.upgrades.weapons * (u.def.targets !== 'air' ? 2 : 0);
+  u.bonusArmor = player.upgrades.armor;
+  if (techResearched('vehiclePlating1') && VEHICLES.includes(u.kind)) u.bonusArmor += 2;
+  if (techResearched('bladeguardSpeed') && u.kind === 'bladeguard') u.speed *= 1.18;
+}
+
+// SIM block of BattleScene.completeResearch, verbatim: tech flag, upgrade
+// counters (including the counter-overwrite/second-increment quirk pinned by
+// the golden), retro-apply to live units, sentinel range def-clone. The
+// empty deepWarren/hive find-block (dead code) was NOT carried over.
+// Presentation (tints, orb fly, alerts, audio) stays in the scene.
+export function researchBonuses(player, units, techId, t, team) {
+  player.techs[techId] = true;
+  if (t?.affects === 'weapons' || t?.affects?.includes('Weapons')) player.upgrades.weapons++;
+  if (t?.affects === 'armor' || t?.affects?.includes('Armor') || t?.affects?.includes('Carapace') || t?.affects?.includes('Plating')) player.upgrades.armor++;
+  // SC1 tiered army-wide upgrades: retro-apply to every live unit of the branch
+  if (/InfantryWeapons/.test(techId)) {
+    const lvl = t?.level || player.upgrades.weapons;
+    player.upgrades.weapons = lvl;
+    for (const u of units) if (!u.dead && u.team === team && !u.def.worker && INFANTRY.includes(u.kind)) u.bonusDamage = Math.max(u.bonusDamage || 0, lvl * 2);
+  }
+  if (/InfantryArmor/.test(techId)) {
+    const lvl = t?.level || player.upgrades.armor;
+    player.upgrades.armor = lvl;
+    for (const u of units) if (!u.dead && u.team === team && !u.def.worker && INFANTRY.includes(u.kind)) u.bonusArmor = Math.max(u.bonusArmor || 0, lvl);
+  }
+  if (techId === 'vehiclePlating1') for (const u of units) if (!u.dead && u.team === team && VEHICLES.includes(u.kind)) u.bonusArmor += 2;
+  if (techId === 'bladeguardSpeed') for (const u of units) if (!u.dead && u.team === team && u.kind === 'bladeguard') u.speed *= 1.18;
+  if (techId === 'sentinelRange') for (const u of units) if (!u.dead && u.team === team && u.kind === 'sentinel') u.def = { ...u.def, range: u.def.range + 1 };
+  if (techId === 'skarnMeleeAttacks1') player.upgrades.weapons++;
+  if (techId === 'skarnCarapace1') player.upgrades.armor++;
+  if (techId === 'terranInfantryWeapons1') player.upgrades.weapons++;
+  if (techId === 'terranInfantryArmor1') player.upgrades.armor++;
+  if (techId === 'auraxisGroundWeapons1') player.upgrades.weapons++;
+  if (techId === 'auraxisGroundPlating1') player.upgrades.armor++;
+}
+
 // P1.028 single-source projectile flight, now callable headlessly.
 // Flight state lives in world.projectiles[]; sprite mirrors (pr.spr) are
 // optional — a missing sprite cannot skip or delay the hit tick.
@@ -107,4 +160,4 @@ export function stepProjectiles(world, dt, applyHit) {
   if (world.projectiles.length && world.projectiles.some(pr => pr.dead)) world.projectiles = world.projectiles.filter(pr => !pr.dead);
 }
 
-export default { sizeMult, effectiveDamage, absorb, unitSplashDamage, bldgSplashDamage, splashPass, structureShot, secondaryDamage, stepProjectiles };
+export default { sizeMult, effectiveDamage, absorb, unitSplashDamage, bldgSplashDamage, splashPass, structureShot, secondaryDamage, stepProjectiles, shotDamage, applySpawnBonuses, researchBonuses };

@@ -658,9 +658,8 @@ export class Unit {
       this.world.audio?.psiCast?.();
       return;
     }
-    const dmg = SC.effectiveDamage(this, target);
-    // SC1: unit-level veterancy damage aura
-    const lvl = this.level || 0;
+        // P1.031-i2: weapon math + veterancy aura single-sourced in the kernel
+    const dmg = SC.shotDamage(this, target);
     const volley = this.def.attacksPerVolley || 1;
     for (let v = 0; v < volley; v++) {
       const off = volley > 1 ? { x: (s01(this.world) * 24 - 12), y: (s01(this.world) * 16 - 8) } : { x: 0, y: 0 };
@@ -669,7 +668,7 @@ export class Unit {
       this.world.spawnProjectile({
         from,
         target: tgt,
-        damage: dmg + lvl * 2,
+        damage: dmg,
         splash: this.def.splash ? (this.sieged ? this.def.siege.splash : this.def.splash.radius) * TILE : 0,
         team: this.team,
         kind: this.kind,

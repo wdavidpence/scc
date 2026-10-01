@@ -66,7 +66,8 @@ async function runFight({ seed, ticks }) {
     elevAt: (x, y) => (y < 303 ? 2 : 0),
     players: [
       { team: 0, race: 'terran', minerals: 300, gas: 0, supplyUsed: 0, supplyCap: 10, techs: {}, upgrades: { weapons: 0, armor: 0 } },
-      { team: 1, race: 'terran', minerals: 400, gas: 150, supplyUsed: 0, supplyCap: 10, techs: {}, upgrades: { weapons: 0, armor: 0 } },
+      // P1 starts upgraded (w1/a1 + plating): spawn-time bonus path executes
+      { team: 1, race: 'terran', minerals: 400, gas: 150, supplyUsed: 0, supplyCap: 10, techs: { vehiclePlating1: true }, upgrades: { weapons: 1, armor: 1 } },
     ],
     add: {
       container: (x, y) => cont(x, y),
@@ -94,6 +95,8 @@ async function runFight({ seed, ticks }) {
     spawnUnit(team, kind, x, y, opts = {}) {
       const u = new Unit(this, team, kind, x, y, opts);
       this.units.push(u);
+      // P1.031-i2: spawn bonuses run through the SAME kernel as live spawnUnit
+      SC.applySpawnBonuses(u, this.players[team], id => !!this.players[team].techs[id]);
       return u;
     },
     spawnProjectile(p) { this.projectiles.push({ x: p.from.x, y: p.from.y, ...p }); },
@@ -146,14 +149,22 @@ async function runFight({ seed, ticks }) {
   e1.bonusDamage = 3;
   const turret = new Building(w, 1, 'missileTurret', 292, 300, { instant: true });
   w.buildings.push(turret);
+  // mid-fight research events: retro-apply path executes DURING the replay
+  // (t=40 chosen so infantry are still alive to receive the bonus)
+  const script = (t) => {
+    if (t === 40) SC.researchBonuses(w.players[1], w.units, 'terranInfantryWeapons1', sc1.TECHS.terranInfantryWeapons1, 1);
+    if (t === 90) SC.researchBonuses(w.players[1], w.units, 'terranInfantryWeapons2', sc1.TECHS.terranInfantryWeapons2, 1);
+  };
 
   for (const u of w.units) if (u.team === 0 && !u.flying) u.setOrder({ type: 'attackMove', point: { x: 290, y: 305 } });
 
   let splashMultiTick = -1, sentHpWhileShield = false, enemyDeadTick = -1;
-  let allyDentTick = -1, turretFired = false;
+  let allyDentTick = -1, turretFired = false, retroRan = false;
   const trace = [];
   for (let t = 0; t < ticks; t++) {
     w.time.now = t;
+    script(t);
+    if (t === 91) retroRan = w.units.some(u => u.team === 1 && !u.dead && u.bonusDamage === 4);
     const before = w.projectiles.length;
     // exact per-unit hp snapshot BEFORE any damage this tick (object keys:
     // no kind-substring collisions)
@@ -189,7 +200,7 @@ async function runFight({ seed, ticks }) {
     hash: createHash('sha256').update(full).digest('hex').slice(0, 16),
     nan: /NaN|Infinity/.test(full),
     splashMultiTick, sentHpWhileShield, enemyDeadTick, allyDentTick,
-    turretFired,
+    turretFired, retroRan,
     projLeft: w.projectiles.length,
     enemiesLeft: w.units.filter(u => u.team === 1 && !u.dead).length,
   };
@@ -257,7 +268,57 @@ async function oracleChecks() {
   let t2 = 0, d = 60, step = 620 * TICK;
   while (d > step + 6) { d -= step; t2++; } // oracle: first tick where pre-move dist <= step+r
   const flightOk = hitTick === t2;
-  return { bad, total, fx: f1 && f2 && f3 && g1 && g2 && h1, struct: s1 && s2, absorb: a1 && a2 && a3, flightOk, hitTick, t2 };
+  // ---- P1.031-i2: shotDamage = weapon math + veterancy*2, checked against
+  // an independent recompute over sampled pairs x levels 0..3 x bonus combos
+  let sbad = 0, stotal = 0;
+  const pairs = [['marine', 'marine'], ['marine', 'sentinel'], ['tank', 'marine'], ['tank', 'tank'], ['wraith', 'wraith'], ['sentinel', 'tank'], ['marine', 'wraith'], ['wraith', 'marine']];
+  for (const [ak, tk] of pairs) {
+    for (let lvl = 0; lvl <= 3; lvl++) {
+      for (const [bd, ba] of [[0, 0], [3, 1]]) {
+        stotal++;
+        const A = { def: UNITS[ak], x: 10, y: 300, world: flat, level: lvl, bonusDamage: bd };
+        const B = { def: UNITS[tk], x: 40, y: 310, bonusArmor: ba };
+        const mult = SIZE_MULT[UNITS[ak].attackType]?.[UNITS[tk].size] ?? 1;
+        const want = Math.max(1, Math.round((UNITS[ak].damage + bd) * mult - (UNITS[tk].armor + ba))) + lvl * 2;
+        if (SC.shotDamage(A, B) !== want) { sbad++; if (sbad < 4) console.log(`SHOT-DIFF ${ak}->${tk} lvl${lvl} want ${want} got ${SC.shotDamage(A, B)}`); }
+      }
+    }
+  }
+  // ---- spawn-bonus assembly pins (independent of kernel internals)
+  const mk = (kind) => ({ kind, def: UNITS[kind], speed: 100, bonusDamage: 0, bonusArmor: 0 });
+  const pUp = { upgrades: { weapons: 1, armor: 1 } };
+  const noTech = () => false;
+  const m2 = mk('marine'); SC.applySpawnBonuses(m2, pUp, noTech);
+  const sp1 = m2.bonusDamage === 2 && m2.bonusArmor === 1; // w1*2, armor level 1
+  const wr = mk('wraith'); SC.applySpawnBonuses(wr, pUp, id => id === 'vehiclePlating1');
+  const sp2 = wr.bonusDamage === 0 && wr.bonusArmor === 3; // air-only: no weapon bonus; plating +2
+  const bg = mk('bladeguard'); SC.applySpawnBonuses(bg, pUp, id => id === 'bladeguardSpeed');
+  const sp3 = Math.abs(bg.speed - 118) < 1e-9;
+  const tk2 = mk('tank'); SC.applySpawnBonuses(tk2, pUp, id => id === 'bladeguardSpeed');
+  const sp4 = tk2.speed === 100 && tk2.bonusDamage === 2 && tk2.bonusArmor === 1;
+  // ---- research retro pins: counter quirk (affects++ → set(level) → id++)
+  // preserved, Math.max no-clobber, team filter, plating retro, def clone
+  const pr1 = { upgrades: { weapons: 1, armor: 0 }, techs: {} };
+  const mu = { kind: 'marine', def: UNITS.marine, team: 1, dead: false, hp: 50, bonusDamage: 5, bonusArmor: 0 };
+  SC.researchBonuses(pr1, [mu], 'terranInfantryWeapons1', sc1.TECHS.terranInfantryWeapons1, 1);
+  const rs1 = pr1.upgrades.weapons === 2 && pr1.techs.terranInfantryWeapons1 === true;
+  const rs2 = mu.bonusDamage === 5;
+  const mu2 = { kind: 'marine', def: UNITS.marine, team: 1, dead: false, hp: 50, bonusDamage: 0, bonusArmor: 0 };
+  SC.researchBonuses({ upgrades: { weapons: 0, armor: 0 }, techs: {} }, [mu2], 'terranInfantryWeapons1', sc1.TECHS.terranInfantryWeapons1, 1);
+  const rs3 = mu2.bonusDamage === 2;
+  const tk3 = { kind: 'tank', def: UNITS.tank, team: 1, dead: false, hp: 50, bonusDamage: 0, bonusArmor: 0 };
+  const pr3 = { upgrades: { weapons: 0, armor: 0 }, techs: {} };
+  SC.researchBonuses(pr3, [tk3], 'vehiclePlating1', sc1.TECHS.vehiclePlating1, 1);
+  const rs4 = pr3.upgrades.armor === 1 && tk3.bonusArmor === 2;
+  const mu3 = { kind: 'marine', def: UNITS.marine, team: 0, dead: false, hp: 50, bonusDamage: 0, bonusArmor: 0 };
+  SC.researchBonuses({ upgrades: { weapons: 0, armor: 0 }, techs: {} }, [mu3], 'terranInfantryWeapons1', sc1.TECHS.terranInfantryWeapons1, 1);
+  const rs5 = mu3.bonusDamage === 0;
+  const sv = { kind: 'sentinel', def: UNITS.sentinel, team: 1, dead: false, hp: 50, bonusDamage: 0, bonusArmor: 0 };
+  const origRange = UNITS.sentinel.range;
+  SC.researchBonuses({ upgrades: { weapons: 0, armor: 0 }, techs: {} }, [sv], 'sentinelRange', sc1.TECHS.sentinelRange, 1);
+  const rs6 = sv.def !== UNITS.sentinel && sv.def.range === origRange + 1 && UNITS.sentinel.range === origRange;
+  return { bad, total, fx: f1 && f2 && f3 && g1 && g2 && h1, struct: s1 && s2, absorb: a1 && a2 && a3, flightOk, hitTick, t2,
+    sbad, stotal, spawnPins: sp1 && sp2 && sp3 && sp4, researchPins: rs1 && rs2 && rs3 && rs4 && rs5 && rs6 };
 }
 
 (async () => {
@@ -278,6 +339,7 @@ async function oracleChecks() {
   ok('RETURN-FIRE', A.allyDentTick >= 0, `first player-side dent at tick ${A.allyDentTick}`);
   ok('BLAST-MULTI-HIT', A.splashMultiTick >= 0, `2+ victims in one tick at ${A.splashMultiTick}`);
   ok('TURRET-SHOT', A.turretFired, 'turret projectiles entered the flight kernel');
+  ok('RETRO-IN-SCENARIO', A.retroRan, 'mid-fight Weapons-2 retro raised P1 bonusDamage to 4');
   ok('FLIGHT-CULLED', A.projLeft === 0 && A.enemiesLeft === 0, `projectiles left ${A.projLeft}, enemies left ${A.enemiesLeft}`);
 
   const O = await oracleChecks();
@@ -286,6 +348,9 @@ async function oracleChecks() {
   ok('STRUCT-SHOT-PINS', O.struct);
   ok('ABSORB-PINS', O.absorb);
   ok('FLIGHT-PIN', O.flightOk, `hit tick ${O.hitTick} === oracle ${O.t2}`);
+  ok('SHOT-ORACLE', O.sbad === 0, `${O.stotal - O.sbad}/${O.stotal} shot combos match independent oracle`);
+  ok('SPAWN-BONUS-PINS', O.spawnPins);
+  ok('RESEARCH-PINS', O.researchPins, 'counter quirk + max-no-clobber + team filter + def clone preserved');
 
   const child = spawnSync(process.execPath, ['--jitless', __filename, '--child'], { encoding: 'utf8', timeout: 180000 });
   const m = /CHILD-HASH (\w+)/.exec(child.stdout || '');

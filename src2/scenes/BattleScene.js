@@ -2123,11 +2123,8 @@ export class BattleScene extends Phaser.Scene {
     this.units.push(u);
     this.polish?.spawnFlash(x, y, team);
     EC.chargeSupply(p, def);
-    // apply weapon upgrades
-    u.bonusDamage = this.getWeaponLevel(team) * (def.targets !== 'air' ? 2 : 0);
-    u.bonusArmor = this.getArmorLevel(team);
-    if (this.techResearched(team, 'vehiclePlating1') && ['tank', 'duster', 'ballista', 'wraith', 'battlecruiser', 'ark', 'reaver', 'corroder'].includes(kind)) u.bonusArmor += 2;
-    if (this.techResearched(team, 'bladeguardSpeed') && kind === 'bladeguard') u.speed *= 1.18;
+    // apply weapon upgrades — P1.031-i2: assembly single-sourced in simCombat
+    SC.applySpawnBonuses(u, p, id => this.techResearched(team, id));
     // F7 perks + F2 upgrade visuals on birth
     if (team === 0) {
       if (this.perks?.flag && !def.worker) this.veteranFlag(u);
@@ -2712,32 +2709,10 @@ export class BattleScene extends Phaser.Scene {
   techResearched(team, techId) { return !!this.players[team].techs[techId]; }
   completeResearch(team, techId) {
     const t = TECHS[techId];
-    this.players[team].techs[techId] = true;
-    if (t?.affects === 'weapons' || t?.affects?.includes('Weapons')) this.players[team].upgrades.weapons++;
-    if (t?.affects === 'armor' || t?.affects?.includes('Armor') || t?.affects?.includes('Carapace') || t?.affects?.includes('Plating')) this.players[team].upgrades.armor++;
-    // SC1 tiered army-wide upgrades: retro-apply to every live unit of the branch
-    if (/InfantryWeapons/.test(techId)) {
-      const lvl = t?.level || this.players[team].upgrades.weapons;
-      this.players[team].upgrades.weapons = lvl;
-      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'incinerator', 'ghost', 'skarnling', 'razorspine', 'vexwing', 'tremorclaw', 'bladeguard', 'nightblade', 'caller'].includes(u.kind)) u.bonusDamage = Math.max(u.bonusDamage || 0, lvl * 2);
-    }
-    if (/InfantryArmor/.test(techId)) {
-      const lvl = t?.level || this.players[team].upgrades.armor;
-      this.players[team].upgrades.armor = lvl;
-      for (const u of this.units) if (!u.dead && u.team === team && !u.def.worker && ['marine', 'incinerator', 'ghost', 'skarnling', 'razorspine', 'vexwing', 'tremorclaw', 'bladeguard', 'nightblade', 'caller'].includes(u.kind)) u.bonusArmor = Math.max(u.bonusArmor || 0, lvl);
-    }
-    if (techId === 'vehiclePlating1') for (const u of this.units) if (!u.dead && u.team === team && ['tank', 'duster', 'ballista', 'wraith', 'battlecruiser', 'ark', 'reaver', 'corroder'].includes(u.kind)) u.bonusArmor += 2;
-    if (techId === 'bladeguardSpeed') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'bladeguard') u.speed *= 1.18;
-    if (techId === 'sentinelRange') for (const u of this.units) if (!u.dead && u.team === team && u.kind === 'sentinel') u.def = { ...u.def, range: u.def.range + 1 };
-    if (techId === 'deepWarren' || techId === 'hive') {
-      const b = this.buildings.find(b => b.team === team && (b.buildId === 'broodNest' || b.buildId === 'deepWarren') && b.def.morphTo !== false);
-    }
-    if (techId === 'skarnMeleeAttacks1') this.players[team].upgrades.weapons++;
-    if (techId === 'skarnCarapace1') this.players[team].upgrades.armor++;
-    if (techId === 'terranInfantryWeapons1') this.players[team].upgrades.weapons++;
-    if (techId === 'terranInfantryArmor1') this.players[team].upgrades.armor++;
-    if (techId === 'auraxisGroundWeapons1') this.players[team].upgrades.weapons++;
-    if (techId === 'auraxisGroundPlating1') this.players[team].upgrades.armor++;
+    // P1.031-i2: all SIM effects of the research (tech flag, upgrade counters
+    // incl. the counter-overwrite quirk, retro-apply to live units) run in
+    // simCombat.researchBonuses — same code the headless combat golden calls.
+    SC.researchBonuses(this.players[team], this.units, techId, t, team);
     // F2: visible research effects — unit tint flash + glow ring on the lab
     if (team === 0) {
       const tint = t?.affects?.toLowerCase?.().includes('weapon') || /weapon|attack/i.test(techId) ? 0xffe08a : 0x8ad4ff;

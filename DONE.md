@@ -106,3 +106,29 @@
   turret radius is 112 px; a probe script saved 3 wrong pins. Also:
   bldgSplash floor is 0.3.
 - Suite: 43/43 GREEN on rebuilt bundle index-uB35jQIA (HEAD-fresh).
+
+## P1.031-i2 DONE 2026-09-30 — veterancy + upgrade math into simCombat kernel
+- Added to simCombat.js: shotDamage (= effectiveDamage + level*2, was fireAt's
+  inline `dmg + lvl*2`), applySpawnBonuses (spawn-time weapon/armor/plating/
+  speed assembly, was BattleScene.spawnUnit), researchBonuses (SIM block of
+  completeResearch: tech flag, upgrade counters INCLUDING the affects++ →
+  set(level) → explicit-id++ double-increment quirk, retro-apply to infantry/
+  vehicle branch lists, sentinel range def-clone). Presentation-only code
+  (tints, orb fly, alerts) stayed in the scene; the empty deepWarren find
+  block was dead code and was not carried over.
+- verify-combat-golden.cjs 13→17 checks: SHOT-ORACLE (64 combos vs
+  independent recompute), SPAWN-BONUS-PINS, RESEARCH-PINS (pins the counter
+  quirk + Math.max no-clobber + team filter + def-clone), RETRO-IN-SCENARIO
+  (mid-fight Weapons-2 at tick 90 on live units). Scenario now runs P1
+  upgraded (w1/a1 + plating) and research fires DURING the replay.
+- Economy golden unchanged hash (91cd7fc1) after wiring its spawnUnit through
+  the same kernel — single-source discipline without pin churn.
+- Harness lesson 1 (smooth-move gate): J waypoint scan searched LEFT of the
+  blob and passed only on lucky camera/map rolls; on left-edge spawn maps the
+  waypoint projected off-screen (x<0) and the click never happened. Fixed:
+  scan down-right, require the waypoint inside camera worldView (clickable).
+  Lesson 2 (suite runner): a down QA server turns every browser gate RED
+  with misleading errors — run-regression-263.sh now aborts fast on
+  non-200 preflight instead of burning 11 minutes.
+- Suite 43/43 GREEN incl. teardown-hash 10/10 + replay parity (kernel
+  extraction verified behavior-identical). Released as v2.71.0.
