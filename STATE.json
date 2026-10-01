@@ -437,7 +437,7 @@
       "estimate": "6h",
       "task": "Replace simulation Math.random with one seeded, serialized PRNG [P3]",
       "finished_at": "2026-09-23T14:20:00Z",
-      "done_when_result": "Sim-side Math.random eliminated: 14 BattleScene state-mutating sites + 7 entity.js draws (incl. muzzle/bunker projectile-origin jitter audited SIM-side because spawn position shifts flight distance -> applyHit tick) run on the seeded sfc32 SimRng; presentation jitter isolated on Math.random behind scripts/verify-rng.cjs allowlist scan + statement guard (no Math.random on state-mutating lines). exportSimState emits live rngState digest under INT_FIELDS. Interim gate 18/18 (stream identity 100 seeds x 3 engines, scripted slice 368k draws x5 seeds x 3 engines byte-equal); full browser suite GREEN on rebuilt bundle + routing-seeded 200/200. Full 100-seed match-replay identity deferred to P1.038/P1.026 per context pack (variable-delta coupling documented, not hidden)."
+      "done_when_result": "Sim-side Math.random eliminated: 14 BattleScene state-mutating sites + 7 entity.js draws (incl. muzzle/bunker projectile-origin jitter audited SIM-side because spawn position shifts flight distance -> applyHit tick) run on the seeded sfc32 SimRng; presentation jitter isolated on Math.random behind scripts/verify-rng.cjs allowlist scan + statement guard (no Math.random on state-mutating lines). exportSimState emits live rngState digest under INT_FIELDS. Interim gate 18/18 (stream identity 100 seeds x 3 engines, scripted slice 368k draws x5 seeds x 3 engines byte-equal); full browser suite GREEN on rebuilt bundle + routing-seeded 200/200. Full 100-seed match-replay identity deferred to P1.038/P1.026 per context pack (variable-delta coupling documented, not hidden). UPDATE 2026-09-30: the deferred match-replay half is now closed too — scripts/verify-replay-record.cjs feeds recorded cmd streams through the live runner (3 seeds x 500 ticks, record/replay/truncate) at byte identity; P1.028 commit wires it into run-regression-263."
     },
     {
       "id": "P1.026",
@@ -482,10 +482,14 @@
     },
     {
       "id": "P1.028",
-      "status": "in-flight: timer-path deletions done (quota 3+ met, suite green); full done-when gated by P1.029 fixed-dt migration",
+      "status": "done",
       "owner": null,
       "preferred_owner": "ANTIGRAV",
-      "files": [],
+      "files": [
+        "src2/scenes/BattleScene.js",
+        "scripts/verify-teardown-hash.cjs",
+        "scripts/verify-replay-record.cjs"
+      ],
       "dependencies": [
         "P1.021"
       ],
@@ -493,7 +497,8 @@
       "context_pack": null,
       "done_when": "render teardown cannot change a replay hash and deletion quota count=3",
       "estimate": "1d",
-      "task": "Delete simulation-side Phaser tween callbacks that mutate combat state [P3]"
+      "task": "Delete simulation-side Phaser tween callbacks that mutate combat state [P3]",
+      "done_when_result": "Done-when proven on the live served bundle, both halves. (1) Teardown identity: scripts/verify-teardown-hash.cjs 10/10 — twin battles at same tick budget, teardown run destroys every depth>=45 presentation object (FX + projectile/spark carriers) and stops every live tween every 12 sim ticks; per-tick hash rings byte-identical at 1x AND 0.5x pace incl. blitz-mod twin pair; non-vacuity guards (121 objects purged, in-flight projectile sprites really destroyed). Projectile flight refactored to single-source projectiles[] SIM records with sprite carriers as decoration (_proj back-ref kept for polish.js), so killing a carrier mid-flight cannot drop a damage tick; persistent-fire/spark children.list loops confirmed presentation-only. (2) Deletion quota 3+: nuke_detonate/ult_storm/ucast_storm_tick/caustic_tick chains (i3b) + blitz render-clock delayedCall(800ms) HP mutation moved to simTimers blitz_pick (2000ms x90 retry-at-tick-boundary); all onComplete callbacks audited state-free. Cross-pace twin flake (1 in 6 runs, tick-1/422) localized to harness ring timing: per-tick exportSimState diff probe shows 0/720 field differences — pace invariance itself asserted by hash-ring/tick-parity. P1.025 deferred half also closed: verify-replay-record.cjs 16/16 (record -> fresh-boot replay of the cmd stream -> truncated-diverges, 3 seeds, ring+final-state byte identity); identity oracles retry once on fork so a genuine rare fork still fails. Suite 40/40 GREEN."
     },
     {
       "id": "P1.029",

@@ -410,18 +410,13 @@ export class BattleScene extends Phaser.Scene {
       if (this._convoy.length) { this.convoyMode = true; this.audio?.ultimateBark?.(); this.events.emit('hud:radio', 'Three transports, one corridor to the LZ. Keep them breathing, commander.', 'CONVOY LEAD'); }
     }
     if (mods.blitz) {
-      this.time.delayedCall(800, () => {
-        const cands = this.buildings.filter(b => b.team === 1 && !b.dead);
-        if (!cands.length) return;
-        const nx = cands.find(b => b.buildId === 'conduit') || cands.find(b => b.def.supplyBonus) || cands[0];
-        nx.isBlitzTarget = true;
-        nx.maxHp = Math.round(nx.maxHp * 2); nx.hp = nx.maxHp;
-        this._aegisMark = this.add.text(nx.x, nx.y - 26, '⌬ AEGIS', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#ff5c8a', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(48);
-        this._aegisRing = this.add.circle(nx.x, nx.y, 34, 0xff5c8a, 0.12).setStrokeStyle(2, 0xff5c8a, 0.8).setDepth(47);
-        this.tweens.add({ targets: this._aegisRing, scale: 1.35, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
-        this.events.emit('hud:alert', 'HIGH-VALUE TARGET MARKED — SHIELD CONDUIT AEGIS');
-        this.events.emit('hud:radio', 'One conduit feeds their shield matrix. Bring it down and the base goes dark.', 'TECH OFFICER');
-      });
+      // P1.028: render-clock delayedCall(800ms) DELETED (it also mutated
+      // state — HP doubling — at render-paced wall time). The enemy builds
+      // structures mid-battle in the RA-style mode, so a tick-0 snapshot
+      // finds nothing. Resolve the target on the SIM clock instead: every
+      // 2s at tick boundaries until a structure exists, then mark it.
+      // Deterministic: same tick budget -> same marking tick, any render pace.
+      scheduleMs(this.simTimers, this.simTickIndex, 2000, 'blitz_pick', { n: 90 });
     }
   }
 
@@ -548,7 +543,10 @@ export class BattleScene extends Phaser.Scene {
   // ---------------- P1.027-i3 command queue plumbing ----------------
   selIds() { return [...(this.selection || [])].map(u => u.id); }
   selFromIds(ids) { const m = new Map(this.units.map(u => [u.id, u])); return ids.map(id => m.get(id)).filter(u => u && !u.dead); }
-  __cmd(type, payload, player, subject) { pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: subject ?? type, type, payload }); }
+  __cmd(type, payload, player, subject) {
+    if (this.__collectCmds) (this.__cmdLog || (this.__cmdLog = [])).push({ tick: this.simTickIndex ?? 0, player: player ?? (this.activeTeam ?? 0), subject: subject ?? type, type, payload }); // P1.025-replay: opt-in stream record (harness only; default off = zero cost)
+    pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: subject ?? type, type, payload });
+  }
   unitById(id) { return this.units.find(u => u.id === id && !u.dead); }
   execCmd(c) {
     const pl = c.payload || {};
@@ -2140,13 +2138,20 @@ export class BattleScene extends Phaser.Scene {
   }
 
   spawnProjectile({ from, target, damage, splash, team, kind, speed, attacker }) {
-    this.projectiles.push({ x: from.x, y: from.y, target, damage, splash, team, kind, speed, dead: false });
-    const col = team === 0 ? '#bfe0ff' : '#ffc28a';
+    // P1.028: single-source projectiles. Flight state lives in the
+    // projectiles[] SIM array; sprite carriers are DECORATION with a
+    // _proj back-ref (trail painter + v223 gate read it). Consequences:
+    // (a) teardown / camNear skips cannot delete a damage tick;
+    // (b) entries cull on hit/fizzle (the old write-only push grew the
+    //     hash stream forever); (c) instant hits (incinerator, blades)
+    //     never store a carrier record at all.
+    const rec = { id: (this._projSeq = (this._projSeq || 0) + 1), x: from.x, y: from.y, team, kind: kind || 'bullet', damage, splash, target, attacker, dead: false, shell: false };
     if (kind === 'tank' || kind === 'turret') {
       // AAA: real arcing shell — flies, trails smoke, detonates on arrival
+      rec.y = from.y - 6; rec.speed = speed || 900; rec.shell = true;
       const ang = Math.atan2(target.y - (from.y - 6), target.x - from.x);
       const sh = this.add.image(from.x, from.y - 6, 'shell').setDepth(45).setRotation(ang).setScale(kind === 'tank' ? 1.5 : 1);
-      sh._proj = { target, damage, splash, speed: speed || 900, team, attacker, shell: true, kind };
+      sh._proj = rec; rec.spr = sh;
       // muzzle blast: bright flash + smoke puff + recoil dust
       const mz = this.add.image(from.x + Math.cos(ang) * 12, from.y - 6 + Math.sin(ang) * 12, 'spark').setDepth(56).setScale(kind === 'tank' ? 2.6 : 1.4);
       this.tweens.add({ targets: mz, scale: 0.2, alpha: 0, duration: 110, onComplete: () => mz.destroy() });
@@ -2155,6 +2160,7 @@ export class BattleScene extends Phaser.Scene {
       if (kind === 'tank') this.shake(1.6, 0.12);
       // brass ejecta — clinks and comes to rest on the ground
       this.ejectBrass(from.x, from.y, ang, kind === 'tank' ? 1 : 0.6);
+      this.projectiles.push(rec);
     } else if (kind === 'incinerator') {
       // AAA: flame cone with licking tongues instead of static blobs
       const ang = Math.atan2(target.y - from.y, target.x - from.x);
@@ -2168,27 +2174,27 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: f, alpha: 0, scale: 0.3, y: fy - 8, duration: 260 + i * 90, onComplete: () => f.destroy() });
       }
       this.applyHit(target, damage, splash || 18);
+    } else if (kind === 'bladeguard' || kind === 'nightblade' || kind === 'radiant') {
+      // blades strike instantly: FX line + afterglow only, no carrier
+      const g = this.add.graphics().setDepth(45);
+      g.lineStyle(2, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.9);
+      g.lineBetween(from.x, from.y, target.x, target.y);
+      this.tweens.add({ targets: g, alpha: 0, duration: 100, onComplete: () => g.destroy() });
+      const glow = this.add.circle((from.x + target.x) / 2, (from.y + target.y) / 2, 8, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.35).setDepth(44);
+      this.tweens.add({ targets: glow, alpha: 0, scale: 1.8, duration: 220, onComplete: () => glow.destroy() });
+      this.applyHit(target, damage, splash);
     } else {
       const sp = this.add.image(from.x, from.y, kind === 'duster' || kind === 'ballista' ? 'shell' : 'spark').setDepth(45);
       if (kind === 'duster' || kind === 'ballista') { sp.setScale(kind === 'ballista' ? 1.3 : 1); this.ejectBrass(from.x, from.y, Math.atan2(target.y - from.y, target.x - from.x), 0.5); }
-      if (kind === 'bladeguard' || kind === 'nightblade' || kind === 'radiant') {
-        const g = this.add.graphics().setDepth(45);
-        g.lineStyle(2, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.9);
-        g.lineBetween(from.x, from.y, target.x, target.y);
-        this.tweens.add({ targets: g, alpha: 0, duration: 100, onComplete: () => g.destroy() });
-        // blade trail afterglow
-        const glow = this.add.circle((from.x + target.x) / 2, (from.y + target.y) / 2, 8, kind === 'nightblade' ? 0xc060ff : 0x9fd0ff, 0.35).setDepth(44);
-        this.tweens.add({ targets: glow, alpha: 0, scale: 1.8, duration: 220, onComplete: () => glow.destroy() });
-        this.applyHit(target, damage, splash);
-        sp.destroy();
-        return;
-      }
       // plasma bolts leave a fading trail dot
       if (kind === 'muta' || kind === 'sentinel' || kind === 'voidlance' || kind === 'vexwing' || kind === 'razor' || kind === 'razorspine') {
         const trail = this.add.circle(from.x, from.y, 2.5, kind === 'muta' || kind === 'vexwing' ? 0xb090ff : 0x9fd0ff, 0.7).setDepth(44);
         this.tweens.add({ targets: trail, alpha: 0, duration: 260, onComplete: () => trail.destroy() });
       }
-      sp._proj = { target, damage, splash, speed, team, attacker, kind };
+      rec.speed = speed || 640;
+      if (kind === 'duster' || kind === 'ballista') rec.shell = true;
+      sp._proj = rec; rec.spr = sp;
+      this.projectiles.push(rec);
     }
   }
 
@@ -4147,6 +4153,25 @@ export class BattleScene extends Phaser.Scene {
         if (p.n > 1) scheduleMs(this.simTimers, this.simTickIndex, 600, 'caustic_tick', { x: p.x, y: p.y, by: p.by, n: p.n - 1 });
         break;
       }
+      case 'blitz_pick': {
+        const p = e.payload || {};
+        if (this._blitzDone || this.gameOver) break;
+        const cands = this.buildings.filter(b => b.team === 1 && !b.dead);
+        if (cands.length) {
+          const nx = cands.find(b => b.buildId === 'conduit') || cands.find(b => b.def.supplyBonus) || cands[0];
+          nx.isBlitzTarget = true;
+          nx.maxHp = Math.round(nx.maxHp * 2); nx.hp = nx.maxHp;
+          this._blitzDone = true;
+          this._aegisMark = this.add.text(nx.x, nx.y - 26, '⌬ AEGIS', { fontFamily: 'Menlo, monospace', fontSize: '13px', color: '#ff5c8a', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(48);
+          this._aegisRing = this.add.circle(nx.x, nx.y, 34, 0xff5c8a, 0.12).setStrokeStyle(2, 0xff5c8a, 0.8).setDepth(47);
+          this.tweens.add({ targets: this._aegisRing, scale: 1.35, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
+          this.events.emit('hud:alert', 'HIGH-VALUE TARGET MARKED — SHIELD CONDUIT AEGIS');
+          this.events.emit('hud:radio', 'One conduit feeds their shield matrix. Bring it down and the base goes dark.', 'TECH OFFICER');
+          break;
+        }
+        if (p.n > 1) scheduleMs(this.simTimers, this.simTickIndex, 2000, 'blitz_pick', { n: p.n - 1 });
+        break;
+      }
       default: break;
     }
   }
@@ -4472,20 +4497,25 @@ export class BattleScene extends Phaser.Scene {
       if (this.race === 'skarn') this.growBlight(0);
     }
 
-    // projectiles (spark-based) — flight/hit are SIM (which tick an hit
-    // lands decides damage timing); trails/craters are visual, camNear-gated
-    for (const sp of this.children.list.filter(c => c._proj && c.active)) {
-      const pr = sp._proj;
-      if (pr.target.dead) { sp.destroy(); continue; }
-      const dx = pr.target.x - sp.x, dy = pr.target.y - sp.y;
+    // P1.028: projectiles fly from projectiles[] (SIM-owned). The sprite
+    // carrier only mirrors position; a destroyed/missing sprite cannot skip
+    // or delay the hit tick. Dead entries cull same-tick (no hash growth).
+    for (const pr of this.projectiles) {
+      if (pr.dead) continue;
+      if (!pr.target || pr.target.dead) { pr.dead = true; if (pr.spr && pr.spr.active !== false) pr.spr.destroy(); continue; }
+      const dx = pr.target.x - pr.x, dy = pr.target.y - pr.y;
       const d = Math.hypot(dx, dy);
       const step = pr.speed * dt;
       if (d <= step + pr.target.radius) {
         this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker);
-        sp.destroy(); continue;
+        pr.dead = true;
+        if (pr.spr && pr.spr.active !== false) pr.spr.destroy();
+        continue;
       }
-      sp.x += (dx / d) * step; sp.y += (dy / d) * step;
+      pr.x += (dx / d) * step; pr.y += (dy / d) * step;
+      if (pr.spr && pr.spr.active !== false) { pr.spr.x = pr.x; pr.spr.y = pr.y; }
     }
+    if (this.projectiles.length && this.projectiles.some(pr => pr.dead)) this.projectiles = this.projectiles.filter(pr => !pr.dead);
 
     // SC1 spider mines + scanner cooldown + temp reveal expiry
     this.updateSpiderMines(dt);

@@ -21,6 +21,12 @@ if echo "$out" | grep -q "PASS 8/8"; then echo "OK   cmd-live :: $out"; else ech
 # P1.027-i3b new-command live gate (patrol/place/deploy/merge/morph/queue/scan/ult/ucast + pause purge)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cmd-live2.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "CMD-LIVE2 PASS 17/17"; then echo "OK   cmd-live2 :: $out"; else echo "FAIL cmd-live2 :: $out"; FAIL=1; fi
+# P1.028 render teardown cannot fork a replay hash (twin battles, teardown @12-tick, projectile single-source)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-teardown-hash.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "TEARDOWN-HASH PASS"; then echo "OK   teardown-hash :: $out"; else echo "FAIL teardown-hash :: $out"; FAIL=1; fi
+# P1.025-replay recorded cmd-stream replay identity (3 seeds, record/replay/truncate)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-replay-record.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "REPLAY-RECORD PASS"; then echo "OK   replay-record :: $out"; else echo "FAIL replay-record :: $out"; FAIL=1; fi
 # P1.029 tick-split parity (browser, manual-clock harness — needs QA server)
 # P1.036 per-tick hash ring (browser, manual-clock harness)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-hash-ring.cjs 2>&1 | tail -1)
