@@ -44,6 +44,9 @@ if echo "$out" | grep -q "RENDER-ADAPTER PASS"; then echo "OK   render-adapter :
 # P1.034 net-side command queue: shuffled/duplicate/gapped arrival must reproduce canonical execution order + hash (kernel + live identity)
 out=$(node scripts/verify-netcmds.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "NETQ PASS"; then echo "OK   netcmds :: $out"; else echo "FAIL netcmds :: $out"; FAIL=1; fi
+# P1.035 replay format: SCCR/1 envelope must round-trip a 10-minute replay losslessly and refuse corruption/wrong-map/wrong-data
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-replay-format.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "REPLAY-FORMAT PASS"; then echo "OK   replay-format :: $out"; else echo "FAIL replay-format :: $out"; FAIL=1; fi
 # P1.039 player-economy chain (browser, ~3 min: deploy + train + 100 s hands-off mining)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-economy-live.cjs 2>&1 | tail -3)
 if echo "$out" | grep -q "ACCEPTANCE PASS"; then echo "OK   economy-live :: chain hands-off"; else echo "FAIL economy-live :: $out"; FAIL=1; fi

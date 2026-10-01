@@ -600,7 +600,7 @@
   },
   {
    "id": "P1.035",
-   "status": "todo",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -611,7 +611,8 @@
    "context_pack": null,
    "done_when": "schema round-trips a 10-minute replay losslessly and rejects mismatched content hashes",
    "estimate": "1d",
-   "task": "Define replay header, command stream, seed, map hash, data hash, and checksum format [P3]"
+   "task": "Define replay header, command stream, seed, map hash, data hash, and checksum format [P3]",
+   "note": "closed 2026-10-01: SCCR/1 replay format (src2/engine/replayFormat.js pure kernel): header(seed,ticks,mapHash,dataHash,cmdCount) + spawn fixtures + tick-stamped command stream + trailing FNV checksum. Two refusal classes kept distinct — checksum catches any corruption/edit; content hashes COMPARED against local terrain+balance, so wrong-map/wrong-balance replays refuse even when re-signed. Gate verify-replay-format 7/7: 10-min/2.3k-cmd fixture lossless (deep-equal + byte re-encode), 40-byte corruption sweep refused, re-signed version/magic/CC/map/data attacks refused with exact error classes, --jitless digest match, live-recorded stream round-trips + wrong-map refused. Suite 47/47 GREEN."
   },
   {
    "id": "P1.036",
@@ -647,7 +648,7 @@
   },
   {
    "id": "P1.038",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -852,7 +853,7 @@
   },
   {
    "id": "P1.051",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],

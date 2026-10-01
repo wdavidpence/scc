@@ -210,3 +210,32 @@
   per-player prefix AFTER drainNet had already popped the whole batch
   (next had advanced). Kernel was right, probe was wrong — same lesson as
   P1.032: assert the invariant, not a probe artifact.
+
+## P1.035 DONE 2026-10-01 — SCCR/1 replay format (lossless round-trip + content-hash refusal)
+- New src2/engine/replayFormat.js (pure kernel, zero src2 consumers yet —
+  P1.038 runner + P1.050 golden replays are the planned consumers).
+- Envelope: header (version, seed, ticks, hashEvery, mapHash, dataHash,
+  cmdCount) + spawn fixtures + one line per tick-stamped command
+  (tick|player|type|subject|payloadJSON) + trailing FNV-1a checksum over
+  every byte above. Text format = diffable, 8 MB-capped at 10 min.
+- Two refusal classes kept deliberately distinct: the CHECKSUM catches any
+  corruption or edit anywhere (seed, tick stamps, payloads — first defense
+  is refuse, never hand-decode tampered semantics); CONTENT HASHES are
+  compared against local state — a replay must not run against a terrain
+  bake or a balance table it was not recorded on. That is what turns golden
+  replays into guard rails instead of time bombs when terrain gen or unit
+  stats change (a stat tweak flips the canonical data hash -> refusal).
+- Losslessness contract proven: decode(encode(x)) deep-equal + byte-identical
+  re-encode, incl. fractional .125-grid waypoints and nested payloads; JSON
+  shortest-roundtrip preserves doubles; no re-keying anywhere.
+- Gate scripts/verify-replay-format.cjs (7 checks): 600 s/14400-tick 2.3k
+  command fixture round-trips; 40 single-byte corruption sites all refused;
+  RE-SIGNED attacks (checksum recomputed) still refused for version/magic/
+  cmd-count/map/data classes with exact error codes; --jitless cross-engine
+  digest match; live-recorded __cmdLog stream (~420 real commands) from a
+  running match round-trips + wrong-map refused. Wired into suite 46->47;
+  full suite 47/47 GREEN zero flakes.
+- Harness lessons: seed swap is checksum-class by design (seed covered, no
+  separate semantic seed check) — assert the REAL rejection path; object
+  round-trip comparison must be field-wise (key insertion order differs
+  between recorded and decoded shapes; byte-equal re-encode is the proof).
