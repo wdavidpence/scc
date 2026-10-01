@@ -303,17 +303,27 @@ export class Unit {
       this.flowField = null; this.needsPath = true;
       return false;
     }
-    const step = this.speed * dt;
-    let vx = f.x, vy = f.y;
-    // separation from neighbors — DEF-MOVE-1: capped like stepAlongPath (P0.39).
-    // Uncapped crowd push rotated/cancelled the goal drive (pair oscillation).
+    // DEF-MOVE-2: accel ramp + heading low-pass (parity with stepAlongPath's
+    // ramp feel). Adjacent-tile gradients can alternate every tick; the
+    // low-pass kills the bang-bang weave, the ramp smooths start/stop.
     const sep = this.world.separationVector(this);
     let sx = sep.x * 0.9, sy = sep.y * 0.9;
     const sm2 = Math.hypot(sx, sy);
     if (sm2 > 0.75) { const kk = 0.75 / sm2; sx *= kk; sy *= kk; }
-    vx += sx; vy += sy;
+    let vx = f.x + sx, vy = f.y + sy;
+    this._curSpeed = this._curSpeed || 0;
+    this._curSpeed += (this.speed - this._curSpeed) * Math.min(1, 3.4 * dt);
+    const stp = this._curSpeed * dt;
+    const l0 = Math.hypot(vx, vy) || 1;
+    vx /= l0; vy /= l0;
+    if (this._flowH) {
+      const k = Math.min(1, 7 * dt); // ~0.15 s settle at 24 Hz
+      vx = this._flowH.x + (vx - this._flowH.x) * k;
+      vy = this._flowH.y + (vy - this._flowH.y) * k;
+    }
     const l = Math.hypot(vx, vy) || 1;
-    this.setPos(this.x + (vx / l) * step, this.y + (vy / l) * step);
+    this._flowH = { x: vx / l, y: vy / l };
+    this.setPos(this.x + (vx / l) * stp, this.y + (vy / l) * stp);
     this.face(vx, vy);
     this.moving = true;
     return field.distAt(this.x, this.y) <= 1.2;
