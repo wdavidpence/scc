@@ -6,8 +6,9 @@ import { createMatchCmds, pushCmd, drainTo } from '../engine/cmdQueue.js';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_H } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
-import { Unit, Building, effectiveDamage } from '../engine/entity.js';
+import { Unit, Building } from '../engine/entity.js';
 import * as EC from '../engine/simEconomy.js';
+import * as SC from '../engine/simCombat.js';
 import { createAllTextures } from '../engine/art.js';
 import { createBuildingsAAA } from '../engine/art3d.js';
 import { createTerrainArt } from '../engine/terrainArt.js';
@@ -2268,21 +2269,9 @@ export class BattleScene extends Phaser.Scene {
       if (splash >= 20) this.shake(6, 0.35);
       const boom = this.add.circle(tx, ty, splash, 0xff9c3c, 0.25).setDepth(46);
       this.tweens.add({ targets: boom, scale: 1.6, alpha: 0, duration: 200, onComplete: () => boom.destroy() });
-      for (const u of this.units) {
-        if (u.dead || u.team === undefined) continue;
-        if (u === target) continue;
-        const sd = Math.hypot(u.x - tx, u.y - ty);
-        if (sd <= splash + u.radius) {
-          // SC1-style falloff: full damage at center -> ~40% at blast edge
-          const falloff = Math.max(0.4, 1 - 0.6 * Math.min(1, sd / Math.max(1, splash)));
-          u.takeDamage(Math.ceil(damage * falloff), attacker);
-        }
-      }
-      for (const b of this.buildings) {
-        if (b.dead || b.team === target.team) continue;
-        const sd = Math.hypot(b.x - tx, b.y - ty);
-        if (sd <= splash + 16) b.takeDamage(Math.ceil(damage * Math.max(0.3, 0.5 * (1 - 0.5 * Math.min(1, sd / Math.max(1, splash))))), attacker);
-      }
+      // P1.031: blast damage pass → SC.splashPass (verbatim unit+building loops,
+      // falloff curves and range checks live in the kernel now)
+      SC.splashPass(this, target, damage, splash, attacker);
     }
   }
 
@@ -3642,7 +3631,7 @@ export class BattleScene extends Phaser.Scene {
 
   // SC1 burrower spike: line attack that detonates through ground units between burrower and target
   burrowerStrike(burrower, target) {
-    const dmg = Math.max(1, effectiveDamage(burrower, target));
+    const dmg = Math.max(1, SC.effectiveDamage(burrower, target)); // P1.031 kernel
     const dx = target.x - burrower.x, dy = target.y - burrower.y;
     const dist = Math.hypot(dx, dy) || 1;
     const nx = dx / dist, ny = dy / dist;
@@ -3664,7 +3653,7 @@ export class BattleScene extends Phaser.Scene {
       const t = (ux * nx + uy * ny);
       if (t < 0 || t > dist + hitR) continue;
       const px = ux - nx * t, py = uy - ny * t;
-      if (Math.hypot(px, py) <= hitR) u.takeDamage(t === dist ? dmg : Math.round(dmg * 0.8), burrower);
+      if (Math.hypot(px, py) <= hitR) u.takeDamage(t === dist ? dmg : SC.secondaryDamage(dmg), burrower);
     }
   }
 
@@ -4440,25 +4429,11 @@ export class BattleScene extends Phaser.Scene {
       if (this.race === 'skarn') this.growBlight(0);
     }
 
-    // P1.028: projectiles fly from projectiles[] (SIM-owned). The sprite
+    // P1.028 projectiles fly from projectiles[] (SIM-owned). The sprite
     // carrier only mirrors position; a destroyed/missing sprite cannot skip
-    // or delay the hit tick. Dead entries cull same-tick (no hash growth).
-    for (const pr of this.projectiles) {
-      if (pr.dead) continue;
-      if (!pr.target || pr.target.dead) { pr.dead = true; if (pr.spr && pr.spr.active !== false) pr.spr.destroy(); continue; }
-      const dx = pr.target.x - pr.x, dy = pr.target.y - pr.y;
-      const d = Math.hypot(dx, dy);
-      const step = pr.speed * dt;
-      if (d <= step + pr.target.radius) {
-        this.applyHit(pr.target, pr.damage, pr.splash, pr.attacker);
-        pr.dead = true;
-        if (pr.spr && pr.spr.active !== false) pr.spr.destroy();
-        continue;
-      }
-      pr.x += (dx / d) * step; pr.y += (dy / d) * step;
-      if (pr.spr && pr.spr.active !== false) { pr.spr.x = pr.x; pr.spr.y = pr.y; }
-    }
-    if (this.projectiles.length && this.projectiles.some(pr => pr.dead)) this.projectiles = this.projectiles.filter(pr => !pr.dead);
+    // or delay the hit tick. P1.031: flight loop single-sourced in
+    // SC.stepProjectiles (headless golden runs the SAME loop).
+    SC.stepProjectiles(this, dt, (t, d, s, a) => this.applyHit(t, d, s, a));
 
     // SC1 spider mines + scanner cooldown + temp reveal expiry
     this.updateSpiderMines(dt);

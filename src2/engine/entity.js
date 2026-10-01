@@ -1,7 +1,8 @@
 // Core entities for SCC2: Unit, Building, Projectile, effects.
 import Phaser from 'phaser';
-import { UNITS, BUILDINGS, TECHS, SIZE_MULT, TILE } from '../data/sc1.js';
+import { UNITS, BUILDINGS, TECHS, TILE } from '../data/sc1.js';
 import { liveProjectiles } from './liveProjectiles.js';
+import * as SC from './simCombat.js';
 
 let nextId = 1;
 
@@ -21,14 +22,10 @@ export function teamColorHex(team) {
   return team === 0 ? '#4ea1ff' : team === 1 ? '#ff7b2e' : '#ff4fa3';
 }
 
-export function effectiveDamage(attacker, target) {
-  const mult = SIZE_MULT[attacker.def.attackType]?.[target.def.size] ?? 1;
-  const armor = target.def.armor + (target.bonusArmor || 0);
-  let dmg = (attacker.def.damage + (attacker.bonusDamage || 0)) * mult - armor;
-  // v2.34 SC1 high ground: ANY attacker standing on higher terrain gets +2 damage bonus (was team-0 only)
-  if (attacker.world?.elevAt && attacker.world.elevAt(attacker.x, attacker.y) > attacker.world.elevAt(target.x, target.y)) dmg += 2;
-  return Math.max(1, Math.round(dmg));
-}
+// P1.031: combat math is single-sourced in simCombat.js (shared by the live
+// scene and the headless combat golden — a fork between them is a bug).
+// Re-exported here so existing importers keep working unchanged.
+export { effectiveDamage } from './simCombat.js';
 
 export class Unit {
   constructor(world, team, kind, x, y) {
@@ -661,7 +658,7 @@ export class Unit {
       this.world.audio?.psiCast?.();
       return;
     }
-    const dmg = effectiveDamage(this, target);
+    const dmg = SC.effectiveDamage(this, target);
     // SC1: unit-level veterancy damage aura
     const lvl = this.level || 0;
     const volley = this.def.attacksPerVolley || 1;
@@ -968,17 +965,12 @@ export class Unit {
   takeDamage(amount, attacker) {
     if (this.dead) return;
     const wasShielded = this.shield > 0;
-    if (this.shield > 0) {
-      const s = Math.min(this.shield, amount);
-      this.shield -= s; amount -= s;
-      this.shieldRegenDelay = 5;
-      // shield impact ripple
-      if (s > 0 && this.world.camNear && this.world.camNear(this.x, this.y)) {
-        const rip = this.world.add.circle(this.x, this.y, this.radius + 4, 0x4ea1ff, 0).setStrokeStyle(1.5, 0x8ab4ff, 0.9).setDepth(55);
-        this.world.tweens.add({ targets: rip, scale: 1.5, alpha: 0, duration: 240, onComplete: () => rip.destroy() });
-      }
+    // P1.031: shield/hp absorption math → SC.absorb (identical arithmetic)
+    const absorbed = SC.absorb(this, amount);
+    if (absorbed > 0 && this.world.camNear && this.world.camNear(this.x, this.y)) {
+      const rip = this.world.add.circle(this.x, this.y, this.radius + 4, 0x4ea1ff, 0).setStrokeStyle(1.5, 0x8ab4ff, 0.9).setDepth(55);
+      this.world.tweens.add({ targets: rip, scale: 1.5, alpha: 0, duration: 240, onComplete: () => rip.destroy() });
     }
-    this.hp -= amount;
     // v2.35b gap 95: SC1 damaged-unit tell — RED flash (replaces the plain white blink) + portrait flicker
     this._dmgFlashUntil = performance.now() + 320;
     if (!this._dmgTinting) {
@@ -1197,11 +1189,7 @@ export class Building {
 
   takeDamage(amount, attacker) {
     if (this.dead) return;
-    if (this.shield > 0) {
-      const s = Math.min(this.shield, amount);
-      this.shield -= s; amount -= s;
-    }
-    this.hp -= amount;
+    SC.absorb(this, amount); // P1.031 — buildings never set shieldRegenDelay (kernel guard preserves that)
     this.sprite.setTint(0xffffff);
     this.world.time.delayedCall(60, () => { if (this.sprite && !this.dead) this.sprite.clearTint(); });
     if (this.hp <= 0) this.die();
@@ -1339,8 +1327,8 @@ export class Building {
         const range = d.range * TILE;
         const foe = this.world.findNearestEnemy(this.x, this.y, range, d.targets === 'air' ? true : undefined, d.targets === 'air' ? false : d.targets === 'ground' ? true : undefined, this.team);
         if (foe) {
-          const mult = SIZE_MULT[d.attackType]?.[foe.def.size] ?? 1;
-          this.world.spawnProjectile({ from: { x: this.x, y: this.y - 10 }, target: foe, damage: Math.max(1, Math.round(d.damage * mult - foe.def.armor)), splash: 0, team: this.team, kind: 'turret', speed: 700 });
+          // P1.031: structure shot math → SC.structureShot (identical arithmetic)
+          this.world.spawnProjectile({ from: { x: this.x, y: this.y - 10 }, target: foe, damage: SC.structureShot(d.damage, d.attackType, foe), splash: 0, team: this.team, kind: 'turret', speed: 700 });
           this.attackTimer = d.cooldown;
           this.world.audio?.attack('turret');
         }
@@ -1355,8 +1343,7 @@ export class Building {
         if (foe) {
           for (const g of this.garrison.slice(0, 4)) {
             if (g.dead) continue;
-            const mult = SIZE_MULT[g.def.attackType || gd.attackType]?.[foe.def.size] ?? 1;
-            const dmg = Math.max(1, Math.round((g.def.damage || gd.damage) * mult - foe.def.armor));
+            const dmg = SC.structureShot(g.def.damage || gd.damage, g.def.attackType || gd.attackType, foe);
             this.world.spawnProjectile({ from: { x: this.x + (s01(this.world) * 20 - 10), y: this.y - 8 }, target: foe, damage: dmg, splash: 0, team: this.team, kind: 'marine', speed: 640, attacker: g });
             g._bunkerShot = true;
           }

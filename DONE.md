@@ -84,3 +84,25 @@
 - Verified end-to-end in real Chromium (repro scripts/repro-v4.cjs + permanent gate): rally-pocket 6-marine march went from net 2-8px in 6s (tortuosity 20+) to net 145-160px reaching the target, orders resolving; footprint-locked cluster (worst synthetic case) degrades to idle instead of freezing.
 - Gate: scripts/verify-smooth-move.cjs 2/2 (~50 s, 2 scenarios, travel + no-freeze criteria), wired into run-regression-263.sh browser block.
 - Harness lesson (bit twice): browser gates run under run-regression-263.sh WITHOUT NODE_PATH — require('playwright') via npm root -g (copy the verify-cmd-live.cjs header), otherwise the gate crashes in-suite and passes standalone.
+
+## P1.031-i1 DONE 2026-09-30 — combat-math extraction to simCombat.js
+- New src2/engine/simCombat.js: sizeMult, effectiveDamage (size mult + bonus
+  dmg/armor + high-ground +2), absorb (shield-then-hp, regen-delay only where
+  the property exists — buildings never set it), unitSplashDamage +
+  bldgSplashDamage falloff curves, splashPass (verbatim unit+bldg loops),
+  structureShot (turret + bunker-garrison shot math), secondaryDamage
+  (burrower 0.8 falloff), stepProjectiles (P1.028 flight loop, verbatim).
+- entity.js: local effectiveDamage deleted (re-exported from kernel);
+  Unit/Building.takeDamage absorb → SC.absorb; turret + bunker fire math →
+  SC.structureShot; fireAt/burrowerStrike call the kernel.
+- BattleScene.js: applyHit splash loops → SC.splashPass (pass the REAL target
+  — a surrogate breaks the u===target identity skip); stepSim projectile loop
+  → SC.stepProjectiles. Live and replay now execute the same code.
+- Gate: scripts/verify-combat-golden.cjs 13/13 (~0.3 s): dual-run identity +
+  cross-V8, full-roster DAMAGE-ORACLE (5712 attacker/target pairs vs an
+  independent oracle transcription), absorb/splash/flight endpoint pins, and a
+  real 247-tick firefight replay (turret + splash + shields + ridge +2).
+- Pitfall found while calibrating the gate: TILE is 16, not 24 — a 7-tile
+  turret radius is 112 px; a probe script saved 3 wrong pins. Also:
+  bldgSplash floor is 0.3.
+- Suite: 43/43 GREEN on rebuilt bundle index-uB35jQIA (HEAD-fresh).
