@@ -568,7 +568,7 @@
   },
   {
    "id": "P1.033",
-   "status": "todo",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -579,7 +579,8 @@
    "context_pack": null,
    "done_when": "disabling render has no simulation effect and enabling 144 Hz interpolation adds no state writes",
    "estimate": "2d",
-   "task": "Build render adapters that consume immutable tick snapshots [P1][P3]"
+   "task": "Build render adapters that consume immutable tick snapshots [P1][P3]",
+   "note": "closed 2026-10-01: RenderAdapter (one-tick-behind child-offset interp, display-only) + __renderOff tail kill + three render-paced state writers moved tick-side (coach park, hold settle, skywarden refuel). Gate verify-render-adapter 13/13: byte-identical hash rings + exportSimState across tail-on/render-off/144Hz-interp; suite 45/45 GREEN"
   },
   {
    "id": "P1.034",

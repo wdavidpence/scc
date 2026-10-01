@@ -23,6 +23,7 @@ import { SimSchema } from '../engine/simSchema.js';
 import { SimNum } from '../engine/simNum.js';
 import { SimRng } from '../engine/simRng.js';
 import { SimTerrain } from '../engine/simTerrain.js';
+import { RenderAdapter } from '../engine/renderAdapter.js';
 import { Coach } from '../engine/coach.js';
 import { PolishFX } from '../engine/polish.js';
 
@@ -3973,6 +3974,42 @@ export class BattleScene extends Phaser.Scene {
         }
       }
 
+      // P1.033: state writers that used to run ONCE PER RENDER FRAME in
+      // the __step tail. Cadence-coupled sim mutation is exactly what the
+      // render adapter removes; verbatim semantics at exact 24 Hz cadence.
+      // verify-render-adapter probes all three fire with the tail disabled.
+      if (this.coach && this.coach.active && this.coach.step && !this.coach._minedClick) {
+        // lesson hold: park team-0 workers until the player issues harvest
+        // themselves (was coach.tick; kept out of the render tail)
+        for (const u of this.units) if (u.team === 0 && !u.dead && u.def.worker && u.order && u.order.type === 'harvest') { u.order = null; u.state = 'idle'; }
+      }
+      if (this._holdUntil != null && !this.gameOver) {
+        const remain = Math.ceil(this._holdUntil - this.gameTime);
+        const ho = this.objectives && this.objectives.find(o => o.id === 'hold');
+        if (ho && remain > 0 && remain % 5 === 0 && ho._lastT !== remain) {
+          ho._lastT = remain; ho.text = 'HOLD THE LINE ' + remain + 's';
+          this.events.emit('hud:objectives', this.objectives);
+        }
+        if (remain <= 0 && !this._holdDone) {
+          this._holdDone = true;
+          const k = this.objectives && this.objectives.find(o => o.id === 'hold'); if (k) k.done = true;
+          this.events.emit('hud:objectives', this.objectives);
+          this.audio?.objective();
+          if (!this.mods.boss) this.endGame('victory');
+          else { this.events.emit('hud:alert', 'HOLD COMPLETE — SLAY THE CHAMPION'); this.mods.boss = false; }
+        }
+      }
+      if (this.players[1].supplyUsed >= this.players[1].supplyCap - 1) {
+        const pool = this.buildings.find(b => b.team === 1 && b.buildId === 'broodNest' && b.queue.length === 0);
+        if (pool) pool.queueUnit('skywarden');
+      }
+      if (this.players[0].supplyUsed >= this.players[0].supplyCap - 1 && this.race === 'skarn') {
+        const pool = this.buildings.find(b => b.team === 0 && b.buildId === 'broodNest' && b.queue.length === 0);
+        if (pool && this.canAfford(0, UNITS.skywarden.minerals)) pool.queueUnit('skywarden');
+      }
+
+      if (this.__interp) RenderAdapter.snapshotPair(this.units); // display lag pair, per tick
+
       // P1.036: per-tick canonical hash ring. Records the FINISHED tick
       // (ring index === simTickIndex), 1200 deep = 5 min @24Hz, for P1.037
       // first-divergent-tick diffs and P1.045 checksum exchange. Input:
@@ -3989,6 +4026,19 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     }
+
+    // P1.033 render adapter boundary. Everything below runs on the render
+    // clock and must stay presentation-only: __renderOff skips this whole
+    // tail and the simulation must not notice (scripts/verify-render-adapter
+    // .cjs compares byte-identical hash rings render-off vs render-on).
+    // The state writers that used to live here (skywarden refuel, hold
+    // settle, coach park) were moved into the fixed-tick loop for exactly
+    // that reason — cadence-coupled sim writes are what the adapter removes.
+    if (this.__renderOff) return;
+    this.__tp = (this.__tp || 0) + 1;
+    // one-tick-behind interpolation (display-only child offsets; container +
+    // hash truth untouched — contract in engine/renderAdapter.js)
+    if (this.__interp) RenderAdapter.smoothPass(this.units, this._tickAcc / TICK, this.__ra);
 
     // in-mission radio chatter beats
     if (this.chatter && this._chatterIdx < this.chatter.length && this.gameTime >= this.chatter[this._chatterIdx].t) {
@@ -4095,25 +4145,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // AAA: mission triggers tick moved into __simPassive (per-tick, P1.029)
-
-    // hold-the-line objective countdown
-    if (this._holdUntil != null && !this.gameOver) {
-      const remain = Math.ceil(this._holdUntil - this.gameTime);
-      // v2.70 (#9): live countdown — the static "HOLD 240s" line gave no urgency read
-      const ho = this.objectives && this.objectives.find(o => o.id === 'hold');
-      if (ho && remain > 0 && remain % 5 === 0 && ho._lastT !== remain) {
-        ho._lastT = remain; ho.text = 'HOLD THE LINE ' + remain + 's';
-        this.events.emit('hud:objectives', this.objectives);
-      }
-      if (remain <= 0 && !this._holdDone) {
-        this._holdDone = true;
-        const k = this.objectives.find(o => o.id === 'hold'); if (k) k.done = true;
-        this.events.emit('hud:objectives', this.objectives);
-        this.audio?.objective();
-        if (!this.mods.boss) this.endGame('victory');
-        else { this.events.emit('hud:alert', 'HOLD COMPLETE — SLAY THE CHAMPION'); this.mods.boss = false; }
-      }
-    }
+    // P1.033: hold-the-line countdown + settlement moved into the fixed-tick
+    // loop (endGame/objective completion is sim state, was render-paced).
 
     // enemy AI
     // P1.029: updateAI/updateEscape/updateConvoy moved into the fixed-tick
@@ -4133,17 +4166,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.coach && this.coach.active) this.coach.tick(dt);
 
     // income trickle from assigned gas (simplification: gas income via worker returns only)
-    // supply check
-    for (const b of this.buildings) { if (b.team === 1 && b.built && this.enemyRace === 'skarn' && !b._skywardenChecked) { b._skywardenChecked = true; } }
-    // skarn needs skywardens
-    if (this.players[1].supplyUsed >= this.players[1].supplyCap - 1) {
-      const pool = this.buildings.find(b => b.team === 1 && b.buildId === 'broodNest' && b.queue.length === 0);
-      if (pool) pool.queueUnit('skywarden');
-    }
-    if (this.players[0].supplyUsed >= this.players[0].supplyCap - 1 && this.race === 'skarn') {
-      const pool = this.buildings.find(b => b.team === 0 && b.buildId === 'broodNest' && b.queue.length === 0);
-      if (pool && this.canAfford(0, UNITS.skywarden.minerals)) pool.queueUnit('skywarden');
-    }
+    // P1.033: brood-nest skywarden refuel moved into the fixed-tick loop
+    // (queue fill is sim state, was render-paced).
 
     this.events.emit('hud:tick');
   }

@@ -370,11 +370,10 @@ export class Coach {
     if (!this.active) return;
     const b = this.b, s = this.step;
     if (!s) return;
-    // lesson hold: Unit ctor auto-harvests every spawned worker — park team-0 workers
-    // until the player actually ISSUES the harvest order themselves (one-time teaching)
-    if (!this._minedClick) {
-      for (const u of b.units) if (u.team === 0 && !u.dead && u.def.worker && u.order && u.order.type === 'harvest') { u.order = null; u.state = 'idle'; }
-    }
+    // P1.033: the harvest-lesson worker PARK moved to the fixed-tick loop
+    // in BattleScene.__step (parking = sim state; per render frame it made
+    // worker behavior render-pace dependent). coach.tick keeps only the
+    // hint/marker drawing now. Keep both in sync if you touch the lesson.
     this.g.clear();
     let hx = 0, hy = 0, hr = 0, ok = false;
     if (s.mode === 'button') {

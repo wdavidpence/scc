@@ -160,3 +160,24 @@
   run-regression-263.sh, suite 43→44.
 - Suite 44/44 GREEN twice (one earlier RED was a replay-record contention
   flake: 16/16 standalone and on rerun, zero flakes in final full run).
+
+## P1.033 DONE 2026-10-01 — render adapters on tick snapshots (render-off + 144 Hz identity)
+- New src2/engine/renderAdapter.js: one-tick-behind entity interpolation.
+  Per tick, snapshotPair copies container.x/y into _r0/_r1 display fields;
+  per render frame smoothPass shifts the unit CHILD visuals (sprite/shadow
+  local offsets) by lerp(r0,r1,alpha), alpha = _tickAcc/TICK. Container
+  position — the collision AND hash-observed truth (get x(){container.x},
+  exportSimState q8) — is never written, so interpolation adds zero state.
+- New __renderOff flag: skips the ENTIRE __step render tail. Proved
+  simulation-invisible, together with the writer moves below, by byte-
+  identical per-tick hash rings and final exportSimState across tail-on /
+  render-off / 144 Hz-interp runs of one scripted 16-unit skirmish.
+- Three render-paced STATE writers removed from the tail (they mutated sim
+  state at display cadence — the exact coupling this ticket exists to kill):
+  coach harvest-lesson worker park (was coach.tick), hold-the-line countdown
+  + settlement/endGame, brood-nest skywarden refuel. All now run in the
+  fixed-tick loop verbatim at 24 Hz; render-off probes prove they still fire.
+- Gate scripts/verify-render-adapter.cjs (13 checks): identity family A/B/C
+  + non-vacuity (attrition >=8 kills, tail-skip counter proves tail really
+  off, interp paints >500 moving frames maxOff>1.5px, writer probes).
+  Wired into run-regression-263.sh, suite 44->45. Full suite 45/45 GREEN.
