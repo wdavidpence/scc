@@ -181,3 +181,32 @@
   + non-vacuity (attrition >=8 kills, tail-skip counter proves tail really
   off, interp paints >500 moving frames maxOff>1.5px, writer probes).
   Wired into run-regression-263.sh, suite 44->45. Full suite 45/45 GREEN.
+
+## P1.034 DONE 2026-10-01 — net-side command queue (shuffled-arrival identity)
+- New src2/engine/netCmds.js: pure receive buffer for network command
+  streams. Canonical execution order is content — (dueTick, player, seq) —
+  never arrival time. Per-player seq prefix = causality: a command executes
+  only after every smaller seq in its stream; a missing seq HOLDS the rest
+  of that stream (late retransmit resumes at the right point). Duplicate
+  (player,seq) drops. Same shape as TCP reassembly + frame-delay lockstep:
+  jitter changes latency, not outcome.
+- This is deliberately NOT the local input path: cmdQueue (P1.027) keeps
+  last-arrival-wins coalescing for mouse UX. Net streams must never
+  coalesce — every sender command is authoritative. That asymmetry is the
+  ticket.
+- BattleScene wiring: __net(pkt) feed + tick-head drain right after
+  matchCmds. Default play leaves netBuf undefined — zero cost, local path
+  byte-identical (full suite proves it).
+- Gate scripts/verify-netcmds.cjs (8 checks): P family pure-kernel (12-pkt
+  stream under reversed + 5 seeded-shuffle arrivals => byte-identical exec
+  sequences; dedup; gap-hold prefix rule; --jitless cross-engine digest
+  match via verify-netcmds-selftest.cjs). L family live (12 scripted
+  order/stop/stance packets into the REAL scene in 4 arrival permutations;
+  wrapped-execCmd call order + hashRing + exportSimState identical across
+  all four and different from the no-commands control; gapped-delivery run
+  preserved per-player seq order). Wired into run-regression-263.sh, suite
+  45->46. Full suite 46/46 GREEN, zero flakes.
+- Gate-authoring lesson: P3 initially RED because the assertion checked
+  per-player prefix AFTER drainNet had already popped the whole batch
+  (next had advanced). Kernel was right, probe was wrong — same lesson as
+  P1.032: assert the invariant, not a probe artifact.

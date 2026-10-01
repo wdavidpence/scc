@@ -41,6 +41,9 @@ if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo
 # P1.033 render adapter: render-off + 144 Hz interpolation must be simulation-invisible (byte rings) and the moved tick-side writers must still fire
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-render-adapter.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "RENDER-ADAPTER PASS"; then echo "OK   render-adapter :: $out"; else echo "FAIL render-adapter :: $out"; FAIL=1; fi
+# P1.034 net-side command queue: shuffled/duplicate/gapped arrival must reproduce canonical execution order + hash (kernel + live identity)
+out=$(node scripts/verify-netcmds.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "NETQ PASS"; then echo "OK   netcmds :: $out"; else echo "FAIL netcmds :: $out"; FAIL=1; fi
 # P1.039 player-economy chain (browser, ~3 min: deploy + train + 100 s hands-off mining)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-economy-live.cjs 2>&1 | tail -3)
 if echo "$out" | grep -q "ACCEPTANCE PASS"; then echo "OK   economy-live :: chain hands-off"; else echo "FAIL economy-live :: $out"; FAIL=1; fi

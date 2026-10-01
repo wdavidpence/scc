@@ -584,7 +584,7 @@
   },
   {
    "id": "P1.034",
-   "status": "todo",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -595,7 +595,8 @@
    "context_pack": null,
    "done_when": "shuffled network arrival produces identical execution order and hash",
    "estimate": "1d",
-   "task": "Build a deterministic tick-command queue with stable player and sequence ordering [P1][P3]"
+   "task": "Build a deterministic tick-command queue with stable player and sequence ordering [P1][P3]",
+   "note": "closed 2026-10-01: netCmds.js pure receive kernel (content-ordered (tick,player,seq) drain, dedup, gap-hold, per-player seq prefix = causality) + BattleScene __net feed + tick-head drain. Gate verify-netcmds 8/8: kernel perm/dedup/gap/cross-engine + LIVE identity (canon vs reversed vs 2 shuffles byte-identical exec order + hashRing + exportSimState; gapped delivery preserved order). Suite 46/46 GREEN. Local __cmd path untouched — last-wins coalescing there stays arrival-ordered BY DESIGN; net streams must never coalesce (that asymmetry is the ticket)."
   },
   {
    "id": "P1.035",

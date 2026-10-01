@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import { createTimers, scheduleMs, drain as drainTimers } from '../engine/simTimers.js';
 import { createMatchCmds, pushCmd, drainTo } from '../engine/cmdQueue.js';
+import { createNetBuf, deliver, drainNet } from '../engine/netCmds.js';
 import { UNITS, BUILDINGS, TECHS, TILE, RACE_INFO, BUILD_TIME_SCALE, MAP_W, MAP_H } from '../data/sc1.js';
 import { NavGrid } from '../engine/pathfinding.js';
 import { FlowManager, SpatialHash } from '../engine/flowfield.js';
@@ -552,6 +553,13 @@ export class BattleScene extends Phaser.Scene {
     pushCmd(this.matchCmds, { tick: this.simTickIndex ?? 0, epoch: this.matchCmds.epoch, player: player ?? (this.activeTeam ?? 0), subject: subject ?? type, type, payload });
   }
   unitById(id) { return this.units.find(u => u.id === id && !u.dead); }
+  // P1.034: feed one NETWORK packet {player, seq, tick, type, payload} into
+  // the receive buffer. Any arrival order/duplication is legal — the drain
+  // restores canonical (tick, player, seq) execution order.
+  __net(pkt) {
+    if (!this.netBuf) this.netBuf = createNetBuf();
+    return deliver(this.netBuf, pkt);
+  }
   execCmd(c) {
     const pl = c.payload || {};
     const sel = pl.sel !== undefined ? this.selFromIds(pl.sel) : null;
@@ -3952,6 +3960,13 @@ export class BattleScene extends Phaser.Scene {
       this.gameTime += TICK;
       for (const e of drainTimers(this.simTimers, this.simTickIndex)) this.execSimTimer(e);
       for (const c of drainTo(this.matchCmds, this.simTickIndex)) this.execCmd(c);
+      // P1.034 net-side receive queue: replay/harness/netcode code feeds
+      // packets via __net(); execution order is (dueTick, player, seq) from
+      // CONTENT, never arrival order. Undefined netBuf = default play — the
+      // check costs nothing and the local path is untouched.
+      if (this.netBuf) {
+        for (const c of drainNet(this.netBuf, this.simTickIndex)) this.execCmd(c);
+      }
       this.stepSim(TICK);
       // P1.029: AI decisions, evac window, and convoy orders mutate sim
       // state (orders/spawns/end-state) — they execute on the fixed tick,
