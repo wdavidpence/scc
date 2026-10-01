@@ -7,7 +7,7 @@ FAIL=0
 CODE=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "${SCC_URL:-http://127.0.0.1:4177/scc/}")
 if [ "$CODE" != "200" ]; then echo "ABORT: QA server down at ${SCC_URL:-http://127.0.0.1:4177/scc/} (http $CODE) — start: node scripts/serve-dist.cjs"; exit 1; fi
 # Phase-1 kernel gates (pure Node, no browser)
-for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report verify-replay-runner verify-worker-flow verify-input-purity verify-economy-golden verify-combat-golden; do
+for g in verify-rng verify-fixed-tick verify-input-queue verify-sim-timers verify-order-golden verify-desync-report verify-replay-runner verify-worker-flow verify-input-purity verify-economy-golden verify-combat-golden verify-terrain-golden; do
   out=$(node scripts/$g.cjs 2>&1 | tail -1)
   if echo "$out" | grep -q "PASS"; then echo "OK   $g :: $out"; else echo "FAIL $g :: $out"; FAIL=1; fi
 done

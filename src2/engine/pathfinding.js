@@ -72,18 +72,28 @@ export class NavGrid {
     if (!this.inBounds(gx, gy) || !this.inBounds(sx, sy)) return null;
 
     // If goal blocked, snap to nearest free tile near goal (so units "attack move approach").
+    // P1.032 fix: pick the CLOSEST walkable cell to the goal pixel, not the first
+    // hit in ring scan order, and never the unit's own start tile. A mineral
+    // blocks its own tile, and off-centre patch pixels could snap to a ring
+    // cell ~22px away — outside the 17.6px harvest radius — freezing the whole
+    // worker chain (2026-10-01 economy-live RED on seed-driven terrain).
+    // Scan order r-then-x-then-y with strict '<' keeps the pick deterministic.
     if (!this.walkable(gx, gy, clearance, ignoreId)) {
-      let found = false;
-      for (let r = 1; r <= 3 && !found; r++) {
-        for (let dy = -r; dy <= r && !found; dy++) {
-          for (let dx = -r; dx <= r && !found; dx++) {
+      let best = null, bestD = Infinity;
+      for (let r = 1; r <= 3; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
             const nx = gx + dx, ny = gy + dy;
-            if (this.inBounds(nx, ny) && this.walkable(nx, ny, clearance, ignoreId)) {
-              gx = nx; gy = ny; found = true;
-            }
+            if (nx === sx && ny === sy) continue;
+            if (!this.inBounds(nx, ny) || !this.walkable(nx, ny, clearance, ignoreId)) continue;
+            const cx = (nx + 0.5) * ts, cy = (ny + 0.5) * ts;
+            const d2 = (cx - goalX) ** 2 + (cy - goalY) ** 2;
+            if (d2 < bestD) { bestD = d2; best = [nx, ny]; }
           }
         }
       }
+      if (best) { gx = best[0]; gy = best[1]; }
     }
     // allow escape from a blocked start tile (unit standing on harvest block)
     if (this.solid[this.hIdx(sx, sy)]) return null;
