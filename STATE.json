@@ -536,8 +536,8 @@
   },
   {
    "id": "P1.031",
-   "status": "blocked",
-   "owner": null,
+   "status": "done",
+   "owner": "MSM5U",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
@@ -547,12 +547,13 @@
    "context_pack": null,
    "done_when": "combat replay produces exact health, casualty, and winner hashes",
    "estimate": "2d",
-   "task": "Extract projectile, damage, death, and victory execution into pure simulation [P3]"
+   "task": "Extract projectile, damage, death, and victory execution into pure simulation [P3]",
+   "note": "closed by P1.031-i1/i2 (simCombat kernel + verify-combat-golden 13/13) + P1.036 hash ring: combat replay yields exact per-tick health/casualty/winner hashes"
   },
   {
    "id": "P1.032",
-   "status": "blocked",
-   "owner": null,
+   "status": "done",
+   "owner": "MSM5U",
    "preferred_owner": "ANTIGRAV",
    "files": [],
    "dependencies": [
@@ -562,11 +563,12 @@
    "context_pack": null,
    "done_when": "Phase-0 terrain tests run headlessly with identical topology hashes",
    "estimate": "2d",
-   "task": "Extract terrain, navigation, elevation, ramps, and blockers into pure simulation state [P2][P3]"
+   "task": "Extract terrain, navigation, elevation, ramps, and blockers into pure simulation state [P2][P3]",
+   "note": "closed by P1.032-i1 (simTerrain pure kernel, headless; verify-terrain-golden T1-T5 8-seed battery incl --jitless identity); terrain now SimRng(matchSeed)-driven"
   },
   {
    "id": "P1.033",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -581,7 +583,7 @@
   },
   {
    "id": "P1.034",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
