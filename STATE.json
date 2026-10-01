@@ -5145,7 +5145,7 @@
   {
    "v": "v2.71.0",
    "date": "2026-09-30",
-   "commit": "HEAD",
+   "commit": "ff45b42",
    "items": [
     "DEF-MOVE-2: flow-march accel ramp + heading low-pass (group march smoothness)",
     "P1.031-i1: simCombat.js combat kernel (damage math, absorb, splash falloff, structure shots, projectile flight) single-sourced live+headless",
