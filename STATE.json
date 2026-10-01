@@ -5112,17 +5112,21 @@
   },
   {
    "id": "P1.032-i1",
-   "status": "todo",
-   "owner": null,
+   "status": "done",
+   "owner": "MSM5U",
    "preferred_owner": "MSM5U",
    "files": [
     "src2/engine/simTerrain.js",
-    "src2/scenes/BattleScene.js"
+    "src2/scenes/BattleScene.js",
+    "src2/engine/pathfinding.js",
+    "scripts/verify-terrain-golden.cjs",
+    "scripts/run-regression-263.sh"
    ],
    "dependencies": [
     "P1.031-i2"
    ],
-   "note": "extract terrain/nav PURE state (elev/ramp/walkable gen + seeded placement) from buildTerrain render mass; golden: seeded map identity + ramp connectivity invariants; check this.rng() is seeded SimRng first"
+   "attempts": 1,
+   "note": "terrain/nav pure-state kernel simTerrain.js (seed-driven SimRng, was LCG(1234567) per call); golden gate 8-seed identity + divergence + ramp connectivity; goal-snap fix (nearest walkable, never start tile) unfroze worker chain on shelf-edge patches; suite 43->44, GREEN 44/44"
   }
  ],
  "active_release": "v2.71.0",

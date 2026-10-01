@@ -132,3 +132,31 @@
   non-200 preflight instead of burning 11 minutes.
 - Suite 43/43 GREEN incl. teardown-hash 10/10 + replay parity (kernel
   extraction verified behavior-identical). Released as v2.71.0.
+
+## P1.032-i1 DONE 2026-10-01 — terrain/nav pure-state kernel + worker-chain unfreeze
+- New src2/engine/simTerrain.js: buildMapState(seed,W,H) generates rock
+  clusters/tiles/destructibles, elev/ramp, ridge+knoll lines, valley bands
+  (ty 44-52, ty 110-118), HQ-connectivity corridors; bakeLayers emits
+  solid/blocked. Scene keeps a SEPARATE presentation stream for sprite
+  key/flip/scale so render pacing can never enter the sim hash.
+- Terrain is now SimRng(matchSeed)-driven. Before: this.rng() minted a fresh
+  LCG(1234567) per call — every match had the identical map, so the P1.032
+  done-when (seed-driven maps) had never actually been satisfied.
+- Preserved quirks: destructibles share reference identity with rockTiles
+  entries (runtime mutates both — no copy/filter); valley-cleanup orphan
+  destructibles are harmless and asserted as such (walkable check, not list
+  equality).
+- Fixed: pathfinding findPath goal-snap took the FIRST walkable tile in ring
+  scan order and could snap onto the unit's own start tile. Off-centre mineral
+  patches on shelf-edge terrain produced 1-2 point paths whose last waypoint
+  was ~22.6px from the crystal — outside the 17.6px harvest radius — so the
+  whole worker chain froze (economy-live RED; DEF-MOVE residual shuffle in
+  crowded pockets). Snap now picks the CLOSEST walkable cell to the goal
+  pixel, never the start tile; deterministic ring scan (r then x then y,
+  strict '<').
+- New gate scripts/verify-terrain-golden.cjs: T1 byte identity incl.
+  cross-engine (--jitless) check, T2 8-seed divergence, T3 A→B flood
+  connectivity, T4 ramp reachability, T5 count floors. Wired into
+  run-regression-263.sh, suite 43→44.
+- Suite 44/44 GREEN twice (one earlier RED was a replay-record contention
+  flake: 16/16 standalone and on rerun, zero flakes in final full run).
