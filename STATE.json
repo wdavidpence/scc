@@ -600,7 +600,7 @@
   },
   {
    "id": "P1.035",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -678,7 +678,7 @@
   },
   {
    "id": "P1.040",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -689,7 +689,8 @@
    "context_pack": null,
    "done_when": "commands execute at configured tick while local acknowledgment remains <100 ms",
    "estimate": "1d",
-   "task": "Add configurable two-to-three-tick input delay model [P1][P3]"
+   "task": "Add configurable two-to-three-tick input delay model [P1][P3]",
+   "note": " [unblocked 2026-10-01: all deps done]"
   },
   {
    "id": "P1.041",
@@ -708,7 +709,7 @@
   },
   {
    "id": "P1.042",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -719,7 +720,8 @@
    "context_pack": null,
    "done_when": "relay carries commands/checksums without authoritative simulation state",
    "estimate": "2d",
-   "task": "Implement WebSocket relay for ordered command envelopes only [P3]"
+   "task": "Implement WebSocket relay for ordered command envelopes only [P3]",
+   "note": " [unblocked 2026-10-01: all deps done]"
   },
   {
    "id": "P1.043",
@@ -1001,7 +1003,7 @@
   },
   {
    "id": "P2.061",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -1012,7 +1014,8 @@
    "context_pack": null,
    "done_when": "64-order FIFO fixtures match specified state transitions",
    "estimate": "1d",
-   "task": "Implement command queue semantics for replace, shift-append, and cancel [P1][P3]"
+   "task": "Implement command queue semantics for replace, shift-append, and cancel [P1][P3]",
+   "note": " [unblocked 2026-10-01: all deps done]"
   },
   {
    "id": "P2.062",
@@ -1046,7 +1049,7 @@
   },
   {
    "id": "P2.064",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -1057,7 +1060,8 @@
    "context_pack": null,
    "done_when": "1,000 seeded corner approaches produce zero illegal crossings",
    "estimate": "6h",
-   "task": "Prevent diagonal corner cutting at unit-radius clearance [P2][P3]"
+   "task": "Prevent diagonal corner cutting at unit-radius clearance [P2][P3]",
+   "note": " [unblocked 2026-10-01: all deps done]"
   },
   {
    "id": "P2.065",
