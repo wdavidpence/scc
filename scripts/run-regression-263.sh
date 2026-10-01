@@ -37,6 +37,9 @@ if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo
 # P1.039 player-economy chain (browser, ~3 min: deploy + train + 100 s hands-off mining)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-economy-live.cjs 2>&1 | tail -3)
 if echo "$out" | grep -q "ACCEPTANCE PASS"; then echo "OK   economy-live :: chain hands-off"; else echo "FAIL economy-live :: $out"; FAIL=1; fi
+# DEF-MOVE-1 smooth-move gate (group travel quality, ~50 s: rally-pocket march must travel; footprint cluster must not freeze)
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-smooth-move.cjs 2>&1 | tail -2)
+if echo "$out" | grep -q "SMOOTH-MOVE PASS 2/2"; then echo "OK   smooth-move :: group travel + no freeze"; else echo "FAIL smooth-move :: $out"; FAIL=1; fi
 # v2.69.2 building render gate (browser, ~40 s: no __MISSING, pseudo-3D tex, glow budget)
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-build-visual.cjs 2>&1 | tail -3)
 if echo "$out" | grep -q "BUILD-VISUAL PASS"; then echo "OK   build-visual :: bld render"; else echo "FAIL build-visual :: $out"; FAIL=1; fi

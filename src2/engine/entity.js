@@ -296,12 +296,22 @@ export class Unit {
   // flow-field descent: steer by shared integrator field instead of own path
   stepAlongFlow(dt, field) {
     const f = field.flowAt(this.x, this.y);
-    if (!f) { this.path = []; this.pathIndex = 0; return false; } // local pocket; separation + nudge
+    if (!f) {
+      // DEF-MOVE-1: dead-flow escape. A pocket/plateau tile with no gradient used
+      // to park units here forever (state 'move', zero motion — the reported
+      // "jittered and did not move"). Hand off to per-unit A* instead.
+      this.flowField = null; this.needsPath = true;
+      return false;
+    }
     const step = this.speed * dt;
     let vx = f.x, vy = f.y;
-    // separation from neighbors
+    // separation from neighbors — DEF-MOVE-1: capped like stepAlongPath (P0.39).
+    // Uncapped crowd push rotated/cancelled the goal drive (pair oscillation).
     const sep = this.world.separationVector(this);
-    vx += sep.x * 0.9; vy += sep.y * 0.9;
+    let sx = sep.x * 0.9, sy = sep.y * 0.9;
+    const sm2 = Math.hypot(sx, sy);
+    if (sm2 > 0.75) { const kk = 0.75 / sm2; sx *= kk; sy *= kk; }
+    vx += sx; vy += sy;
     const l = Math.hypot(vx, vy) || 1;
     this.setPos(this.x + (vx / l) * step, this.y + (vy / l) * step);
     this.face(vx, vy);
@@ -360,6 +370,22 @@ export class Unit {
   updateMove(dt) {
     // flow field when group-cohort registered for this order point
     if (this.flowField) {
+      // DEF-MOVE-1 stuck-breaker: in crowded pockets the shared field's gradient
+      // weaves between adjacent tiles; bang-bang steering then flip-flops and
+      // units orbit in place ("jittered and did not move"). If net progress
+      // stalls, drop to per-unit A* (waypoint pathing threads pinches), with
+      // a hard cap so a hopeless pocket degrades to idle, never a frozen move.
+      this._flowStuckT = (this._flowStuckT || 0) + dt;
+      if (this._flowStuckT >= 0.7) {
+        const px = this._flowStuckX, py = this._flowStuckY;
+        this._flowStuckT = 0; this._flowStuckX = this.x; this._flowStuckY = this.y;
+        if (px !== undefined && Math.hypot(this.x - px, this.y - py) < 2.5) {
+          this._flowFails = (this._flowFails || 0) + 1;
+          if (this._flowFails <= 2) { this.flowField = null; this.needsPath = true; }
+          else { this.flowField = null; this.order = null; this.state = 'idle'; }
+        } else this._flowFails = 0;
+      }
+      if (!this.flowField) return;
       const arrived = this.stepAlongFlow(dt, this.flowField);
       if (arrived) { this.flowField = null; this.order = null; this.state = 'idle'; }
     } else {

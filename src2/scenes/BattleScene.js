@@ -2614,7 +2614,10 @@ export class BattleScene extends Phaser.Scene {
       const field = this.flows.ensure(key, x, y, this.gameTime, 0.6, clearance);
       let i = 0;
       for (const u of list) {
-        const t = useFormation ? slot(i) : { x, y };
+        let t = useFormation ? slot(i) : { x, y };
+        // DEF-MOVE-1: never aim a slot inside a wall/solid tile — march to the
+        // click point itself instead (slot jitter / wall hugging).
+        if (this.nav && this.nav.walkable && !this.nav.walkable(Math.floor(t.x / TILE), Math.floor(t.y / TILE))) t = { x, y };
         u.flowField = field; u.issueMove(t.x, t.y, attackMove); i++;
       }
       this.flowsDirty = true;
@@ -3209,7 +3212,9 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     // rally point placement when a production building is selected
-    if (this.selectedBuilding && this.selectedBuilding.built && this.selectedBuilding.def.rally) {
+    // DEF-MOVE-1: only when NO units are selected — a stale selectedBuilding
+    // (auto-set when a structure finishes) used to swallow army move orders.
+    if (this.selectedBuilding && this.selectedBuilding.built && this.selectedBuilding.def.rally && !SEL.length) {
       const sb = this.selectedBuilding;
       sb.rallyPoint = { x: wp.x, y: wp.y };
       this.showRallyFlag(sb);
