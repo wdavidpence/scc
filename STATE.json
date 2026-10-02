@@ -844,13 +844,15 @@
    "files": [],
    "dependencies": [
     "P1.035",
-    "P1.038"
+    "P1.038",
+    "P1.056"
    ],
-   "attempts": 0,
+   "attempts": 1,
    "context_pack": null,
    "done_when": "tutorial replay completes headlessly and in browser with identical final state",
    "estimate": "1d",
-   "task": "Convert one complete training match to a committed golden replay [P1][P3]"
+   "task": "Convert one complete training match to a committed golden replay [P1][P3]",
+   "note": "2026-10-02 P1.050-i1 delivered: replay-runner per-run isolation (loader nonce module-subtree reload + seed-pinned Math.random) — in-process dual-run identity now holds (was nondeterministic via entity nextId continuation); gate extended to 22 checks incl. INPROC family. Remaining done_when (full training match headless-vs-browser identical) needs the headless full-match core: economy/production/research command coverage + tutorial step-to-command conversion. Tracked as P1.056; P1.050 blocked on it."
   },
   {
    "id": "P1.051",
@@ -5137,6 +5139,26 @@
    ],
    "attempts": 1,
    "note": "terrain/nav pure-state kernel simTerrain.js (seed-driven SimRng, was LCG(1234567) per call); golden gate 8-seed identity + divergence + ramp connectivity; goal-snap fix (nearest walkable, never start tile) unfroze worker chain on shelf-edge patches; suite 43->44, GREEN 44/44"
+  },
+  {
+   "id": "P1.056",
+   "status": "todo",
+   "owner": null,
+   "preferred_owner": "ANTIGRAV",
+   "files": [
+    "scripts/replay-runner.cjs",
+    "src2/engine/simEconomy.js",
+    "src2/engine/entity.js",
+    "src2/engine/coach.js"
+   ],
+   "dependencies": [
+    "P1.038"
+   ],
+   "attempts": 0,
+   "context_pack": null,
+   "task": "Headless full-match core: production/economy/research command coverage in the runner world + convert TRAINING SIM coach steps to a committed command-stream golden [P1][P3]",
+   "done_when": "full training-match replay (deploy/build/train/research/deploy-MCV included) executes headlessly with final-state digest identical to the live scene run",
+   "estimate": "1d"
   }
  ],
  "active_release": "v2.71.0",

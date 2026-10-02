@@ -108,7 +108,6 @@ ok('SCCR-REFUSE-DATAHASH', fData.code === 3 && fData.out.includes('DATA_HASH_MIS
   ok('BATTLE-HAPPENS', m1 && m2 && (m2[2] - m2[1]) >= 8, `json ${m1 && m1[1]}/${m1 && m1[2]}, sccr ${m2 && m2[1]}/${m2 && m2[2]}`);
 }
 
-// ---------- scale probe (P1.052 data; hard-fail only beyond 60 s) ----------
 const big = JSON.parse(fs.readFileSync(REPLAY, 'utf8'));
 big.units = [];
 for (let i = 0; i < 100; i++) big.units.push({ team: 0, kind: i % 9 === 0 ? 'tank' : 'marine', x: 200 + (i % 10) * 14, y: 200 + Math.floor(i / 10) * 12 });
@@ -119,5 +118,24 @@ const rb = run(['--replay', '/tmp/rp-200u.json']);
 const tms = Date.now() - tb0;
 ok('SCALE-200U-feasible', tms < 60000, `200 units x 14400 ticks in ${tms}ms — ${(() => { const m = /units (\d+)\/200/.exec(rb); return m ? m[1] + ' survived' : '?'; })()} (data for P1.052)`);
 
-console.log(`RESULT REPLAY-RUNNER ${fail === 0 ? 'PASS' : 'FAIL'} ${pass}/${pass + fail} (${Date.now() - t0}ms total)`);
-process.exit(fail === 0 ? 0 : 1);
+// ---------- in-process isolation family (P1.050-i1) ----------
+// Same file run twice IN ONE PROCESS must equal each other and the CLI
+// (separate-process) runs, and a mid-stream file switch must not cross-
+// pollute. Separate processes hide module-state leaks (entity nextId
+// continuation, shared Math.random history); this family catches them.
+{
+  const { runReplay } = require(RR);
+  (async () => {
+    const ip1 = await runReplay(REPLAY_SCC);
+    const ij1 = await runReplay(REPLAY);
+    const ip2 = await runReplay(REPLAY_SCC);
+    const ij2 = await runReplay(REPLAY);
+    ok('INPROC-SCCR-DUAL-IDENTICAL', ip1.finalHash === ip2.finalHash && ip1.ringDigest === ip2.ringDigest && ip1.alive === ip2.alive, `${ip1.finalHash} (${ip1.ms.toFixed(0)}ms/${ip2.ms.toFixed(0)}ms)`);
+    ok('INPROC-JSON-DUAL-IDENTICAL', ij1.finalHash === ij2.finalHash && ij1.alive === ij2.alive, `${ij1.finalHash}`);
+    const ip3 = await runReplay(REPLAY_SCC);
+    ok('INPROC-NO-CROSS-POLLUTION', ip3.finalHash === ip1.finalHash && ip3.ringDigest === ip1.ringDigest);
+    ok('INPROC-EQUALS-CLI', String(ip1.finalHash) === ps1[2] && String(ij1.finalHash) === p1[2], `sccr ${ip1.finalHash}/${ps1[2]} json ${ij1.finalHash}/${p1[2]}`);
+    console.log(`RESULT REPLAY-RUNNER ${fail === 0 ? 'PASS' : 'FAIL'} ${pass}/${pass + fail} (${Date.now() - t0}ms total)`);
+    process.exit(fail === 0 ? 0 : 1);
+  })();
+}

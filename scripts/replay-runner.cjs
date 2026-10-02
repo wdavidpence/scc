@@ -32,19 +32,31 @@ const { pathToFileURL } = require('url');
 
 const TICK = 1 / 24;
 
-async function loadEngine() {
+// P1.050: per-run module isolation. Each run loads the engine subtree with
+// a fresh nonce query (?s=NONCE); stubs/loader.mjs propagates the nonce to
+// every relative engine/data import, so NO module-level state (entity.js
+// nextId, cached tables) is shared between two runs in one process. Math
+// .random is pinned to a seed-derived stream during the run: any display-
+// layer random draw that survives into the world stubs is deterministic
+// per (file, seed), never per wall-clock. Set SCC_RUN_ISOLATED=0 to opt
+// out (shared modules, unpinned rng) for A/B experiments.
+let runNonce = 0;
+const ISOLATED = process.env.SCC_RUN_ISOLATED !== '0';
+
+async function loadEngine(nonce) {
   const { register } = require('node:module');
-  register('./stubs/loader.mjs', pathToFileURL(__filename));
-  const eng = (f) => import(pathToFileURL(path.resolve(__dirname, '../src2/engine', f)).href);
+  if (!loadEngine._reg) { register('./stubs/loader.mjs', pathToFileURL(__filename)); loadEngine._reg = true; }
+  const q = nonce ? '?s=' + nonce : '';
+  const eng = (f) => import(pathToFileURL(path.resolve(__dirname, '../src2/engine', f)).href + q);
   return {
-    Unit: (await import(pathToFileURL(path.resolve(__dirname, '../src2/engine/entity.js')))).Unit,
+    Unit: (await import(pathToFileURL(path.resolve(__dirname, '../src2/engine/entity.js')) + q)).Unit,
     SimRng: (await eng('simRng.js')).SimRng,
     SimSchema: (await eng('simSchema.js')).SimSchema,
     NavGrid: (await eng('pathfinding.js')).NavGrid,
     SimTerrain: (await eng('simTerrain.js')).SimTerrain,
     rf: (await eng('replayFormat.js')),
     nc: (await eng('netCmds.js')).default || (await eng('netCmds.js')),
-    sc1: await import(pathToFileURL(path.resolve(__dirname, '../src2/data/sc1.js'))),
+    sc1: await import(pathToFileURL(path.resolve(__dirname, '../src2/data/sc1.js')) + q),
   };
 }
 
@@ -190,9 +202,31 @@ function execSccrCmd(w, idMap, cmd, stats) {
   stats.executed++;
 }
 
-async function runReplay(file, { hashEvery = 0, shuffleSeed = 0, fakeMap = null, fakeData = null } = {}) {
-  const E = await loadEngine();
+// Wrapper: sets up per-run isolation (fresh engine module subtree via
+// loader nonce + seeded Math.random pin), then delegates. The pin is
+// derived from the replay seed, so display-layer Math.random draws
+// (spread, offsets) become a deterministic function of the match, not of
+// wall-clock or draw history.
+async function runReplay(file, opts = {}) {
   const text = fs.readFileSync(file, 'utf8');
+  if (!ISOLATED) return runReplayIsolated(file, text, opts, null);
+  const m0 = /^SCCR\/1 (\S+)/.exec(text);
+  let seed = 0x9E3779B9;
+  if (m0) { const sm = /(?:^| )seed=([0-9a-f]+)/.exec(m0[1]); if (sm) seed = parseInt(sm[1], 16) >>> 0; }
+  else { try { const j = JSON.parse(text); if ((j.seed | 0) !== 0) seed = (j.seed | 0) >>> 0; } catch (e) { /* inner will error */ } }
+  runNonce = (runNonce + 1) >>> 0;
+  const real = Math.random;
+  let s = (seed ^ 0x85ebca6b) >>> 0; if (!s) s = 1;
+  Math.random = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  try {
+    return await runReplayIsolated(file, text, opts, runNonce.toString(16));
+  } finally {
+    Math.random = real;
+  }
+}
+
+async function runReplayIsolated(file, text, { hashEvery = 0, shuffleSeed = 0, fakeMap = null, fakeData = null } = {}, nonce) {
+  const E = await loadEngine(nonce);
   const isSccr = text.startsWith('SCCR/1');
   let rep, mode;
 

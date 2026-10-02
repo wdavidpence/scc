@@ -265,3 +265,20 @@
   GREEN twice, zero flakes.
 - Harness lesson: dual-identity asserts must compare DIGESTS (finalHash +
   ring digest), never whole output lines — wallMs varies per run.
+
+## P1.050-i1 DONE 2026-10-02 — replay-runner run isolation (foundation for golden-replay parity)
+- Found and fixed a REAL determinism defect: replay-runner executed twice in
+  one process diverged (entity.js module-level nextId continued across runs;
+  Math.random history shared). Cross-process runs were always deterministic,
+  so the shipped suite never caught it — the defect blocked the P1.039
+  five-run bot-vs-bot requirement and any future in-process batching.
+- Fix = per-run isolation, default ON: loader.mjs propagates a per-run nonce
+  query through the whole engine import subtree (fresh module copies, ids
+  restart at 1, no shared tables) + Math.random pinned to a seed-derived LCG
+  for the run. SCC_RUN_ISOLATED=0 opts out for A/B experiments.
+- Proof: in-process hashes now EQUAL CLI hashes on both golden files
+  (sccr 1721121357, json 251974592); mid-stream file switch no cross-pollution.
+- verify-replay-runner.cjs extended 18 -> 22 checks (INPROC-SCCR/JSON dual,
+  NO-CROSS-POLLUTION, EQUALS-CLI). Suite stayed 47/47 GREEN, exit 0, zero flakes.
+- P1.050 remains open: full-economy tutorial parity needs the headless
+  full-match core -> new ticket P1.056 (P1.050 now depends on it).
