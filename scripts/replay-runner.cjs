@@ -56,6 +56,7 @@ async function loadEngine(nonce) {
     SimTerrain: (await eng('simTerrain.js')).SimTerrain,
     rf: (await eng('replayFormat.js')),
     nc: (await eng('netCmds.js')).default || (await eng('netCmds.js')),
+    sm: (await eng('simMatch.js')).default || (await eng('simMatch.js')),
     sc1: await import(pathToFileURL(path.resolve(__dirname, '../src2/data/sc1.js')) + q),
   };
 }
@@ -243,51 +244,17 @@ async function runReplayIsolated(file, text, { hashEvery = 0, shuffleSeed = 0, f
     if (!dec.ok) return { refused: dec.error, detail: dec.detail };
     rep = dec.replay;
     mode = 'sccr';
-    const w = makeWorld(E, seed, terrain);
-    const idMap = new Map();
-    for (const [team, kind, x, y] of rep.units) {
-      const u = new E.Unit(w, team, kind, x, y);
-      w.units.push(u);
-      idMap.set(u.id, u);
-    }
-    // ---- netCmds receive path: file order = sender order; seq per player
-    // by stream position. --shuffle-arrival permutes DELIVERY only.
-    const seqN = new Map();
-    const packets = rep.commands.map(c => {
-      const s = (seqN.get(c.player) || 0) + 1;
-      seqN.set(c.player, s);
-      return { player: c.player, seq: s, tick: c.tick, type: c.type, payload: c.payload };
-    });
-    let arrival = packets;
-    if (shuffleSeed) {
-      arrival = packets.slice();
-      let s = shuffleSeed >>> 0;
-      const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
-      for (let i = arrival.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arrival[i], arrival[j]] = [arrival[j], arrival[i]]; }
-    }
-    const buf = E.nc.createNetBuf();
-    for (const p of arrival) E.nc.deliver(buf, p);
-    const stats = { executed: 0, skipped: 0, drained: 0 };
+    // P1.056: the whole match runs on the SHARED kernel
+    // (src2/engine/simMatch.js). The browser harness (verify-cross-engine)
+    // calls the same runHeadlessMatch with the same decode — Node<->browser
+    // forks are caught by the parity gate, impossible by construction.
     const t0 = process.hrtime.bigint();
     const he = hashEvery || rep.hashEvery || 0;
-    let lastHash = null;
-    const ring = [];
-    for (let t = 1; t <= rep.ticks; t++) {
-      w.time.now = t;
-      for (const c of E.nc.drainNet(buf, t)) {
-        stats.drained++;
-        execSccrCmd(w, idMap, c, stats);
-      }
-      for (const u of w.units) if (!u.dead) u.update(TICK);
-      stepProjectiles(w);
-      if (he && t % he === 0) { const hh = E.SimSchema.hashState(snapshot(w, t)); ring.push(hh); if (ring.length > 1200) ring.shift(); lastHash = hh; }
-    }
+    const res = E.sm.runHeadlessMatch(rep, E, terrain, { shuffleSeed, hashEvery: he });
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-    const finalHash = E.SimSchema.hashState(snapshot(w, rep.ticks));
-    const alive = w.units.filter(u => !u.dead).length;
-    return { mode, ticks: rep.ticks, ms, finalHash, alive, total: w.units.length,
-      cmds: packets.length, ...stats, shuffleSeed, lastHash,
-      ringDigest: E.rf.h32(ring.join('|')) };
+    return { mode, ticks: res.ticks, ms, finalHash: res.finalHash, alive: res.alive, total: res.total,
+      cmds: res.cmds, executed: res.executed, skipped: res.skipped, drained: res.drained, shuffleSeed,
+      lastHash: null, ringDigest: res.ringDigest };
   }
 
   // ---- legacy JSON mode (unchanged semantics; real terrain now) ----

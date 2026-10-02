@@ -41,6 +41,9 @@ if echo "$out" | grep -q "PASS"; then echo "OK   tick-parity :: $out"; else echo
 # P1.033 render adapter: render-off + 144 Hz interpolation must be simulation-invisible (byte rings) and the moved tick-side writers must still fire
 out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-render-adapter.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "RENDER-ADAPTER PASS"; then echo "OK   render-adapter :: $out"; else echo "FAIL render-adapter :: $out"; FAIL=1; fi
+# P1.056 cross-engine parity: the shared match kernel must give byte-identical digests in node-default, node --jitless, and Chromium (page-side kernel world), with shuffled-arrival identity in both engines
+out=$(SCC_URL=${SCC_URL:-http://127.0.0.1:4177/scc/} node scripts/verify-cross-engine.cjs 2>&1 | tail -1)
+if echo "$out" | grep -q "CROSS-ENGINE PASS"; then echo "OK   cross-engine :: $out"; else echo "FAIL cross-engine :: $out"; FAIL=1; fi
 # P1.034 net-side command queue: shuffled/duplicate/gapped arrival must reproduce canonical execution order + hash (kernel + live identity)
 out=$(node scripts/verify-netcmds.cjs 2>&1 | tail -1)
 if echo "$out" | grep -q "NETQ PASS"; then echo "OK   netcmds :: $out"; else echo "FAIL netcmds :: $out"; FAIL=1; fi
