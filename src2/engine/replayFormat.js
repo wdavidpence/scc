@@ -31,7 +31,7 @@ import { fnv } from './cmdQueue.js';
 
 const VERSION = 'SCCR/1';
 
-function h32(str) { return ('00000000' + (fnv(str) >>> 0).toString(16)).slice(-8); }
+export function h32(str) { return ('00000000' + (fnv(str) >>> 0).toString(16)).slice(-8); }
 
 // canonical form for data hashing: sorted keys everywhere, so two balance
 // files that differ only in key order or formatting hash equal; values that

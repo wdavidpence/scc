@@ -239,3 +239,29 @@
   separate semantic seed check) — assert the REAL rejection path; object
   round-trip comparison must be field-wise (key insertion order differs
   between recorded and decoded shapes; byte-equal re-encode is the proof).
+
+## P1.038 DONE 2026-10-02 — headless CLI match runner on the SCCR/1 spine
+- replay-runner.cjs rewritten: consumes legacy JSON AND SCCR/1 replays.
+  SCCR path = P1.035 format kernel (decode + refusal classes) feeding the
+  P1.034 netCmds receive queue — the three-ticket spine (34+35+38) closes
+  end-to-end: record order -> file -> any arrival permutation -> one
+  canonical execution order -> one hash.
+- Headless world upgraded from 64x64 all-walkable nav stub to the REAL
+  SimTerrain bake + real NavGrid (elev/ramp aware) built from the replay
+  seed; content hashes compared against that bake, so a replay recorded on
+  different terrain or balance is REFUSED (exit 3) instead of silently
+  replayed against changed rules.
+- New CLI: --generate-sccr (byte-stable writer), --shuffle-arrival <seed>
+  (permuted delivery proof), --hash-every N (ring mode, proven
+  sim-neutral: final hash identical with and without), --fake-map/--fake-data
+  (harness-only refusal-path injection).
+- Timings (24-inch M2 CU class box): 10-min mirrored battle 519 ms
+  (done-when limit 10 s); 200-unit probe 3.4 s — P1.052 starts from
+  feasible territory; 251/715 headless-skipped cmd types count as skips,
+  never crashes (format portability).
+- Gate verify-replay-runner.cjs extended 7 -> 18 checks (dual-run identity
+  both paths, shuffle identity x3, refusal x4, attrition, scale probe).
+  Suite stayed 47 gates (replay-runner lives in the loop list), 47/47
+  GREEN twice, zero flakes.
+- Harness lesson: dual-identity asserts must compare DIGESTS (finalHash +
+  ring digest), never whole output lines — wallMs varies per run.

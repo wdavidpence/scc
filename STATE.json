@@ -648,7 +648,7 @@
   },
   {
    "id": "P1.038",
-   "status": "todo",
+   "status": "done",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -659,11 +659,12 @@
    "context_pack": null,
    "done_when": "a 10-minute replay executes in <10 s without browser, canvas, audio, or GPU",
    "estimate": "2d",
-   "task": "Add headless CLI match runner [P3]"
+   "task": "Add headless CLI match runner [P3]",
+   "note": "closed 2026-10-02 (P1.038-i2): replay-runner.cjs now consumes BOTH replay paths — legacy JSON (unchanged semantics, real SimTerrain/NavGrid replacing 64x64 stub) and SCCR/1 (P1.035 kernel decode + content-hash gates: wrong map/data REFUSED exit 3, not silently replayed). Command streams execute through the P1.034 netCmds queue (canonical (tick,player,seq) order); --shuffle-arrival permutes delivery and the runner must still land byte-identical finalHash+ring. 10-min/715-cmd battle 519ms headless (limit 10 s); 200-unit probe 3.4 s (P1.052 data). Gate verify-replay-runner extended to 18 checks; suite 47/47 GREEN twice. Ready for P1.050 golden-replay promotion."
   },
   {
    "id": "P1.039",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -837,7 +838,7 @@
   },
   {
    "id": "P1.050",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "ANTIGRAV",
    "files": [],
@@ -869,7 +870,7 @@
   },
   {
    "id": "P1.052",
-   "status": "blocked",
+   "status": "todo",
    "owner": null,
    "preferred_owner": "QWEN-ONE",
    "files": [],

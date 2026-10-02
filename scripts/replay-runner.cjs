@@ -1,18 +1,30 @@
 #!/usr/bin/env node
-// P1.038 — Headless CLI match runner.
-// Executes a replay (seed + tick-stamped command script) through the REAL
-// engine modules (entity.js Units, real order execution, seeded PRNG) with
-// NO browser, canvas, audio, or GPU. 'phaser' is stubbed via scripts/stubs
-// /loader.mjs; the fake world has no display surface that state can flow
-// through (presentation hooks are no-ops; camNear=false).
+// P1.038 — Headless CLI match runner (upgraded by P1.038-i2 for SCCR/1).
+// Executes a replay through the REAL engine modules (entity.js Units, real
+// NavGrid pathfinding, real SimTerrain bake, seeded PRNG) with NO browser,
+// canvas, audio, or GPU. 'phaser' is stubbed via scripts/stubs/loader.mjs;
+// the fake world has no display surface that state can flow through
+// (presentation hooks are no-ops; camNear=false).
 //
-// Replay format (JSON): { seed, seconds, units:[{team,kind,x,y}],
-//   script: [{tick, side, kind:'move|attackMove|attackTarget|patrol',
-//             unit, target?, x?, y?, repeat?}], hashEvery? }
+// TWO REPLAY SOURCES:
+//  1) legacy JSON  {seed,seconds,units:[{team,kind,x,y}],script:[...]}
+//     — index-based script, kept for the P1.029-era golden harness.
+//  2) SCCR/1 text  (src2/engine/replayFormat.js kernel):
+//     header(seed,ticks,mapHash,dataHash,nc) + units + `C tick|player|
+//     type|subject|payload` lines + checksum. The command stream executes
+//     through the P1.034 netCmds receive queue: canonical (tick,player,seq)
+//     order from CONTENT, so arrival/re-sequencing cannot change outcomes
+//     (--shuffle-arrival proves it). Header mapHash/dataHash are CHECKED
+//     against the locally built terrain bake and balance tables — a replay
+//     for different content is REFUSED (exit 3), not silently reinterpreted.
+//
 // Usage:
-//   node scripts/replay-runner.cjs --replay <file.json> [--hash-every N]
-//   node scripts/replay-runner.cjs --generate <file.json>  (writer mode)
-// Exit 0 + final hash on success; prints timing; exit 1 on divergence mode.
+//   node scripts/replay-runner.cjs --replay <file> [--hash-every N]
+//     [--shuffle-arrival <seed>] [--fake-map <hex>] [--fake-data <hex>]
+//   node scripts/replay-runner.cjs --generate <file.json>
+//   node scripts/replay-runner.cjs --generate-sccr <file.sccr>
+// Exit 0 = ran (prints wallMs + finalHash); 3 = refused (checksum/content
+// hash); 1/2 = missing file / engine error.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -23,15 +35,21 @@ const TICK = 1 / 24;
 async function loadEngine() {
   const { register } = require('node:module');
   register('./stubs/loader.mjs', pathToFileURL(__filename));
+  const eng = (f) => import(pathToFileURL(path.resolve(__dirname, '../src2/engine', f)).href);
   return {
-    Unit: (await import(path.resolve(__dirname, '../src2/engine/entity.js'))).Unit,
-    SimRng: (await import(path.resolve(__dirname, '../src2/engine/simRng.js'))).SimRng,
-    SimSchema: (await import(path.resolve(__dirname, '../src2/engine/simSchema.js'))).SimSchema,
-    sc1: await import(path.resolve(__dirname, '../src2/data/sc1.js')),
+    Unit: (await import(pathToFileURL(path.resolve(__dirname, '../src2/engine/entity.js')))).Unit,
+    SimRng: (await eng('simRng.js')).SimRng,
+    SimSchema: (await eng('simSchema.js')).SimSchema,
+    NavGrid: (await eng('pathfinding.js')).NavGrid,
+    SimTerrain: (await eng('simTerrain.js')).SimTerrain,
+    rf: (await eng('replayFormat.js')),
+    nc: (await eng('netCmds.js')).default || (await eng('netCmds.js')),
+    sc1: await import(pathToFileURL(path.resolve(__dirname, '../src2/data/sc1.js'))),
   };
 }
 
-function makeWorld(E, seed) {
+// ---- headless world: no display surface; presentation hooks are no-ops ----
+function makeWorld(E, seed, terrain) {
   const chainer = new Proxy(function () {}, {
     get: (t, k) => (k === 'x' || k === 'y' ? 0 : chainer),
     set: () => true, apply: () => chainer,
@@ -49,9 +67,6 @@ function makeWorld(E, seed) {
   const w = {
     units: [], projectiles: [], rng, simRng: rng, econ: 0,
     time: { now: 0, delayedCall: () => ({}) },
-    // universal display factory: ANY add.x() returns a chainer; display
-    // objects cannot carry state (no fields), and unknown factories cannot
-    // crash. State-neutrality is asserted by the dual-run hash checks.
     add: new Proxy({ container: (x, y) => cont(x, y) }, {
       get: (t, k) => (k in t ? t[k] : () => chainer),
     }),
@@ -61,9 +76,7 @@ function makeWorld(E, seed) {
     camNear: () => false, currentlyVisible: () => true, flash() {}, shake() {},
     groundBlocked: () => false, blightSpeedAt: () => false,
     separationVector: () => ({ x: 0, y: 0 }),
-    nav: { idx: (x, y) => y * 64 + x, blockedBy: new Int8Array(64 * 64), walkable: () => true,
-      unblockBy() {}, findPath: (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y1 }] },
-    techResearched: () => false, hasAddOn: () => false, spend: () => true,
+    nav: terrain.nav,
     spawnProjectile(p) { this.projectiles.push({ x: p.from.x, y: p.from.y, ...p }); },
     applyHit(target, dmg) { if (target && !target.dead) target.takeDamage(dmg, null); },
     acquireFor(u, range) {
@@ -81,6 +94,24 @@ function makeWorld(E, seed) {
     onUnitDeath() {},
   };
   return w;
+}
+
+// real terrain from the seed via the simTerrain kernel (same bake the
+// scene writes into nav and verify-terrain-golden asserts); optional
+// --fake-map/--fake-data let the gate prove content-hash REFUSAL paths.
+function buildTerrain(E, seed) {
+  const ms = E.SimTerrain.buildMapState(seed, E.sc1.MAP_W, E.sc1.MAP_H);
+  const bake = E.SimTerrain.bakeLayers(ms, E.sc1.MAP_W, E.sc1.MAP_H);
+  const nav = new E.NavGrid(E.sc1.MAP_W, E.sc1.MAP_H, E.sc1.TILE);
+  nav.solid.set(bake.solid);
+  nav.blocked.set(bake.blocked);
+  nav.elev = ms.elev;
+  nav.ramp = ms.ramp;
+  return { nav, bake, ms };
+}
+
+function localDataHash(E) {
+  return E.rf.computeDataHash({ units: E.sc1.UNITS, buildings: E.sc1.BUILDINGS, techs: E.sc1.TECHS, w: E.sc1.MAP_W, h: E.sc1.MAP_H, tile: E.sc1.TILE });
 }
 
 function stepProjectiles(w) {
@@ -108,7 +139,8 @@ function snapshot(w, tick) {
   };
 }
 
-function applyScriptEntry(w, u, s) {
+// legacy index-based script (P1.029-era JSON replays)
+function applyScriptEntry(w, s) {
   const unit = w.units[s.unit];
   if (!unit || unit.dead) return;
   switch (s.kind) {
@@ -120,97 +152,250 @@ function applyScriptEntry(w, u, s) {
   }
 }
 
-async function runReplay(file, { hashEvery = 0 } = {}) {
+// SCCR command execution: headless equivalents of BattleScene.execCmd,
+// verbatim field semantics where a headless counterpart exists; unknown
+// types count as skipped (portability: a replay may hold types the
+// headless world does not simulate). sel ids resolve against unit ids.
+function execSccrCmd(w, idMap, cmd, stats) {
+  const pl = cmd.payload || {};
+  const sel = (pl.sel !== undefined ? pl.sel.map(id => idMap.get(id)).filter(u => u && !u.dead) : null);
+  switch (cmd.type) {
+    case 'order': {
+      const wp = Array.isArray(pl.wp) ? pl.wp : (pl.wp && typeof pl.wp.x === 'number' ? [pl.wp] : null);
+      if (!wp || !sel) { stats.skipped++; return; }
+      const last = wp[wp.length - 1];
+      for (const u of sel) if (!u.dead) u.issueMove(last.x, last.y, !!pl.attackMove);
+      break;
+    }
+    case 'stop':
+      for (const u of sel) { u.order = null; u.state = 'idle'; u.path = []; u.waypoints = null; u.patrolPoints = null; }
+      break;
+    case 'stance':
+      for (const u of sel) if (!u.dead) u.stance = pl.stance;
+      break;
+    case 'patrol': {
+      if (!sel || !sel.length || !pl.a || !pl.b) { stats.skipped++; return; }
+      for (const u of sel) { u.patrolPoints = [{ x: pl.a.x, y: pl.a.y }, { x: pl.b.x, y: pl.b.y }]; u._patrolIdx = 0; u.setOrder({ type: 'patrol' }); }
+      break;
+    }
+    case 'attackTarget': {
+      const t = idMap.get(pl.target);
+      for (const u of sel) if (!u.dead && t && !t.dead) u.setOrder({ type: 'attackTarget', target: t });
+      break;
+    }
+    default:
+      stats.skipped++;
+      return;
+  }
+  stats.executed++;
+}
+
+async function runReplay(file, { hashEvery = 0, shuffleSeed = 0, fakeMap = null, fakeData = null } = {}) {
   const E = await loadEngine();
-  const rep = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const he = hashEvery || rep.hashEvery || 0;
-  const w = makeWorld(E, rep.seed);
-  const units = rep.units || [];
-  for (const s of units) {
+  const text = fs.readFileSync(file, 'utf8');
+  const isSccr = text.startsWith('SCCR/1');
+  let rep, mode;
+
+  if (isSccr) {
+    // header carries seed + ticks; parse seed first to build local content
+    const m0 = /^SCCR\/1 (\S+)/.exec(text);
+    const h = {};
+    for (const kv of (m0 ? m0[1].split(' ') : [])) { const e = kv.indexOf('='); if (e > 0) h[kv.slice(0, e)] = kv.slice(e + 1); }
+    const seed = parseInt(h.seed, 16) >>> 0;
+    const terrain = buildTerrain(E, seed);
+    const localMap = fakeMap || E.rf.computeMapHash(terrain.bake);
+    const localData = fakeData || localDataHash(E);
+    const dec = E.rf.decodeReplay(text, { mapHash: localMap, dataHash: localData });
+    if (!dec.ok) return { refused: dec.error, detail: dec.detail };
+    rep = dec.replay;
+    mode = 'sccr';
+    const w = makeWorld(E, seed, terrain);
+    const idMap = new Map();
+    for (const [team, kind, x, y] of rep.units) {
+      const u = new E.Unit(w, team, kind, x, y);
+      w.units.push(u);
+      idMap.set(u.id, u);
+    }
+    // ---- netCmds receive path: file order = sender order; seq per player
+    // by stream position. --shuffle-arrival permutes DELIVERY only.
+    const seqN = new Map();
+    const packets = rep.commands.map(c => {
+      const s = (seqN.get(c.player) || 0) + 1;
+      seqN.set(c.player, s);
+      return { player: c.player, seq: s, tick: c.tick, type: c.type, payload: c.payload };
+    });
+    let arrival = packets;
+    if (shuffleSeed) {
+      arrival = packets.slice();
+      let s = shuffleSeed >>> 0;
+      const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+      for (let i = arrival.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arrival[i], arrival[j]] = [arrival[j], arrival[i]]; }
+    }
+    const buf = E.nc.createNetBuf();
+    for (const p of arrival) E.nc.deliver(buf, p);
+    const stats = { executed: 0, skipped: 0, drained: 0 };
+    const t0 = process.hrtime.bigint();
+    const he = hashEvery || rep.hashEvery || 0;
+    let lastHash = null;
+    const ring = [];
+    for (let t = 1; t <= rep.ticks; t++) {
+      w.time.now = t;
+      for (const c of E.nc.drainNet(buf, t)) {
+        stats.drained++;
+        execSccrCmd(w, idMap, c, stats);
+      }
+      for (const u of w.units) if (!u.dead) u.update(TICK);
+      stepProjectiles(w);
+      if (he && t % he === 0) { const hh = E.SimSchema.hashState(snapshot(w, t)); ring.push(hh); if (ring.length > 1200) ring.shift(); lastHash = hh; }
+    }
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    const finalHash = E.SimSchema.hashState(snapshot(w, rep.ticks));
+    const alive = w.units.filter(u => !u.dead).length;
+    return { mode, ticks: rep.ticks, ms, finalHash, alive, total: w.units.length,
+      cmds: packets.length, ...stats, shuffleSeed, lastHash,
+      ringDigest: E.rf.h32(ring.join('|')) };
+  }
+
+  // ---- legacy JSON mode (unchanged semantics; real terrain now) ----
+  mode = 'json';
+  const data = JSON.parse(text);
+  const terrain = buildTerrain(E, data.seed);
+  const w = makeWorld(E, data.seed, terrain);
+  for (const s of data.units || []) {
     const u = new E.Unit(w, s.team, s.kind, s.x, s.y);
     w.units.push(u);
   }
-  // index script by tick for O(1) access
   const byTick = new Map();
-  for (const s of rep.script) {
+  for (const s of data.script) {
     if (!byTick.has(s.tick)) byTick.set(s.tick, []);
     byTick.get(s.tick).push(s);
   }
-  const totalTicks = Math.round(rep.seconds * 24);
+  const totalTicks = Math.round(data.seconds * 24);
+  const he = hashEvery || data.hashEvery || 0;
   const t0 = process.hrtime.bigint();
-  let finalHash = null;
   let lastHash = null;
   for (let t = 0; t < totalTicks; t++) {
     w.time.now = t;
     const script = byTick.get(t);
-    if (script) for (const s of script) applyScriptEntry(w, null, s);
+    if (script) for (const s of script) applyScriptEntry(w, s);
     for (const u of w.units) if (!u.dead) u.update(TICK);
     stepProjectiles(w);
     if (he && (t + 1) % he === 0) lastHash = E.SimSchema.hashState(snapshot(w, t + 1));
   }
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-  // final snapshot always hashed
-  finalHash = E.SimSchema.hashState(snapshot(w, totalTicks));
+  const finalHash = E.SimSchema.hashState(snapshot(w, totalTicks));
   const alive = w.units.filter((u) => !u.dead).length;
-  return { ticks: totalTicks, ms, finalHash, alive, total: w.units.length, lastHash };
-}
-
-function generateTrainingReplay() {
-  // 10-minute engagement replay: mirrored 9v9 opening + scripted maneuvers
-  // across the full window. Deterministic by construction (data file), so
-  // any machine replays byte-identical.
-  const seed = 12345;
-  const units = [];
-  const kindsA = ['marine', 'marine', 'marine', 'tank', 'tank', 'incinerator', 'wraith', 'marine', 'tank'];
-  const kindsB = ['skarnling', 'skarnling', 'razorspine', 'vexwing', 'skarnling', 'razorspine', 'skarnling', 'vexwing', 'skarnling'];
-  kindsA.forEach((k, i) => units.push({ team: 0, kind: k, x: 240 + (i % 3) * 34, y: 280 + Math.floor(i / 3) * 30 }));
-  kindsB.forEach((k, i) => units.push({ team: 1, kind: k, x: 700 - (i % 3) * 34, y: 280 + Math.floor(i / 3) * 30 }));
-  const script = [];
-  // opening: attack-move sweeps + focus fires (t=1)
-  units.forEach((u, i) => {
-    if (u.team === 0) script.push({ tick: 1, kind: 'attackMove', unit: i, x: 560, y: 290 + (i % 4) * 20 });
-    else script.push({ tick: 1, kind: 'attackMove', unit: i, x: 420, y: 300 + (i % 4) * 16 });
-  });
-  // mid-game flanks every 120 ticks through the full 10 min
-  let t = 200;
-  let fl = 0;
-  while (t < 14400 - 240) {
-    const flippers = [1, 4, 7, 10, 13, 16];
-    for (const idx of flippers) {
-      const u = units[idx];
-      if (!u) continue;
-      const dir = (fl % 2 === 0 ? 1 : -1);
-      script.push({ tick: t, kind: 'attackMove', unit: idx, x: 500 + dir * 180 + (idx % 3) * 25, y: 200 + ((fl + idx) % 5) * 60 });
-    }
-    // occasional focus-fire on a plausible target index
-    script.push({ tick: t + 3, kind: 'attackTarget', unit: 2, target: 12 });
-    t += 120; fl++;
-  }
-  return { seed, seconds: 600, units, script, hashEvery: 0, note: 'P1.038 training replay: mirrored 9v9, full 10-min maneuver script' };
+  return { mode, ticks: totalTicks, ms, finalHash, alive, total: w.units.length, cmds: (data.script || []).length, lastHash };
 }
 
 if (require.main === module) {
   (async () => {
     const args = process.argv.slice(2);
+    const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
+
     if (args[0] === '--generate') {
+      const fs2 = fs;
       const out = args[1] || path.resolve(__dirname, '../replays/training-10min.json');
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      const rep = generateTrainingReplay();
-      fs.writeFileSync(out, JSON.stringify(rep));
-      console.log('GENERATED', out, 'units=' + rep.units.length, 'script=' + rep.script.length, 'seconds=' + rep.seconds);
+      // legacy writer kept byte-identical to the P1.038-i1 version
+      const seed = 12345;
+      const units = [];
+      const kindsA = ['marine', 'marine', 'marine', 'tank', 'tank', 'incinerator', 'wraith', 'marine', 'tank'];
+      const kindsB = ['skarnling', 'skarnling', 'razorspine', 'vexwing', 'skarnling', 'razorspine', 'skarnling', 'vexwing', 'skarnling'];
+      kindsA.forEach((k, i) => units.push({ team: 0, kind: k, x: 240 + (i % 3) * 34, y: 280 + Math.floor(i / 3) * 30 }));
+      kindsB.forEach((k, i) => units.push({ team: 1, kind: k, x: 700 - (i % 3) * 34, y: 280 + Math.floor(i / 3) * 30 }));
+      const script = [];
+      units.forEach((u, i) => {
+        if (u.team === 0) script.push({ tick: 1, kind: 'attackMove', unit: i, x: 560, y: 290 + (i % 4) * 20 });
+        else script.push({ tick: 1, kind: 'attackMove', unit: i, x: 420, y: 300 + (i % 4) * 16 });
+      });
+      let t = 200;
+      let fl = 0;
+      while (t < 14400 - 240) {
+        const flippers = [1, 4, 7, 10, 13, 16];
+        for (const idx of flippers) {
+          const u = units[idx];
+          if (!u) continue;
+          const dir = (fl % 2 === 0 ? 1 : -1);
+          script.push({ tick: t, kind: 'attackMove', unit: idx, x: 500 + dir * 180 + (idx % 3) * 25, y: 200 + ((fl + idx) % 5) * 60 });
+        }
+        script.push({ tick: t + 3, kind: 'attackTarget', unit: 2, target: 12 });
+        t += 120; fl++;
+      }
+      const rep = { seed, seconds: 600, units, script, hashEvery: 0, note: 'P1.038 training replay: mirrored 9v9, full 10-min maneuver script' };
+      fs2.mkdirSync(path.dirname(out), { recursive: true });
+      fs2.writeFileSync(out, JSON.stringify(rep));
+      console.log('GENERATED', out, 'units=' + units.length, 'script=' + script.length, 'seconds=600');
       process.exit(0);
     }
+
+    if (args[0] === '--generate-sccr') {
+      const out = args[1] || path.resolve(__dirname, '../replays/training-10min.sccr');
+      const E = await loadEngine();
+      // deterministic LCG (the arrival-permutation RNG family)
+      let s = 0xC0FFEE;
+      const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+      const seed = 0xBEEF01;
+      const terrain = buildTerrain(E, seed);
+      // mirrored 9v9 fixture; ids are 1..18 (fresh Unit module per run)
+      const kindsA = ['marine', 'marine', 'marine', 'tank', 'tank', 'incinerator', 'wraith', 'marine', 'tank'];
+      const kindsB = ['skarnling', 'skarnling', 'razorspine', 'vexwing', 'skarnling', 'razorspine', 'skarnling', 'vexwing', 'skarnling'];
+      const units = [];
+      const idOf = [];
+      kindsA.forEach((k, i) => { units.push([0, k, 240 + (i % 3) * 34, 280 + Math.floor(i / 3) * 30]); idOf.push(idOf.length + 1); });
+      kindsB.forEach((k, i) => { units.push([1, k, 700 - (i % 3) * 34, 280 + Math.floor(i / 3) * 30]); idOf.push(idOf.length + 1); });
+      const teamOf = idOf.map((_, i) => (i < 9 ? 0 : 1));
+      const commands = [];
+      const q = () => Math.round((80 + rnd() * 960) * 8) / 8;
+      // opening engagement: attack-move sweeps at tick 1
+      for (let i = 0; i < 18; i++) {
+        const tx = teamOf[i] === 0 ? 420 + q() * 0.4 : 560 - q() * 0.4;
+        commands.push({ tick: 1, player: teamOf[i], type: 'order', subject: 'move', payload: { wp: { x: tx, y: 200 + q() * 1.6 }, shift: false, alt: false, sel: [idOf[i]] } });
+      }
+      // flanks + focus fires through the full 10 minutes (real shapes,
+      // 251 bursts incl. stops/stances; mixed same-tick two-player frames)
+      let t = 240;
+      while (t < 14400 - 240) {
+        for (const idx of [0, 3, 6, 9, 12, 15]) {
+          if (rnd() < 0.25) continue;
+          const other = teamOf[idx] === 0 ? idOf.slice(9) : idOf.slice(0, 9);
+          const pick = Math.floor(rnd() * 3);
+          if (pick === 0) commands.push({ tick: t, player: teamOf[idx], type: 'order', subject: 'move', payload: { wp: { x: q(), y: q() }, shift: false, alt: false, sel: [idOf[idx], idOf[(idx + 1) % 18]] } });
+          else if (pick === 1) commands.push({ tick: t, player: teamOf[idx], type: 'stop', subject: 'stop', payload: { sel: [idOf[idx]] } });
+          else commands.push({ tick: t, player: teamOf[idx], type: 'attackTarget', subject: 'attackTarget', payload: { target: other[Math.floor(rnd() * other.length)], sel: [idOf[idx]] } });
+        }
+        if (rnd() < 0.3) commands.push({ tick: t + 2, player: 0, type: 'stance', subject: 'stance', payload: { stance: rnd() < 0.5 ? 'hold' : 'aggressive', sel: [1, 2, 3] } });
+        if (rnd() < 0.3) commands.push({ tick: t + 2, player: 1, type: 'stance', subject: 'stance', payload: { stance: rnd() < 0.5 ? 'hold' : 'aggressive', sel: [10, 11, 12] } });
+        t += 60 + Math.floor(rnd() * 90);
+      }
+      // a few known-unheadless types to prove skip-portability
+      commands.push({ tick: 9000, player: 0, type: 'automine', subject: 'automine', payload: null });
+      commands.push({ tick: 9500, player: 1, type: 'cloak', subject: 'cloak', payload: { sel: [13] } });
+      const repl = {
+        seed, ticks: 14400, hashEvery: 0,
+        mapHash: E.rf.computeMapHash(terrain.bake),
+        dataHash: localDataHash(E),
+        units, commands,
+      };
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, E.rf.encodeReplay(repl));
+      console.log('GENERATED-SCCR', out, 'units=' + units.length, 'commands=' + commands.length, 'ticks=14400');
+      process.exit(0);
+    }
+
     const i = args.indexOf('--replay');
     const file = i >= 0 ? args[i + 1] : path.resolve(__dirname, '../replays/training-10min.json');
-    const heI = args.indexOf('--hash-every');
-    const he = heI >= 0 ? Number(args[heI + 1]) : 0;
     if (!fs.existsSync(file)) { console.error('NO REPLAY FILE:', file, '— run with --generate first'); process.exit(1); }
+    const he = flag('--hash-every') != null ? Number(flag('--hash-every')) : 0;
+    const shuf = flag('--shuffle-arrival') != null ? Number(flag('--shuffle-arrival')) : 0;
+    const fakeMap = flag('--fake-map');
+    const fakeData = flag('--fake-data');
     const wall0 = Date.now();
-    const r = await runReplay(file, { hashEvery: he });
+    const r = await runReplay(file, { hashEvery: he, shuffleSeed: shuf, fakeMap, fakeData });
     const wall = Date.now() - wall0;
-    console.log(`REPLAY ${path.basename(file)} ticks=${r.ticks} simTime=600s wallMs=${wall.toFixed(0)} simMs=${r.ms.toFixed(0)} units ${r.alive}/${r.total} finalHash=${r.finalHash}`);
+    if (r.refused) { console.log('REPLAY REFUSED', r.refused, r.detail || ''); process.exit(3); }
+    console.log(`REPLAY ${path.basename(file)} mode=${r.mode} ticks=${r.ticks} simTime=${(r.ticks / 24).toFixed(0)}s wallMs=${wall.toFixed(0)} simMs=${r.ms.toFixed(0)} units ${r.alive}/${r.total} cmds=${r.cmds}${r.shuffleSeed ? ' shuffle=' + r.shuffleSeed : ''} finalHash=${r.finalHash}${r.ringDigest ? ' ring=' + r.ringDigest : ''}`);
     process.exit(0);
   })().catch((e) => { console.error('REPLAY ERROR:', e); process.exit(2); });
 }
 
-module.exports = { runReplay, generateTrainingReplay };
+module.exports = { runReplay };
