@@ -1,0 +1,301 @@
+{
+ "schema": "TRAIN/1",
+ "name": "training-recipe-v1",
+ "seed": 12513026,
+ "seconds": 210,
+ "ticks": 5040,
+ "minerals": [
+  [
+   816,
+   736,
+   1500
+  ],
+  [
+   826,
+   752,
+   1500
+  ],
+  [
+   794,
+   752,
+   1500
+  ],
+  [
+   840,
+   720,
+   1500
+  ],
+  [
+   806,
+   720,
+   1500
+  ],
+  [
+   1040,
+   640,
+   1500
+  ],
+  [
+   1056,
+   656,
+   1500
+  ],
+  [
+   1032,
+   672,
+   1500
+  ]
+ ],
+ "units": [
+  [
+   0,
+   "mcv",
+   950,
+   728,
+   "mcv"
+  ],
+  [
+   1,
+   "broodmatron",
+   1130,
+   728,
+   "brood1"
+  ],
+  [
+   1,
+   "skarnling",
+   1105,
+   720,
+   "sk1"
+  ],
+  [
+   1,
+   "skarnling",
+   1120,
+   736,
+   "sk2"
+  ],
+  [
+   1,
+   "skarnling",
+   1105,
+   744,
+   "sk3"
+  ],
+  [
+   1,
+   "skarnling",
+   1120,
+   712,
+   "sk4"
+  ]
+ ],
+ "commands": [
+  {
+   "tick": 10,
+   "player": 0,
+   "type": "deploy",
+   "subject": "deploy",
+   "payload": {
+    "uid": "mcv"
+   }
+  },
+  {
+   "tick": 14,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "commandCenter",
+    "kind": "rigger",
+    "id": "wr1"
+   }
+  },
+  {
+   "tick": 14,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "commandCenter",
+    "kind": "rigger",
+    "id": "wr2"
+   }
+  },
+  {
+   "tick": 14,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "commandCenter",
+    "kind": "rigger",
+    "id": "wr3"
+   }
+  },
+  {
+   "tick": 240,
+   "player": 0,
+   "type": "harvest",
+   "subject": "harvest",
+   "payload": {
+    "wp": [
+     {
+      "x": 820,
+      "y": 744
+     }
+    ],
+    "sel": [
+     "wr1",
+     "wr2",
+     "wr3"
+    ]
+   }
+  },
+  {
+   "tick": 500,
+   "player": 0,
+   "type": "place",
+   "subject": "place",
+   "payload": {
+    "bid": "barracks",
+    "x": 860,
+    "y": 700,
+    "sel": [
+     "wr1",
+     "wr2",
+     "wr3"
+    ]
+   }
+  },
+  {
+   "tick": 1150,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "barracks",
+    "kind": "marine",
+    "id": "m1"
+   }
+  },
+  {
+   "tick": 1160,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "barracks",
+    "kind": "marine",
+    "id": "m2"
+   }
+  },
+  {
+   "tick": 1180,
+   "player": 0,
+   "type": "place",
+   "subject": "place",
+   "payload": {
+    "bid": "engineeringBay",
+    "x": 1012,
+    "y": 700,
+    "sel": [
+     "wr1",
+     "wr2",
+     "wr3"
+    ]
+   }
+  },
+  {
+   "tick": 1650,
+   "player": 0,
+   "type": "research",
+   "subject": "research",
+   "payload": {
+    "bid": "engineeringBay",
+    "techId": "terranInfantryWeapons1"
+   }
+  },
+  {
+   "tick": 2550,
+   "player": 0,
+   "type": "queue",
+   "subject": "queue",
+   "payload": {
+    "bid": "barracks",
+    "kind": "marine",
+    "id": "m3"
+   }
+  },
+  {
+   "tick": 3050,
+   "player": 0,
+   "type": "spawn",
+   "subject": "spawn",
+   "payload": {
+    "kind": "skarnling",
+    "team": 1,
+    "x": 975,
+    "y": 782,
+    "hpFrac": 0.45,
+    "id": "foe1",
+    "move": {
+     "x": 940,
+     "y": 800
+    }
+   }
+  },
+  {
+   "tick": 3052,
+   "player": 0,
+   "type": "spawn",
+   "subject": "spawn",
+   "payload": {
+    "kind": "skarnling",
+    "team": 1,
+    "x": 1008,
+    "y": 798,
+    "hpFrac": 0.45,
+    "id": "foe2",
+    "move": {
+     "x": 970,
+     "y": 812
+    }
+   }
+  },
+  {
+   "tick": 3060,
+   "player": 0,
+   "type": "attackTarget",
+   "subject": "attackTarget",
+   "payload": {
+    "sel": [
+     "m1",
+     "m2",
+     "m3",
+     "wr1",
+     "wr2",
+     "wr3"
+    ],
+    "target": "foe1"
+   }
+  },
+  {
+   "tick": 3092,
+   "player": 0,
+   "type": "attackTarget",
+   "subject": "attackTarget",
+   "payload": {
+    "sel": [
+     "m1",
+     "m2",
+     "m3",
+     "wr1",
+     "wr2",
+     "wr3"
+    ],
+    "target": "foe2"
+   }
+  }
+ ]
+}

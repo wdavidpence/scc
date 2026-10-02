@@ -5142,14 +5142,17 @@
   },
   {
    "id": "P1.056",
-   "status": "todo",
-   "owner": null,
+   "status": "in_progress",
+   "owner": "MSM5U",
    "preferred_owner": "ANTIGRAV",
    "files": [
     "scripts/replay-runner.cjs",
     "src2/engine/simEconomy.js",
     "src2/engine/entity.js",
-    "src2/engine/coach.js"
+    "src2/engine/coach.js",
+    "src2/engine/simTrain.js",
+    "scripts/verify-training-golden.cjs",
+    "replays/training-recipe.json"
    ],
    "dependencies": [
     "P1.038"
