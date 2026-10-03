@@ -50,6 +50,7 @@ async function loadEngine(nonce) {
   const eng = (f) => import(pathToFileURL(path.resolve(__dirname, '../src2/engine', f)).href + q);
   return {
     Unit: (await import(pathToFileURL(path.resolve(__dirname, '../src2/engine/entity.js')) + q)).Unit,
+    Building: (await import(pathToFileURL(path.resolve(__dirname, '../src2/engine/entity.js')).href + q)).Building,
     SimRng: (await eng('simRng.js')).SimRng,
     SimSchema: (await eng('simSchema.js')).SimSchema,
     NavGrid: (await eng('pathfinding.js')).NavGrid,
@@ -57,6 +58,7 @@ async function loadEngine(nonce) {
     rf: (await eng('replayFormat.js')),
     nc: (await eng('netCmds.js')).default || (await eng('netCmds.js')),
     sm: (await eng('simMatch.js')).default || (await eng('simMatch.js')),
+    st: (await eng('simTrain.js')).default || (await eng('simTrain.js')),
     sc1: await import(pathToFileURL(path.resolve(__dirname, '../src2/data/sc1.js')) + q),
   };
 }
@@ -231,6 +233,47 @@ async function runReplayIsolated(file, text, { hashEvery = 0, shuffleSeed = 0, f
   const isSccr = text.startsWith('SCCR/1');
   let rep, mode;
 
+  // P1.056: TRAINING recipe — full-chain kernel run (deploy/train/research/
+  // build/harvest/kill). Same runTrainingMatch the browser parity harness
+  // (i3) will call; chain assertions live here so a regression fails the
+  // runner line, not just a digest compare.
+  if (!isSccr) {
+    let pre = null;
+    try { pre = JSON.parse(text); } catch { /* fall through */ }
+    if (pre && pre.schema === 'TRAIN/1') {
+      const real = Math.random;
+      let s = (pre.seed ^ 0x85ebca6b) >>> 0; if (!s) s = 1;
+      Math.random = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+      let res;
+      try {
+        res = await E.st.runTrainingMatch(E, pre, { shuffleSeed, hashEvery: hashEvery || 0 });
+      } finally { Math.random = real; }
+      const w = res.world;
+      const p0 = w.players[0];
+      const cc = w.buildings.find((b) => b.buildId === 'commandCenter' && b.team === 0);
+      const bar = w.buildings.find((b) => b.buildId === 'barracks' && b.team === 0);
+      const eb = w.buildings.find((b) => b.buildId === 'engineeringBay' && b.team === 0);
+      const riggers = w.units.filter((u) => u.kind === 'rigger' && u.team === 0).length;
+      const marines = w.units.filter((u) => u.kind === 'marine' && u.team === 0).length;
+      const foe = w.units.find((u) => u.id === 'foe1');
+      const fails = [];
+      if (!cc || !cc.built) fails.push('CC');
+      if (riggers !== 3) fails.push('riggers=' + riggers);
+      if (w.totalDeposited <= 0) fails.push('income=0');
+      if (!bar || !bar.built) fails.push('barracks');
+      if (marines !== 3) fails.push('marines=' + marines);
+      if (!eb || !eb.built) fails.push('engbay');
+      if (!p0.techs.terranInfantryWeapons1) fails.push('research');
+      // kill-dummy: death REMOVES the unit from w.units (onUnitDeath twin),
+      // so success = absent or flagged dead.
+      if (foe && !foe.dead) fails.push('kill-dummy');
+      if (res.skipped !== 0) fails.push('skipped=' + res.skipped);
+      return { mode: 'train', ticks: res.ticks, ms: 0, finalHash: res.finalHash, alive: res.alive, total: res.total,
+        cmds: res.cmds, executed: res.executed, skipped: res.skipped, drained: res.drained, shuffleSeed,
+        lastHash: null, ringDigest: res.ringDigest, trainFails: fails };
+    }
+  }
+
   if (isSccr) {
     // header carries seed + ticks; parse seed first to build local content
     const m0 = /^SCCR\/1 (\S+)/.exec(text);
@@ -384,7 +427,10 @@ if (require.main === module) {
     }
 
     const i = args.indexOf('--replay');
-    const file = i >= 0 ? args[i + 1] : path.resolve(__dirname, '../replays/training-10min.json');
+    const trn = args.indexOf('--train');
+    const file = trn >= 0
+      ? (args[trn + 1] && !args[trn + 1].startsWith('--') ? path.resolve(args[trn + 1]) : path.resolve(__dirname, '../replays/training-recipe.json'))
+      : (i >= 0 ? args[i + 1] : path.resolve(__dirname, '../replays/training-10min.json'));
     if (!fs.existsSync(file)) { console.error('NO REPLAY FILE:', file, '— run with --generate first'); process.exit(1); }
     const he = flag('--hash-every') != null ? Number(flag('--hash-every')) : 0;
     const shuf = flag('--shuffle-arrival') != null ? Number(flag('--shuffle-arrival')) : 0;
@@ -394,6 +440,7 @@ if (require.main === module) {
     const r = await runReplay(file, { hashEvery: he, shuffleSeed: shuf, fakeMap, fakeData });
     const wall = Date.now() - wall0;
     if (r.refused) { console.log('REPLAY REFUSED', r.refused, r.detail || ''); process.exit(3); }
+    if (r.trainFails && r.trainFails.length) { console.log('TRAIN-CHAIN FAIL:', r.trainFails.join(' ')); process.exit(4); }
     console.log(`REPLAY ${path.basename(file)} mode=${r.mode} ticks=${r.ticks} simTime=${(r.ticks / 24).toFixed(0)}s wallMs=${wall.toFixed(0)} simMs=${r.ms.toFixed(0)} units ${r.alive}/${r.total} cmds=${r.cmds}${r.shuffleSeed ? ' shuffle=' + r.shuffleSeed : ''} finalHash=${r.finalHash}${r.ringDigest ? ' ring=' + r.ringDigest : ''}`);
     process.exit(0);
   })().catch((e) => { console.error('REPLAY ERROR:', e); process.exit(2); });
